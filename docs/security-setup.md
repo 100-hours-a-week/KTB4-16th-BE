@@ -110,7 +110,7 @@ Security 테스트는 DB 없이 실제 필터와 실제 CSRF Cookie/Header를 �
 기존 CI는 JDK 25와 checkstyleMain을 사용하지만 로컬은 Java 21이며 Checkstyle이
 설정되지 않았다. CI 파일은 변경하지 않고 클라우드 담당자에게 정합성 확인을 요청한다.
 전체 테스트를 CI에 추가할 경우 MySQL 준비와 DB_PASSWORD 주입도 필요하다.
-브랜치명은 feature/security-setup-51, 관련 이슈는 #51이다. PR은 develop을 대상으로
+작업 브랜치명은 feat/security-setup-51, 관련 이슈는 #51이다. PR은 feature를 대상으로
 생성하며 merge는 사용자가 직접 수행한다.
 
 참고: https://docs.spring.io/spring-security/reference/servlet/exploits/csrf.html
