@@ -51,7 +51,7 @@ jobs:
         run: ./gradlew checkstyleMain
         
 
-      # Phase 2: Compile
+      # Phase 2: Compile 및 JAR 생성
       - name: Run Compile 
         run: ./gradlew bootJar
 
@@ -62,7 +62,7 @@ jobs:
           node-version: "24"
           package-manager-cache: false
 
-      # Phase 4: Docker Build
+      # Phase 4: Docker Build 준비
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
