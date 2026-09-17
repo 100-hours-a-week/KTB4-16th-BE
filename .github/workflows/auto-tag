@@ -1,0 +1,34 @@
+name: Create release Tag
+
+on:
+  push:
+    branches:
+      - main
+      
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v2
+      - name: version information extraction
+        run: |
+          if [[ '${{ github.event.head_commit.message }}' =~ [0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3} ]]; then
+            echo "version=$(echo '${{ github.event.head_commit.message }}' | egrep -o '[0-9]{1,3}\.[0-9]{1,3}\.[0-9]{1,3}')"  >> $GITHUB_OUTPUT
+          else
+            git fetch --all --tags
+            tag=$(git tag --list "v*" --sort=-v:refname | head -1 | cut -d 'v' -f2)
+            tag=${tag:-0.0.0}
+            major=$(echo $tag | cut -d '.' -f1 )
+            minor=$(echo $tag | cut -d '.' -f2 )
+            patch=$(echo $tag | cut -d '.' -f3 )
+            echo "version=$(echo $major.$minor.$((patch+1)))" >> $GITHUB_OUTPUT
+          fi
+        id: extraction_version
+
+      - name: create release tag
+        uses: actions/create-release@v1
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tag_name: v${{ steps.extraction_version.outputs.version }}
+          release_name: Release v${{ steps.extraction_version.outputs.version }}
