@@ -2,9 +2,13 @@ name : main CI with backend
 
 on:
   push:
-    branches: [ main ]
+    branches:
+      - main
 
-
+# 버전 작업 동시에 실행되지 않게 
+concurrency:
+  group: backend-main-release
+  cancel-in-progress: false
 
 jobs:
   ci:
@@ -13,15 +17,18 @@ jobs:
 
     # 워크플로우 권한 정의
     permissions:
-      contents: read
+      contents: write      # Git 태그, Release 생성
       id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
-
+      
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
       
     steps:
       # 1. 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v7
-        
+        with:
+            fetch-depth: 0
         
       # 2. JDK 환경 설정 (캐싱 포함)
       - name: Set up JDK 25
@@ -30,47 +37,59 @@ jobs:
           java-version: '25'
           distribution: 'temurin'
           
-      # 3. Gradle 실행 권한 부여
+      # 3. Gradle 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+          
+      # 4. Gradle 실행 권한 부여
       - name: Grant execute permission
         run: chmod +x gradlew
         
-      # 4.Gradle 빌드 캐시
-      - name: Set up Gradle
-        uses: gradle/actions/setup-gradle@v6
 
       # Phase 1: Lint (Checkstyle)
       - name: Run Checkstyle
         run: ./gradlew checkstyleMain
+        
 
       # Phase 2: Compile
       - name: Run Compile 
         run: ./gradlew bootJar
 
+      # Phase 3: semantic-release 실행 환경 구성
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      # Phase 4: Docker Build
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
-        
+
+      # Phase 5: OIDC를 이용한 서비스 계정 인증
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID }}
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
-          
+
+      # Phase 6: gcloud 명령어 사용 준비
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
+        
 
-      # Docker가 GCP 인증 정보를 사용하도록 연결
+      # Phase 7: Docker가 GCP 인증 정보를 사용하도록 연결
       - name: Configure Docker authentication
         run: |
-            cloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+            gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
-      # 이미지 빌드 + Artifact Registry 업로드
-      - name: Build and push backend image
-        uses: docker/build-push-action@v7
-        with:
-          context: ./backend
-          file: ./backend/Dockerfile
-          platforms: linux/amd64
-          push: true
-          tags: |
-            ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}:${{ github.sha }}
+      # Phase 8: 버전 계산 -> image build, push -> Git 태그, Release 생성
+      - name: Release backend image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          npx --yes \
+            --package=semantic-release@25 \
+            --package=@semantic-release/exec@7 \
+            semantic-release
