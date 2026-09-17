@@ -1,8 +1,10 @@
-name : feature Lint Test with backend
+name : develop PR CI with backend
 
 on:
-  push:
-    branches: [ feature ]
+  pull_request:
+    branches:
+      - develop
+
 
 jobs:
   ci:
@@ -20,6 +22,7 @@ jobs:
         with:
           java-version: '21'
           distribution: 'temurin'
+          cache: gradle
           
       # 3. Gradle 실행 권한 부여
       - name: Grant execute permission
@@ -33,3 +36,6 @@ jobs:
       - name: Run Checkstyle
         run: ./gradlew checkstyleMain
 
+      # Phase 2: Compile
+      - name: Run Compile
+        run: ./gradlew compileJava
