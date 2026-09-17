@@ -15,12 +15,11 @@ jobs:
         uses: actions/checkout@v7
         
       # 2. JDK 환경 설정 (캐싱 포함)
-      - name: Set up JDK 25
+      - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
-          java-version: '25'
+          java-version: '21'
           distribution: 'temurin'
-          cache: gradle
           
       # 3. Gradle 실행 권한 부여
       - name: Grant execute permission
