@@ -1,0 +1,139 @@
+package com.ktb4.team16.mulo.global.security;
+
+import jakarta.servlet.http.Cookie;
+import org.junit.jupiter.api.BeforeEach;
+import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.boot.test.context.TestConfiguration;
+import org.springframework.context.annotation.Import;
+import org.springframework.http.HttpStatus;
+import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import org.springframework.test.context.web.WebAppConfiguration;
+import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.ResponseStatus;
+import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.context.WebApplicationContext;
+import org.springframework.web.servlet.config.annotation.EnableWebMvc;
+
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.*;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.*;
+import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
+
+@SpringJUnitConfig(SecurityIntegrationTests.TestConfig.class)
+@WebAppConfiguration
+@TestPropertySource(properties = {
+        "mulo.security.allowed-origins=http://localhost:3000",
+        "mulo.security.cookie-secure=false"
+})
+class SecurityIntegrationTests {
+    @Autowired WebApplicationContext context;
+    MockMvc mvc;
+
+    @BeforeEach
+    void setUp() {
+        mvc = webAppContextSetup(context).apply(springSecurity()).build();
+    }
+
+    @Test
+    void csrfBootstrapIssuesReadableStrictCookieWithoutSession() throws Exception {
+        var result = mvc.perform(get("/api/csrf"))
+                .andExpect(status().isNoContent()).andReturn();
+        var cookie = result.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(cookie).isNotNull();
+        assertThat(cookie.isHttpOnly()).isFalse();
+        assertThat(cookie.getSecure()).isFalse();
+        assertThat(cookie.getPath()).isEqualTo("/");
+        assertThat(cookie.getAttribute("SameSite")).isEqualTo("Strict");
+        assertThat(result.getRequest().getSession(false)).isNull();
+    }
+
+    @Test
+    void signupAcceptsActualCookieAndMatchingHeaderWithoutAuthentication() throws Exception {
+        Cookie cookie = csrfCookie();
+        var result = mvc.perform(post("/api/users/signup").cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isCreated()).andReturn();
+        assertThat(result.getRequest().getSession(false)).isNull();
+    }
+
+    @Test
+    void signupWithoutCsrfIsForbiddenJson() throws Exception {
+        mvc.perform(post("/api/users/signup"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+    }
+
+    @Test
+    void cookieAloneAndWrongHeaderCannotAuthorizeSignup() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/users/signup").cookie(cookie)).andExpect(status().isForbidden());
+        mvc.perform(post("/api/users/signup").cookie(cookie).header("X-XSRF-TOKEN", "wrong"))
+                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/users/signup").header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isForbidden());
+    }
+
+    @Test
+    void protectedGetIs401JsonWithoutRedirectOrSession() throws Exception {
+        var result = mvc.perform(get("/api/private"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(header().doesNotExist("Location")).andReturn();
+        assertThat(result.getRequest().getSession(false)).isNull();
+    }
+
+    @Test
+    void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/private").cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(get("/api/users/signup")).andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void localPreflightAllowsOnlyConfiguredFrontend() throws Exception {
+        mvc.perform(options("/api/users/signup").header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "POST")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
+        mvc.perform(options("/api/users/signup").header("Origin", "https://untrusted.example")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isForbidden())
+                .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    private Cookie csrfCookie() throws Exception {
+        var result = mvc.perform(get("/api/csrf")).andExpect(status().isNoContent()).andReturn();
+        Cookie cookie = result.getResponse().getCookie("XSRF-TOKEN");
+        assertThat(cookie).isNotNull();
+        return cookie;
+    }
+
+    @TestConfiguration(proxyBeanMethods = false)
+    @EnableWebMvc
+    @EnableWebSecurity
+    @ComponentScan("com.ktb4.team16.mulo.global")
+    @Import(ProbeController.class)
+    static class TestConfig { }
+
+    // 실제 회원가입을 구현하지 않고 필터 통과 여부만 관찰하는 테스트 전용 엔드포인트.
+    @RestController
+    static class ProbeController {
+        @PostMapping("/api/users/signup")
+        @ResponseStatus(HttpStatus.CREATED)
+        void signup() { }
+
+        @GetMapping("/api/private")
+        String privateResource() { return "protected"; }
+    }
+}

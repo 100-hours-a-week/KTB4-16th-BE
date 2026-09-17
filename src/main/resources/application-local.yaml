@@ -1,0 +1,5 @@
+mulo:
+  security:
+    allowed-origins:
+      - ${FRONTEND_ORIGIN:http://localhost:3000}
+    cookie-secure: false
