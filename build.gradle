@@ -1,5 +1,7 @@
 plugins {
     id 'java'
+    // 컴파일 전 Java 코드 스타일과 기본 문법 규칙을 검사한다.lukas(이대훈)
+    id 'checkstyle'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
 }
