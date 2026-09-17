@@ -4,7 +4,7 @@ on:
   pull_request:
     branches:
       - develop
-      
+
 
 jobs:
   ci:
@@ -37,7 +37,5 @@ jobs:
         run: ./gradlew checkstyleMain
 
       # Phase 2: Compile
-      - name: Run Compile 
+      - name: Run Compile
         run: ./gradlew compileJava
-
-    
