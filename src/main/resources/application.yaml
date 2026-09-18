@@ -31,3 +31,6 @@ mulo:
   security:
     allowed-origins: []
     cookie-secure: true
+
+kakao:
+  rest-api-key: ${KAKAO_REST_API_KEY}
