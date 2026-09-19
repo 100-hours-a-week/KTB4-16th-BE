@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.global.config;
 
 import com.ktb4.team16.mulo.global.security.ApiAccessDeniedHandler;
 import com.ktb4.team16.mulo.global.security.ApiAuthenticationEntryPoint;
+import com.ktb4.team16.mulo.global.security.JwtAuthenticationFilter;
 import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -14,6 +15,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.web.cors.CorsConfiguration;
@@ -21,12 +23,13 @@ import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(SecurityProperties.class)
+@EnableConfigurationProperties({SecurityProperties.class, JwtProperties.class})
 public class SecurityConfig {
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties properties,
             ApiAuthenticationEntryPoint entryPoint, ApiAccessDeniedHandler deniedHandler,
-            CorsConfigurationSource corsConfigurationSource) throws Exception {
+            CorsConfigurationSource corsConfigurationSource,
+            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
         // CSRF Cookie만 JS로 읽는다. 로그인 단계의 Refresh Cookie는 반드시 HttpOnly다.
         var csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfRepository.setCookieCustomizer(cookie -> cookie.path("/")
@@ -52,8 +55,15 @@ public class SecurityConfig {
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users/signup").permitAll()
+                        // 로그인은 공개지만 CSRF 제외 대상이 아니므로 위 CSRF 규칙은 유지한다.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
+                        // Refresh Cookie로 인증하므로 Access Token은 요구하지 않되 CSRF 보호는 유지한다.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
+                        // 로그아웃은 멱등 처리하며 Cookie 인증 요청이므로 CSRF 보호는 유지한다.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/logout").permitAll()
                         .requestMatchers("/api/**").authenticated()
-                        .anyRequest().denyAll());
+                        .anyRequest().denyAll())
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 
