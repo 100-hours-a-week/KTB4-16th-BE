@@ -149,6 +149,20 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void passwordUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/users/me/password"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/users/me/password")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
         Cookie cookie = csrfCookie();
         mvc.perform(post("/api/private").cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))

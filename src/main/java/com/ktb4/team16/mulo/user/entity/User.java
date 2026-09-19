@@ -65,4 +65,10 @@ public class User {
         this.nickname = nickname;
         this.updatedAt = updatedAt;
     }
+
+    public void updatePassword(String passwordHash, LocalDateTime updatedAt) {
+        // 중요: 비밀번호 원문이 아니라 BCrypt 해시와 수정 시각만 저장한다.
+        this.passwordHash = passwordHash;
+        this.updatedAt = updatedAt;
+    }
 }

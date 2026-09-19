@@ -4,9 +4,11 @@ import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.FieldError;
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
+import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
@@ -223,6 +225,90 @@ class UserControllerTest {
                 .andExpect(status().isConflict())
                 .andExpect(jsonPath("$.code").value("NICKNAME_DUPLICATED"))
                 .andExpect(jsonPath("$.message").value("이미 사용 중인 닉네임입니다."));
+    }
+
+    @Test
+    void authenticatedUserCanUpdatePassword() throws Exception {
+        when(profileService.updatePassword(1L, "Test1234!", "New1234!"))
+                .thenReturn(new UpdatePasswordResponse("비밀번호가 변경되었습니다."));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Test1234!\","
+                                + "\"newPassword\":\"New1234!\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("비밀번호가 변경되었습니다."));
+    }
+
+    @Test
+    void missingPasswordFieldsReturnEveryRequiredError() throws Exception {
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors.length()").value(2))
+                .andExpect(jsonPath("$.errors[*].code", hasItems(
+                        "CURRENT_PASSWORD_REQUIRED", "NEW_PASSWORD_REQUIRED")));
+    }
+
+    @Test
+    void invalidNewPasswordReturnsFormatError() throws Exception {
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Test1234!\","
+                                + "\"newPassword\":\"short\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("newPassword"))
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_PASSWORD_FORMAT"));
+    }
+
+    @Test
+    void unicodeBlankNewPasswordReturnsOnlyRequiredError() throws Exception {
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Test1234!\","
+                                + "\"newPassword\":\"\u3000\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("newPassword"))
+                .andExpect(jsonPath("$.errors[0].code").value("NEW_PASSWORD_REQUIRED"));
+    }
+
+    @Test
+    void mismatchedCurrentPasswordReturnsBadRequest() throws Exception {
+        when(profileService.updatePassword(1L, "Wrong1234!", "New1234!"))
+                .thenThrow(new PasswordChangeException(
+                        ErrorCode.CURRENT_PASSWORD_MISMATCH));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Wrong1234!\","
+                                + "\"newPassword\":\"New1234!\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_MISMATCH"))
+                .andExpect(jsonPath("$.message").value("현재 비밀번호가 일치하지 않습니다."));
+    }
+
+    @Test
+    void sameNewPasswordReturnsConflict() throws Exception {
+        when(profileService.updatePassword(1L, "Test1234!", "Test1234!"))
+                .thenThrow(new PasswordChangeException(ErrorCode.SAME_PASSWORD));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/password")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"currentPassword\":\"Test1234!\","
+                                + "\"newPassword\":\"Test1234!\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SAME_PASSWORD"))
+                .andExpect(jsonPath("$.message")
+                        .value("새 비밀번호는 현재 비밀번호와 달라야 합니다."));
     }
 
     private void authenticateUser(Long userId) {

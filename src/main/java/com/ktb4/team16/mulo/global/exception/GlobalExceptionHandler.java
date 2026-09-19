@@ -6,6 +6,7 @@ import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
+import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -42,6 +43,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(NicknameConflictException.class)
     public ResponseEntity<ErrorResponse> handleNicknameConflict(
             NicknameConflictException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status())
+                .body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(PasswordChangeException.class)
+    public ResponseEntity<ErrorResponse> handlePasswordChange(
+            PasswordChangeException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status())
                 .body(ErrorResponse.of(errorCode));

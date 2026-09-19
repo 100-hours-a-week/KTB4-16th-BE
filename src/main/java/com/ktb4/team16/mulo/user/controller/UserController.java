@@ -1,8 +1,10 @@
 package com.ktb4.team16.mulo.user.controller;
 
 import com.ktb4.team16.mulo.user.dto.request.UpdateNicknameRequest;
+import com.ktb4.team16.mulo.user.dto.request.UpdatePasswordRequest;
 import com.ktb4.team16.mulo.user.dto.request.UserSignupRequest;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserSignupResponse;
 import com.ktb4.team16.mulo.user.message.UserMessage;
@@ -53,5 +55,13 @@ public class UserController {
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody UpdateNicknameRequest request) {
         return userProfileService.updateNickname(userId, request.nickname());
+    }
+
+    @PatchMapping("/me/password")
+    public UpdatePasswordResponse updatePassword(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody UpdatePasswordRequest request) {
+        return userProfileService.updatePassword(
+                userId, request.currentPassword(), request.newPassword());
     }
 }

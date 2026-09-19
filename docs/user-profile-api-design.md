@@ -4,7 +4,7 @@
 
 이 문서는 MULO V1 사용자 프로필 API의 개발 순서와 설계 기준을 설명한다. 처음 코드를 확인하는 개발자와 AI도 인증 정보가 프로필 조회로 전달되는 과정, 계층별 책임, 응답 및 오류 계약을 이해할 수 있도록 작성한다.
 
-현재 구현 범위는 `GET /api/users/me`와 `PATCH /api/users/me/nickname`이다. 회원탈퇴는 사용자 연관 데이터의 처리 정책과 구현이 준비될 때까지 제외한다.
+현재 구현 범위는 `GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`이다. 회원탈퇴는 사용자 연관 데이터의 처리 정책과 구현이 준비될 때까지 제외한다.
 
 ## 2. 개발 순서
 
@@ -12,7 +12,8 @@
 
 1. 내 정보 조회: `GET /api/users/me`
 2. 닉네임 변경: `PATCH /api/users/me/nickname`
-3. 회원탈퇴: 현재 범위에서 제외
+3. 비밀번호 변경: `PATCH /api/users/me/password`
+4. 회원탈퇴: 현재 범위에서 제외
 
 내 정보 조회를 먼저 구현하는 이유는 JWT로 인증된 사용자 ID가 Controller와 Service를 거쳐 Repository 조회로 연결되는 공통 흐름을 먼저 확립하기 위해서다. 닉네임 변경은 이 인증 및 사용자 조회 흐름을 재사용한다.
 
@@ -24,7 +25,8 @@
 UserController
 ├── POST  /api/users/signup          기존 회원가입
 ├── GET   /api/users/me              내 정보 조회
-└── PATCH /api/users/me/nickname     닉네임 변경
+├── PATCH /api/users/me/nickname     닉네임 변경
+└── PATCH /api/users/me/password     비밀번호 변경
 ```
 
 기존 `UserSignupController`는 `UserController`로 이름을 변경하고 기존 회원가입 메서드를 그대로 유지한다. Controller는 HTTP 요청과 응답의 연결만 담당한다. 비즈니스 로직은 기능별 Service에 분리하여 Controller 통합으로 인해 책임이 섞이지 않도록 한다.
@@ -38,11 +40,13 @@ user/
 │   └── UserProfileService.java
 └── dto/
     ├── request/
-    │   └── UpdateNicknameRequest.java
+    │   ├── UpdateNicknameRequest.java
+    │   └── UpdatePasswordRequest.java
     └── response/
         ├── UserSignupResponse.java
         ├── UserProfileResponse.java
-        └── UpdateNicknameResponse.java
+        ├── UpdateNicknameResponse.java
+        └── UpdatePasswordResponse.java
 ```
 
 ## 4. 인증과 조회 흐름
@@ -92,6 +96,8 @@ UserProfileResponse 생성
 - 조회 전용 메서드에는 `@Transactional(readOnly = true)`를 적용한다.
 - 닉네임 변경 메서드는 쓰기 트랜잭션에서 동일 닉네임과 활성 사용자 중복을 검사한다.
 - 닉네임 변경 시 `users.updated_at`을 현재 수정 시각으로 갱신한다.
+- 현재 비밀번호를 bcrypt 해시와 대조하고, 새 비밀번호가 현재 비밀번호와 다른지 확인한다.
+- 새 비밀번호를 bcrypt로 다시 해시하여 저장하고 `users.updated_at`을 한국 표준시 기준으로 갱신한다.
 - 저장 시점의 `uk_users_active_nickname` 경합은 `NICKNAME_DUPLICATED`로 변환한다.
 - 활성 사용자를 찾을 수 없으면 인증 실패로 처리될 예외를 발생시킨다.
 
@@ -204,6 +210,56 @@ Content-Type: application/json
 
 현재 닉네임을 다시 요청하면 `409 SAME_NICKNAME`, 다른 활성 사용자가 사용 중이면 `409 NICKNAME_DUPLICATED`를 반환한다. 사전 중복 검사 이후 발생한 DB UNIQUE 경합도 `NICKNAME_DUPLICATED`로 변환한다.
 
+### 6.7 비밀번호 변경 요청
+
+```http
+PATCH /api/users/me/password
+Authorization: Bearer <Access Token>
+Cookie: XSRF-TOKEN=<발급받은 값>
+X-XSRF-TOKEN: <발급받은 값>
+Content-Type: application/json
+```
+
+```json
+{
+  "currentPassword": "Current1234!",
+  "newPassword": "Changed1234!"
+}
+```
+
+`newPasswordConfirm`은 프론트엔드에서 두 입력값이 같은지 즉시 확인하기 위한 값이므로 서버 요청에는 포함하지 않는다. 새 비밀번호는 영문 소문자·대문자·숫자·특수문자를 각각 하나 이상 포함한 8~16자여야 한다.
+
+### 6.8 비밀번호 변경 처리와 성공 응답
+
+Service는 다음 순서로 처리한다.
+
+1. JWT에서 식별된 `userId`로 탈퇴하지 않은 사용자를 조회한다.
+2. `PasswordEncoder.matches`로 현재 비밀번호와 저장된 bcrypt 해시를 대조한다.
+3. 새 비밀번호가 현재 비밀번호와 같지 않은지 다시 `matches`로 확인한다.
+4. 새 비밀번호를 `PasswordEncoder.encode`로 bcrypt 해시한 뒤 저장한다.
+5. `users.updated_at`을 `Asia/Seoul` 기준 현재 시각으로 갱신한다.
+
+bcrypt는 복호화하는 암호화가 아니라 salt가 포함된 단방향 해시다. 따라서 원문 비밀번호를 DB에 저장하거나 기존 비밀번호를 복호화하지 않는다.
+
+```json
+{
+  "message": "비밀번호가 변경되었습니다."
+}
+```
+
+성공 후 현재 Access Token과 Refresh Token은 정책에 따라 유지한다. 비밀번호 변경은 로그아웃이나 토큰 재발급을 수행하지 않는다.
+
+### 6.9 비밀번호 변경 오류
+
+| 상황 | HTTP | 오류 코드 |
+|---|---:|---|
+| 현재 비밀번호 누락 | 400 | `CURRENT_PASSWORD_REQUIRED` |
+| 새 비밀번호 누락 | 400 | `NEW_PASSWORD_REQUIRED` |
+| 새 비밀번호 형식 오류 | 400 | `INVALID_PASSWORD_FORMAT` |
+| 현재 비밀번호 불일치 | 400 | `CURRENT_PASSWORD_MISMATCH` |
+| 새 비밀번호가 현재 비밀번호와 동일 | 409 | `SAME_PASSWORD` |
+| 인증 정보 없음·만료·위조 | 401 | `UNAUTHORIZED` |
+
 ## 7. SecurityConfig 영향
 
 새로운 보안 설정은 필요하지 않다. 기존 `requestMatchers("/api/**").authenticated()` 규칙에 따라 프로필 API는 자동으로 인증 요청이 된다. 상태를 변경하는 `PATCH` 요청은 기존 CSRF 설정도 적용받는다.
@@ -215,15 +271,18 @@ Content-Type: application/json
 | 파일 | 변경 내용 |
 |---|---|
 | `user/controller/UserSignupController.java` | 삭제하고 `UserController`로 대체 |
-| `user/controller/UserController.java` | 회원가입, 내 정보 조회, 닉네임 변경 엔드포인트 배치 |
-| `user/service/UserProfileService.java` | 활성 사용자 조회, 응답 변환, 닉네임 변경 |
+| `user/controller/UserController.java` | 회원가입, 내 정보 조회, 닉네임·비밀번호 변경 엔드포인트 배치 |
+| `user/service/UserProfileService.java` | 활성 사용자 조회, 응답 변환, 닉네임·비밀번호 변경 |
 | `user/dto/response/UserProfileResponse.java` | `message`, `data` 응답 정의 |
 | `user/dto/request/UpdateNicknameRequest.java` | 닉네임 필수값과 형식 검증 |
 | `user/dto/response/UpdateNicknameResponse.java` | 변경된 닉네임 성공 응답 |
-| `user/entity/User.java` | 닉네임과 `updated_at` 동시 변경 메서드 |
+| `user/dto/request/UpdatePasswordRequest.java` | 현재·새 비밀번호 입력 및 형식 검증 |
+| `user/dto/response/UpdatePasswordResponse.java` | 비밀번호 변경 성공 응답 |
+| `user/entity/User.java` | 닉네임·비밀번호와 `updated_at` 동시 변경 메서드 |
 | `user/repository/UserRepository.java` | 활성 사용자 ID 조회 메서드 추가 |
 | `user/message/UserMessage.java` | 회원 정보 조회와 닉네임 변경 성공 메시지 |
 | `user/exception/NicknameConflictException.java` | 동일·중복 닉네임 충돌 표현 |
+| `user/exception/PasswordChangeException.java` | 비밀번호 불일치·동일 비밀번호 오류 표현 |
 | `global/exception/UnauthenticatedUserException.java` | 인증 사용자 조회 실패 표현 |
 | `global/exception/GlobalExceptionHandler.java` | 인증 사용자 조회 실패를 `401`로 변환 |
 | `user/service/UserProfileServiceTest.java` | Service 핵심 동작 검증 |
@@ -246,6 +305,9 @@ Content-Type: application/json
 6. 닉네임 변경 시 닉네임과 `updated_at`이 함께 변경된다.
 7. 동일 닉네임, 활성 사용자 중복, DB UNIQUE 경합이 각각 명세의 `409`로 변환된다.
 8. 닉네임 PATCH 요청에 CSRF와 인증이 적용된다.
+9. 비밀번호 변경 시 현재 비밀번호를 대조하고 새 원문이 아닌 bcrypt 해시와 `updated_at`을 저장한다.
+10. 현재 비밀번호 불일치와 동일 비밀번호 요청이 각각 명세의 오류로 변환된다.
+11. 비밀번호 PATCH 요청에 CSRF와 인증이 적용된다.
 
 ### 9.2 Postman 및 MySQL 검증
 
@@ -254,6 +316,8 @@ Content-Type: application/json
 3. 응답의 `userId`, `email`, `nickname`을 MySQL `users` 행과 비교한다.
 4. Authorization 헤더가 없는 요청과 위조 토큰 요청이 `401`인지 확인한다.
 5. CSRF Cookie와 헤더를 포함한 닉네임 변경 후 MySQL의 `nickname`, `updated_at`을 확인한다.
+6. 비밀번호 변경 후 MySQL의 `password_hash`, `updated_at`이 변경됐는지 확인한다. 새 비밀번호 원문이 저장되면 안 된다.
+7. 기존 Access Token으로 내 정보 조회가 계속 성공하는지 확인하여 세션 유지 정책을 검증한다.
 
 ## 10. 완료 기준
 
