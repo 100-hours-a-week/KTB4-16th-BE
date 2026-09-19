@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.global.exception;
 
+import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
@@ -12,6 +13,12 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(InvalidCredentialsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_CREDENTIALS.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_CREDENTIALS));
+    }
+
     @ExceptionHandler(DuplicateUserException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateUser(DuplicateUserException exception) {
         return response(ErrorCode.DUPLICATE_RESOURCE, exception.fieldErrors());
