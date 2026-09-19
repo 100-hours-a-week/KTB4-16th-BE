@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.global.exception;
 
 import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
+import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
@@ -17,6 +18,12 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_CREDENTIALS.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_CREDENTIALS));
+    }
+
+    @ExceptionHandler(InvalidRefreshTokenException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRefreshToken(InvalidRefreshTokenException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_REFRESH_TOKEN.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_REFRESH_TOKEN));
     }
 
     @ExceptionHandler(DuplicateUserException.class)

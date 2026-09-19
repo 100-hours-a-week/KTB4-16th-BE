@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.auth.controller;
 
 import com.ktb4.team16.mulo.auth.dto.request.LoginRequest;
 import com.ktb4.team16.mulo.auth.dto.response.LoginResponse;
+import com.ktb4.team16.mulo.auth.dto.response.RefreshResponse;
 import com.ktb4.team16.mulo.auth.message.AuthMessage;
 import com.ktb4.team16.mulo.auth.service.AuthService;
 import com.ktb4.team16.mulo.auth.service.LoginResult;
@@ -12,6 +13,7 @@ import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import org.springframework.web.bind.annotation.CookieValue;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
@@ -42,6 +44,14 @@ public class AuthController {
         return ResponseEntity.ok()
                 .header(HttpHeaders.SET_COOKIE, refreshCookie.toString())
                 .body(new LoginResponse(AuthMessage.LOGIN_COMPLETED.message(), result.accessToken()));
+    }
+
+    @PostMapping("/refresh")
+    public ResponseEntity<RefreshResponse> refresh(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken
+    ) {
+        String accessToken = authService.refresh(refreshToken);
+        return ResponseEntity.ok(new RefreshResponse(accessToken));
     }
 
 }

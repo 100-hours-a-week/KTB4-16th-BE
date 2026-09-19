@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.auth.service;
 
 import com.ktb4.team16.mulo.auth.entity.RefreshToken;
 import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
+import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.auth.repository.RefreshTokenRepository;
 import com.ktb4.team16.mulo.global.config.JwtProperties;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
@@ -14,6 +15,7 @@ import java.time.Duration;
 import java.time.LocalDateTime;
 import java.util.HexFormat;
 import org.springframework.security.crypto.password.PasswordEncoder;
+import org.springframework.security.oauth2.jwt.JwtException;
 import org.springframework.stereotype.Service;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.transaction.annotation.Transactional;
@@ -65,6 +67,38 @@ public class AuthService {
         String refreshToken = jwtTokenProvider.createRefreshToken(user.getUserId());
         saveRefreshToken(user, refreshToken);
         return new LoginResult(accessToken, refreshToken);
+    }
+
+    @Transactional(readOnly = true)
+    public String refresh(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            throw new InvalidRefreshTokenException();
+        }
+
+        Long userId;
+        try {
+            userId = jwtTokenProvider.extractRefreshUserId(rawRefreshToken);
+        } catch (JwtException exception) {
+            throw new InvalidRefreshTokenException();
+        }
+
+        RefreshToken storedToken = refreshTokenRepository.findByUserUserId(userId)
+                .orElseThrow(InvalidRefreshTokenException::new);
+        String presentedHash = hash(rawRefreshToken);
+        boolean hashMatches = MessageDigest.isEqual(
+                storedToken.getTokenHash().getBytes(StandardCharsets.UTF_8),
+                presentedHash.getBytes(StandardCharsets.UTF_8)
+        );
+        boolean usable = hashMatches
+                && storedToken.getRevokedAt() == null
+                && storedToken.getExpiresAt().isAfter(LocalDateTime.now())
+                && userRepository.existsByUserIdAndDeletedAtIsNull(userId);
+        if (!usable) {
+            throw new InvalidRefreshTokenException();
+        }
+
+        // Rotation 미적용 정책에 따라 기존 Refresh Token은 유지하고 Access Token만 발급한다.
+        return jwtTokenProvider.createAccessToken(userId);
     }
 
     private void saveRefreshToken(User user, String rawRefreshToken) {
