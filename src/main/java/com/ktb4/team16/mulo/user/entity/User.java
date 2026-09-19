@@ -59,4 +59,16 @@ public class User {
     public static User signup(String email, String passwordHash, String nickname) {
         return new User(email, passwordHash, nickname);
     }
+
+    public void updateNickname(String nickname, LocalDateTime updatedAt) {
+        // 중요: 사용자 정보 변경 시 마지막 수정 시각을 함께 기록한다.
+        this.nickname = nickname;
+        this.updatedAt = updatedAt;
+    }
+
+    public void updatePassword(String passwordHash, LocalDateTime updatedAt) {
+        // 중요: 비밀번호 원문이 아니라 BCrypt 해시와 수정 시각만 저장한다.
+        this.passwordHash = passwordHash;
+        this.updatedAt = updatedAt;
+    }
 }

@@ -15,12 +15,17 @@ public enum ErrorCode {
     EMAIL_REQUIRED(HttpStatus.BAD_REQUEST, "이메일을 입력해주세요."),
     INVALID_EMAIL_FORMAT(HttpStatus.BAD_REQUEST, "올바른 이메일 주소를 입력해주세요."),
     PASSWORD_REQUIRED(HttpStatus.BAD_REQUEST, "비밀번호를 입력해주세요."),
+    CURRENT_PASSWORD_REQUIRED(HttpStatus.BAD_REQUEST, "현재 비밀번호를 입력해주세요."),
+    NEW_PASSWORD_REQUIRED(HttpStatus.BAD_REQUEST, "새 비밀번호를 입력해주세요."),
     INVALID_PASSWORD_FORMAT(HttpStatus.BAD_REQUEST,
             "비밀번호는 영문 대소문자, 숫자, 특수문자를 포함해 8~16자여야 합니다."),
+    CURRENT_PASSWORD_MISMATCH(HttpStatus.BAD_REQUEST, "현재 비밀번호가 일치하지 않습니다."),
 
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "이미 사용 중인 정보가 있습니다."),
     EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    SAME_NICKNAME(HttpStatus.CONFLICT, "현재 닉네임과 동일합니다."),
+    SAME_PASSWORD(HttpStatus.CONFLICT, "새 비밀번호는 현재 비밀번호와 달라야 합니다."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
