@@ -14,6 +14,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
@@ -36,7 +37,10 @@ public class SecurityConfig {
                 .sessionManagement(session -> session.sessionCreationPolicy(SessionCreationPolicy.STATELESS))
                 .requestCache(AbstractHttpConfigurer::disable)
                 // SPA 설정은 Cookie의 원본 토큰 헤더와 BREACH 보호 처리를 함께 지원한다.
-                .csrf(csrf -> csrf.spa().csrfTokenRepository(csrfRepository))
+                .csrf(csrf -> csrf.spa().csrfTokenRepository(csrfRepository)
+                        // 회원가입은 비인증 공개 요청이므로 CSRF 토큰을 요구하지 않는다.
+                        .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
+                                HttpMethod.POST, "/api/users/signup")))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // /logout 기본 엔드포인트 대신 이후 auth 도메인의 명시적 로그아웃을 사용한다.

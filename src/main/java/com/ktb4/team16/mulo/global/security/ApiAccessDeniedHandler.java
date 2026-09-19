@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.global.security;
 
+import com.ktb4.team16.mulo.global.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -20,9 +21,9 @@ public class ApiAccessDeniedHandler implements AccessDeniedHandler {
     public void handle(HttpServletRequest request, HttpServletResponse response,
             AccessDeniedException exception) throws IOException {
         if (exception instanceof CsrfException) {
-            writer.write(response, 403, "CSRF_TOKEN_INVALID", "CSRF 토큰을 확인해주세요.");
+            writer.write(response, ErrorCode.CSRF_TOKEN_INVALID);
             return;
         }
-        writer.write(response, 403, "FORBIDDEN", "접근 권한이 없습니다.");
+        writer.write(response, ErrorCode.FORBIDDEN);
     }
 }
