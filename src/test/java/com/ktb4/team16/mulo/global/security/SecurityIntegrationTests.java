@@ -60,30 +60,18 @@ class SecurityIntegrationTests {
     }
 
     @Test
-    void signupAcceptsActualCookieAndMatchingHeaderWithoutAuthentication() throws Exception {
-        Cookie cookie = csrfCookie();
-        var result = mvc.perform(post("/api/users/signup").cookie(cookie)
-                        .header("X-XSRF-TOKEN", cookie.getValue()))
+    void signupDoesNotRequireCsrfOrAuthentication() throws Exception {
+        var result = mvc.perform(post("/api/users/signup"))
                 .andExpect(status().isCreated()).andReturn();
         assertThat(result.getRequest().getSession(false)).isNull();
     }
 
     @Test
-    void signupWithoutCsrfIsForbiddenJson() throws Exception {
-        mvc.perform(post("/api/users/signup"))
+    void otherStateChangingApiStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/private"))
                 .andExpect(status().isForbidden())
                 .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
-    }
-
-    @Test
-    void cookieAloneAndWrongHeaderCannotAuthorizeSignup() throws Exception {
-        Cookie cookie = csrfCookie();
-        mvc.perform(post("/api/users/signup").cookie(cookie)).andExpect(status().isForbidden());
-        mvc.perform(post("/api/users/signup").cookie(cookie).header("X-XSRF-TOKEN", "wrong"))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/api/users/signup").header("X-XSRF-TOKEN", cookie.getValue()))
-                .andExpect(status().isForbidden());
     }
 
     @Test
