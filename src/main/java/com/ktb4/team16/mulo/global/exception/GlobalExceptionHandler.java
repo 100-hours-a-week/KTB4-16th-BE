@@ -14,6 +14,13 @@ import org.springframework.web.bind.annotation.RestControllerAdvice;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(UnauthenticatedUserException.class)
+    public ResponseEntity<ErrorResponse> handleUnauthenticatedUser(
+            UnauthenticatedUserException exception) {
+        return ResponseEntity.status(ErrorCode.UNAUTHORIZED.status())
+                .body(ErrorResponse.of(ErrorCode.UNAUTHORIZED));
+    }
+
     @ExceptionHandler(InvalidCredentialsException.class)
     public ResponseEntity<ErrorResponse> handleInvalidCredentials(InvalidCredentialsException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_CREDENTIALS.status())
