@@ -101,6 +101,21 @@ public class AuthService {
         return jwtTokenProvider.createAccessToken(userId);
     }
 
+    @Transactional
+    public void logout(String rawRefreshToken) {
+        if (rawRefreshToken == null || rawRefreshToken.isBlank()) {
+            return;
+        }
+
+        String tokenHash = hash(rawRefreshToken);
+        refreshTokenRepository.findByTokenHash(tokenHash)
+                .filter(token -> token.getRevokedAt() == null)
+                .ifPresent(token -> {
+                    token.revoke(LocalDateTime.now());
+                    refreshTokenRepository.save(token);
+                });
+    }
+
     private void saveRefreshToken(User user, String rawRefreshToken) {
         LocalDateTime expiresAt = LocalDateTime.now().plus(refreshTokenTtl);
         String tokenHash = hash(rawRefreshToken);

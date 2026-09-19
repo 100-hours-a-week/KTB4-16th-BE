@@ -59,6 +59,8 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
                         // Refresh Cookie로 인증하므로 Access Token은 요구하지 않되 CSRF 보호는 유지한다.
                         .requestMatchers(HttpMethod.POST, "/api/auth/refresh").permitAll()
+                        // 로그아웃은 멱등 처리하며 Cookie 인증 요청이므로 CSRF 보호는 유지한다.
+                        .requestMatchers(HttpMethod.POST, "/api/auth/logout").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);

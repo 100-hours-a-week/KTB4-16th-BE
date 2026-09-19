@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.auth.controller;
 
 import com.ktb4.team16.mulo.auth.dto.request.LoginRequest;
 import com.ktb4.team16.mulo.auth.dto.response.LoginResponse;
+import com.ktb4.team16.mulo.auth.dto.response.LogoutResponse;
 import com.ktb4.team16.mulo.auth.dto.response.RefreshResponse;
 import com.ktb4.team16.mulo.auth.message.AuthMessage;
 import com.ktb4.team16.mulo.auth.service.AuthService;
@@ -54,4 +55,20 @@ public class AuthController {
         return ResponseEntity.ok(new RefreshResponse(accessToken));
     }
 
+    @PostMapping("/logout")
+    public ResponseEntity<LogoutResponse> logout(
+            @CookieValue(name = "refreshToken", required = false) String refreshToken
+    ) {
+        authService.logout(refreshToken);
+        ResponseCookie expiredRefreshCookie = ResponseCookie.from("refreshToken", "")
+                .path("/api/auth")
+                .httpOnly(true)
+                .secure(securityProperties.cookieSecure())
+                .sameSite("Strict")
+                .maxAge(0)
+                .build();
+        return ResponseEntity.ok()
+                .header(HttpHeaders.SET_COOKIE, expiredRefreshCookie.toString())
+                .body(new LogoutResponse(AuthMessage.LOGOUT_COMPLETED.message()));
+    }
 }
