@@ -59,4 +59,10 @@ public class User {
     public static User signup(String email, String passwordHash, String nickname) {
         return new User(email, passwordHash, nickname);
     }
+
+    public void updateNickname(String nickname, LocalDateTime updatedAt) {
+        // 중요: 사용자 정보 변경 시 마지막 수정 시각을 함께 기록한다.
+        this.nickname = nickname;
+        this.updatedAt = updatedAt;
+    }
 }

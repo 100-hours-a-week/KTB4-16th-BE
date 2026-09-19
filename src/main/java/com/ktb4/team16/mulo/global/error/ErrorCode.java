@@ -21,6 +21,7 @@ public enum ErrorCode {
     DUPLICATE_RESOURCE(HttpStatus.CONFLICT, "이미 사용 중인 정보가 있습니다."),
     EMAIL_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 이메일입니다."),
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
+    SAME_NICKNAME(HttpStatus.CONFLICT, "현재 닉네임과 동일합니다."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");

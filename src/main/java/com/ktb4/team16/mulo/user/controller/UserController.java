@@ -1,6 +1,8 @@
 package com.ktb4.team16.mulo.user.controller;
 
+import com.ktb4.team16.mulo.user.dto.request.UpdateNicknameRequest;
 import com.ktb4.team16.mulo.user.dto.request.UserSignupRequest;
+import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserSignupResponse;
 import com.ktb4.team16.mulo.user.message.UserMessage;
@@ -11,6 +13,7 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -43,5 +46,12 @@ public class UserController {
             @AuthenticationPrincipal Long userId) {
         // 중요: Filter가 검증해 SecurityContext에 저장한 userId만 서비스에 전달한다.
         return userProfileService.getMyProfile(userId);
+    }
+
+    @PatchMapping("/me/nickname")
+    public UpdateNicknameResponse updateNickname(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody UpdateNicknameRequest request) {
+        return userProfileService.updateNickname(userId, request.nickname());
     }
 }

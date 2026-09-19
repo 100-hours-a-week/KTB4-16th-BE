@@ -29,6 +29,7 @@ import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -131,6 +132,20 @@ class SecurityIntegrationTests {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
                 .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
+    void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/users/me/nickname"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/users/me/nickname")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test

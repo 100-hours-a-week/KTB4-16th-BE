@@ -3,8 +3,10 @@ package com.ktb4.team16.mulo.user.controller;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.FieldError;
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
+import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
+import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
@@ -26,6 +28,7 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -141,5 +144,89 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.userId").value(1))
                 .andExpect(jsonPath("$.data.nickname").value("뮤로16"))
                 .andExpect(jsonPath("$.data.email").value("user@example.com"));
+    }
+
+    @Test
+    void authenticatedUserCanUpdateNickname() throws Exception {
+        when(profileService.updateNickname(1L, "새닉네임"))
+                .thenReturn(new UpdateNicknameResponse(
+                        "닉네임이 변경되었습니다.",
+                        new UpdateNicknameResponse.UpdateNicknameData("새닉네임")));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"새닉네임\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("닉네임이 변경되었습니다."))
+                .andExpect(jsonPath("$.data.nickname").value("새닉네임"));
+    }
+
+    @Test
+    void blankNicknameReturnsRequiredError() throws Exception {
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("nickname"))
+                .andExpect(jsonPath("$.errors[0].code").value("NICKNAME_REQUIRED"));
+    }
+
+    @Test
+    void unicodeBlankNicknameReturnsOnlyRequiredError() throws Exception {
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"\u3000\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors.length()").value(1))
+                .andExpect(jsonPath("$.errors[0].field").value("nickname"))
+                .andExpect(jsonPath("$.errors[0].code").value("NICKNAME_REQUIRED"));
+    }
+
+    @Test
+    void invalidNicknameReturnsFormatError() throws Exception {
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"bad name\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors[0].field").value("nickname"))
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_NICKNAME_FORMAT"));
+    }
+
+    @Test
+    void currentNicknameReturnsSameNicknameConflict() throws Exception {
+        when(profileService.updateNickname(1L, "현재닉네임"))
+                .thenThrow(new NicknameConflictException(ErrorCode.SAME_NICKNAME));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"현재닉네임\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("SAME_NICKNAME"))
+                .andExpect(jsonPath("$.message").value("현재 닉네임과 동일합니다."));
+    }
+
+    @Test
+    void duplicateNicknameReturnsNicknameDuplicatedConflict() throws Exception {
+        when(profileService.updateNickname(1L, "사용중닉네임"))
+                .thenThrow(new NicknameConflictException(ErrorCode.NICKNAME_DUPLICATED));
+        authenticateUser(1L);
+
+        mvc.perform(patch("/api/users/me/nickname")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":\"사용중닉네임\"}"))
+                .andExpect(status().isConflict())
+                .andExpect(jsonPath("$.code").value("NICKNAME_DUPLICATED"))
+                .andExpect(jsonPath("$.message").value("이미 사용 중인 닉네임입니다."));
+    }
+
+    private void authenticateUser(Long userId) {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(userId, null, List.of()));
     }
 }

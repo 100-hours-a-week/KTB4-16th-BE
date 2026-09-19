@@ -5,6 +5,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
+import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -36,6 +37,14 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(DuplicateUserException.class)
     public ResponseEntity<ErrorResponse> handleDuplicateUser(DuplicateUserException exception) {
         return response(ErrorCode.DUPLICATE_RESOURCE, exception.fieldErrors());
+    }
+
+    @ExceptionHandler(NicknameConflictException.class)
+    public ResponseEntity<ErrorResponse> handleNicknameConflict(
+            NicknameConflictException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status())
+                .body(ErrorResponse.of(errorCode));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
