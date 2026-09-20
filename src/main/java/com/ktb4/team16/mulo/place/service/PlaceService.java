@@ -1,7 +1,7 @@
 package com.ktb4.team16.mulo.place.service;
 
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto;
-import com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto;
+import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,7 +17,7 @@ public class PlaceService {
     private final RecordRepository recordRepository;
 
     @Transactional(readOnly = true)
-    public List<PopularPlaceMarkerResponseDto> getPopularPlaceMarkersInBounds(
+    public List<PopularPlaceMarkerResponse> getPopularPlaceMarkersInBounds(
             BigDecimal swLat,
             BigDecimal swLng,
             BigDecimal neLat,
@@ -29,7 +29,7 @@ public class PlaceService {
     }
 
     @Transactional(readOnly = true)
-    public List<MyPlaceMarkerResponseDto> getMyPlaceMarkersInBounds(
+    public List<MyPlaceMarkerResponse> getMyPlaceMarkersInBounds(
             Long userId,
             BigDecimal swLat,
             BigDecimal swLng,

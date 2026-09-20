@@ -3,6 +3,7 @@ package com.ktb4.team16.mulo.user.controller;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.FieldError;
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
+import com.ktb4.team16.mulo.place.service.PlaceService;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
@@ -39,12 +40,13 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 class UserControllerTest {
     @Mock UserSignupService signupService;
     @Mock UserProfileService profileService;
+    @Mock PlaceService placeService;
     MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(signupService, profileService))
+                        new UserController(signupService, profileService, placeService))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

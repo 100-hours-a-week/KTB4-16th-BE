@@ -1,5 +1,11 @@
 package com.ktb4.team16.mulo.user.controller;
 
+import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.MyPlacesQuery;
+import com.ktb4.team16.mulo.place.dto.MyPlacesResponse;
+import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
+import com.ktb4.team16.mulo.place.message.PlaceMessage;
+import com.ktb4.team16.mulo.place.service.PlaceService;
 import com.ktb4.team16.mulo.user.dto.request.UpdateNicknameRequest;
 import com.ktb4.team16.mulo.user.dto.request.UpdatePasswordRequest;
 import com.ktb4.team16.mulo.user.dto.request.UserSignupRequest;
@@ -11,11 +17,15 @@ import com.ktb4.team16.mulo.user.message.UserMessage;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+
 import jakarta.validation.Valid;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
+
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
@@ -29,6 +39,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class UserController {
     private final UserSignupService userSignupService;
     private final UserProfileService userProfileService;
+    private final PlaceService placeService;
 
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
@@ -59,5 +70,24 @@ public class UserController {
             @Valid @RequestBody UpdatePasswordRequest request) {
         return userProfileService.updatePassword(
                 userId, request.currentPassword(), request.newPassword());
+    }
+
+    @GetMapping("/me/places")
+    public MyPlacesResponse getMyPlaces(
+            @AuthenticationPrincipal Long userId,
+            @Valid @ModelAttribute MyPlacesQuery query
+    ) {
+        if (!query.hasValidBounds()) {
+            throw new InvalidMapBoundsException();
+        }
+
+        List<MyPlaceMarkerResponse> places =
+                placeService.getMyPlaceMarkersInBounds(
+                        userId, query.swLat(), query.swLng(), query.neLat(), query.neLng());
+
+        return new MyPlacesResponse(
+                PlaceMessage.MY_PLACES_RETRIEVED.message(),
+                places
+        );
     }
 }

@@ -135,6 +135,19 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void myPlacesWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/users/me/places")
+                        .param("swLat", "37.0")
+                        .param("swLng", "127.0")
+                        .param("neLat", "38.0")
+                        .param("neLng", "128.0"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
     void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
         mvc.perform(patch("/api/users/me/nickname"))
                 .andExpect(status().isForbidden())
