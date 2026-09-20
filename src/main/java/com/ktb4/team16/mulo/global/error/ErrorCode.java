@@ -10,6 +10,7 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효한 Refresh Token이 없습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    INVALID_WEATHER_REQUEST_TIME(HttpStatus.BAD_REQUEST, "지난 시간대의 날씨는 조회할 수 없습니다."),
     NICKNAME_REQUIRED(HttpStatus.BAD_REQUEST, "닉네임을 입력해주세요."),
     INVALID_NICKNAME_FORMAT(HttpStatus.BAD_REQUEST, "닉네임은 띄어쓰기와 특수문자 없이 2~10자로 입력해주세요."),
     EMAIL_REQUIRED(HttpStatus.BAD_REQUEST, "이메일을 입력해주세요."),
@@ -26,6 +27,9 @@ public enum ErrorCode {
     NICKNAME_DUPLICATED(HttpStatus.CONFLICT, "이미 사용 중인 닉네임입니다."),
     SAME_NICKNAME(HttpStatus.CONFLICT, "현재 닉네임과 동일합니다."),
     SAME_PASSWORD(HttpStatus.CONFLICT, "새 비밀번호는 현재 비밀번호와 달라야 합니다."),
+
+    WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
+            "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");

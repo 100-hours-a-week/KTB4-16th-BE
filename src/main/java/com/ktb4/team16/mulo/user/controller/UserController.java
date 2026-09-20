@@ -12,6 +12,7 @@ import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,15 +25,10 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/users")
+@RequiredArgsConstructor
 public class UserController {
     private final UserSignupService userSignupService;
     private final UserProfileService userProfileService;
-
-    public UserController(UserSignupService userSignupService,
-            UserProfileService userProfileService) {
-        this.userSignupService = userSignupService;
-        this.userProfileService = userProfileService;
-    }
 
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
