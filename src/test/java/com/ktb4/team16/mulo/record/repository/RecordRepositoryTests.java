@@ -44,26 +44,36 @@ class RecordRepositoryTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void popularPlacesAreDistinctAndExcludeDeletedAndOutOfBoundsRecords() {
+    void popularPlacesCountOnlyRecentActiveInBoundsRecordsPerPlace() {
         long userId = insertUser();
         long trackId = insertTrack("track");
-        long inBounds = insertPlace(null, "테스트동", "-33.0000000", "-150.0000000");
-        long deletedOnly = insertPlace("deleted", "테스트동", "-33.1000000", "-150.1000000");
+        long firstInBounds = insertPlace(null, "테스트동", "-33.0000000", "-150.0000000");
+        long secondInBounds = insertPlace("second", "테스트동", "-33.1000000", "-150.1000000");
         long outOfBounds = insertPlace("outside", "테스트동", "10.0000000", "20.0000000");
-        insertRecord(userId, inBounds, trackId, FIRST_DAY, null);
-        insertRecord(userId, inBounds, trackId, FIRST_DAY.plusDays(1), null);
-        insertRecord(userId, deletedOnly, trackId, FIRST_DAY, FIRST_DAY.plusDays(1));
-        insertRecord(userId, outOfBounds, trackId, FIRST_DAY, null);
+        LocalDateTime createdAtFrom = FIRST_DAY.plusDays(7);
+        insertRecord(userId, firstInBounds, trackId, createdAtFrom, null);
+        insertRecord(userId, firstInBounds, trackId, createdAtFrom.plusDays(1), null);
+        insertRecord(userId, firstInBounds, trackId, createdAtFrom.minusSeconds(1), null);
+        insertRecord(userId, firstInBounds, trackId, createdAtFrom.plusDays(2),
+                createdAtFrom.plusDays(3));
+        insertRecord(userId, secondInBounds, trackId, createdAtFrom.plusDays(1), null);
+        insertRecord(userId, outOfBounds, trackId, createdAtFrom.plusDays(1), null);
 
         List<PopularPlaceMarkerResponseDto> markers = recordRepository.findPopularPlacesInBounds(
-                SW_LAT, SW_LNG, NE_LAT, NE_LNG);
+                SW_LAT, SW_LNG, NE_LAT, NE_LNG, createdAtFrom);
 
-        assertThat(markers).hasSize(1);
-        assertThat(markers.getFirst().getPlaceId()).isEqualTo(inBounds);
-        assertThat(markers.getFirst().getPlaceName()).isNull();
-        assertThat(markers.getFirst().getDongName()).isEqualTo("테스트동");
-        assertThat(markers.getFirst().getLatitude()).isEqualByComparingTo("-33.0000000");
-        assertThat(placeRepository.findById(deletedOnly)).isPresent();
+        assertThat(markers).hasSize(2);
+        assertThat(markers).filteredOn(marker -> marker.getPlaceId().equals(firstInBounds))
+                .singleElement()
+                .satisfies(marker -> {
+                    assertThat(marker.getRecordCount()).isEqualTo(2L);
+                    assertThat(marker.getLatitude()).isEqualByComparingTo("-33.0000000");
+                    assertThat(marker.getLongitude()).isEqualByComparingTo("-150.0000000");
+                });
+        assertThat(markers).filteredOn(marker -> marker.getPlaceId().equals(secondInBounds))
+                .singleElement()
+                .satisfies(marker -> assertThat(marker.getRecordCount()).isEqualTo(1L));
+        assertThat(placeRepository.findById(outOfBounds)).isPresent();
     }
 
     @Test

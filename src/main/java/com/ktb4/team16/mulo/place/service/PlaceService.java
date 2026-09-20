@@ -1,8 +1,10 @@
 package com.ktb4.team16.mulo.place.service;
 
 import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto;
+import com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import java.math.BigDecimal;
+import java.time.LocalDateTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -19,8 +21,22 @@ public class PlaceService {
             BigDecimal swLat,
             BigDecimal swLng,
             BigDecimal neLat,
+            BigDecimal neLng,
+            LocalDateTime createdAtFrom
+    ) {
+        return recordRepository.findPopularPlacesInBounds(
+                swLat, swLng, neLat, neLng, createdAtFrom);
+    }
+
+    @Transactional(readOnly = true)
+    public List<MyPlaceMarkerResponseDto> getMyPlaceMarkersInBounds(
+            Long userId,
+            BigDecimal swLat,
+            BigDecimal swLng,
+            BigDecimal neLat,
             BigDecimal neLng
     ) {
-        return recordRepository.findPopularPlacesInBounds(swLat, swLng, neLat, neLng);
+        return recordRepository.findMyPlaceMarkersInBounds(
+                userId, swLat, swLng, neLat, neLng);
     }
 }

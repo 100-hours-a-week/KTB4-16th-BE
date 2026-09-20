@@ -7,21 +7,18 @@ import lombok.Getter;
 public class PopularPlaceMarkerResponseDto {
 
     private final Long placeId;
-    private final String placeName;
-    private final String dongName;
+    private final Long recordCount;
     private final BigDecimal latitude;
     private final BigDecimal longitude;
 
     public PopularPlaceMarkerResponseDto(
             Long placeId,
-            String placeName,
-            String dongName,
+            Long recordCount,
             BigDecimal latitude,
             BigDecimal longitude
     ) {
         this.placeId = placeId;
-        this.placeName = placeName;
-        this.dongName = dongName;
+        this.recordCount = recordCount;
         this.latitude = latitude;
         this.longitude = longitude;
     }

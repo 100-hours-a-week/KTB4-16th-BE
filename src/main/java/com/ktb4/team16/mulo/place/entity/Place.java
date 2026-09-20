@@ -19,14 +19,11 @@ public class Place {
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long placeId;
 
-    @Column(length = 32)
-    private String externalPlaceId;
-
-    @Column(length = 255)
-    private String placeName;
+    @Column(length = 20)
+    private String legalDongCode;
 
     @Column(length = 100)
-    private String dongName;
+    private String legalDongName;
 
     @Column(nullable = false, precision = 11, scale = 7)
     private BigDecimal latitude;

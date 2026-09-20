@@ -7,23 +7,20 @@ import lombok.Getter;
 public class MyPlaceMarkerResponseDto {
 
     private final Long placeId;
-    private final String placeName;
-    private final String dongName;
+    private final String legalDongName;
     private final Long myRecordsCount;
     private final BigDecimal latitude;
     private final BigDecimal longitude;
 
     public MyPlaceMarkerResponseDto(
             Long placeId,
-            String placeName,
-            String dongName,
+            String legalDongName,
             Long myRecordsCount,
             BigDecimal latitude,
             BigDecimal longitude
     ) {
         this.placeId = placeId;
-        this.placeName = placeName;
-        this.dongName = dongName;
+        this.legalDongName = legalDongName;
         this.myRecordsCount = myRecordsCount;
         this.latitude = latitude;
         this.longitude = longitude;

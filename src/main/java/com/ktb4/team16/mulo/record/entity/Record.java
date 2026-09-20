@@ -59,9 +59,12 @@ public class Record {
     private LocalDateTime deletedAt;
 
     public enum WeatherCondition {
-        SUNNY,
+        CLEAR,
         CLOUDY,
-        RAINY,
-        SNOWY
+        OVERCAST,
+        RAIN,
+        SNOW,
+        RAIN_SNOW,
+        SHOWER
     }
 }

@@ -16,20 +16,23 @@ import org.springframework.data.repository.query.Param;
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
-        SELECT DISTINCT new com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto(
-            p.placeId, p.placeName, p.dongName, p.latitude, p.longitude
+        SELECT new com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto(
+            p.placeId, COUNT(r), p.latitude, p.longitude
         )
         FROM Record r
         JOIN r.place p
         WHERE r.deletedAt IS NULL
+            AND r.createdAt >= :createdAtFrom
             AND p.latitude BETWEEN :swLat AND :neLat
             AND p.longitude BETWEEN :swLng AND :neLng
+        GROUP BY p.placeId, p.latitude, p.longitude
         """)
     List<PopularPlaceMarkerResponseDto> findPopularPlacesInBounds(
             @Param("swLat") BigDecimal swLat,
             @Param("swLng") BigDecimal swLng,
             @Param("neLat") BigDecimal neLat,
-            @Param("neLng") BigDecimal neLng
+            @Param("neLng") BigDecimal neLng,
+            @Param("createdAtFrom") LocalDateTime createdAtFrom
     );
 
     @Query("""
@@ -63,7 +66,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto(
-            p.placeId, p.placeName, p.dongName, COUNT(r), p.latitude, p.longitude
+            p.placeId, p.legalDongName, COUNT(r), p.latitude, p.longitude
         )
         FROM Record r
         JOIN r.place p
@@ -71,7 +74,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             AND r.deletedAt IS NULL
             AND p.latitude BETWEEN :swLat AND :neLat
             AND p.longitude BETWEEN :swLng AND :neLng
-        GROUP BY p.placeId, p.placeName, p.dongName, p.latitude, p.longitude
+        GROUP BY p.placeId, p.legalDongName, p.latitude, p.longitude
         """)
     List<MyPlaceMarkerResponseDto> findMyPlaceMarkersInBounds(
             @Param("userId") Long userId,
