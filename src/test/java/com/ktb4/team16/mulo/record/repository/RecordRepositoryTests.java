@@ -33,6 +33,8 @@ class RecordRepositoryTests {
     private static final BigDecimal NE_LAT = new BigDecimal("-32.0000000");
     private static final BigDecimal NE_LNG = new BigDecimal("-149.0000000");
     private static final LocalDateTime FIRST_DAY = LocalDateTime.of(2026, 1, 1, 12, 0);
+    private static final String LEGAL_DONG_CODE = "1111010100";
+    private static final String LEGAL_DONG_NAME = "테스트동";
 
     @Autowired
     private RecordRepository recordRepository;
@@ -47,9 +49,12 @@ class RecordRepositoryTests {
     void popularPlacesCountOnlyRecentActiveInBoundsRecordsPerPlace() {
         long userId = insertUser();
         long trackId = insertTrack("track");
-        long firstInBounds = insertPlace(null, "테스트동", "-33.0000000", "-150.0000000");
-        long secondInBounds = insertPlace("second", "테스트동", "-33.1000000", "-150.1000000");
-        long outOfBounds = insertPlace("outside", "테스트동", "10.0000000", "20.0000000");
+        long firstInBounds = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long secondInBounds = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
+        long outOfBounds = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "10.0000000", "20.0000000");
         LocalDateTime createdAtFrom = FIRST_DAY.plusDays(7);
         insertRecord(userId, firstInBounds, trackId, createdAtFrom, null);
         insertRecord(userId, firstInBounds, trackId, createdAtFrom.plusDays(1), null);
@@ -79,9 +84,12 @@ class RecordRepositoryTests {
     @Test
     void popularTracksUseCountThenLatestRecordThenTrackIdOrder() {
         long userId = insertUser();
-        long firstPlace = insertPlace("popular-first", "테스트동", "-33.0000000", "-150.0000000");
-        long secondPlace = insertPlace("popular-second", "테스트동", "-33.1000000", "-150.1000000");
-        long excludedPlace = insertPlace("excluded", "테스트동", "-33.2000000", "-150.2000000");
+        long firstPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long secondPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
+        long excludedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.2000000", "-150.2000000");
         long mostCount = insertTrack("most");
         long tiedFirst = insertTrack("tied-first");
         long tiedSecond = insertTrack("tied-second");
@@ -117,9 +125,12 @@ class RecordRepositoryTests {
         long me = insertUser();
         long other = insertUser();
         long trackId = insertTrack("track");
-        long inBounds = insertPlace("mine", "테스트동", "-33.0000000", "-150.0000000");
-        long deletedOnly = insertPlace("deleted", "테스트동", "-33.1000000", "-150.1000000");
-        long outOfBounds = insertPlace("outside", "테스트동", "10.0000000", "20.0000000");
+        long inBounds = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long deletedOnly = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
+        long outOfBounds = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "10.0000000", "20.0000000");
         insertRecord(me, inBounds, trackId, FIRST_DAY, null);
         insertRecord(me, inBounds, trackId, FIRST_DAY.plusDays(1), null);
         insertRecord(me, inBounds, trackId, FIRST_DAY.plusDays(2), FIRST_DAY.plusDays(3));
@@ -142,9 +153,12 @@ class RecordRepositoryTests {
     void myRecordsCursorDoesNotSkipOrRepeatRecordsWithSameCreatedAt() {
         long me = insertUser();
         long other = insertUser();
-        long firstPlace = insertPlace("mine-first", "테스트동", "-33.0000000", "-150.0000000");
-        long secondPlace = insertPlace("mine-second", "테스트동", "-33.1000000", "-150.1000000");
-        long excludedPlace = insertPlace("excluded", "테스트동", "-33.2000000", "-150.2000000");
+        long firstPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long secondPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
+        long excludedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.2000000", "-150.2000000");
         long trackId = insertTrack("track");
         long oldest = insertRecord(me, firstPlace, trackId, FIRST_DAY, null);
         long sameTimeFirst = insertRecord(me, firstPlace, trackId, FIRST_DAY.plusDays(1), null);
@@ -182,11 +196,17 @@ class RecordRepositoryTests {
                 suffix + "@example.test", "test-hash", suffix);
     }
 
-    private long insertPlace(String name, String dongName, String latitude, String longitude) {
+    private long insertPlace(
+            String legalDongCode,
+            String legalDongName,
+            String latitude,
+            String longitude
+    ) {
         return insert("""
-                INSERT INTO places (place_name, dong_name, latitude, longitude)
+                INSERT INTO places (legal_dong_code, legal_dong_name, latitude, longitude)
                 VALUES (?, ?, ?, ?)
-                """, name, dongName, new BigDecimal(latitude), new BigDecimal(longitude));
+                """, legalDongCode, legalDongName,
+                new BigDecimal(latitude), new BigDecimal(longitude));
     }
 
     private long insertTrack(String title) {
