@@ -9,6 +9,7 @@ import com.ktb4.team16.mulo.auth.service.AuthService;
 import com.ktb4.team16.mulo.auth.service.LoginResult;
 import com.ktb4.team16.mulo.global.config.SecurityProperties;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
 import org.springframework.http.ResponseEntity;
@@ -20,16 +21,12 @@ import org.springframework.web.bind.annotation.RestController;
 
 @RestController
 @RequestMapping("/api/auth")
+@RequiredArgsConstructor
 public class AuthController {
     private static final long REFRESH_TOKEN_MAX_AGE_SECONDS = 604800;
 
     private final AuthService authService;
     private final SecurityProperties securityProperties;
-
-    public AuthController(AuthService authService, SecurityProperties securityProperties) {
-        this.authService = authService;
-        this.securityProperties = securityProperties;
-    }
 
     @PostMapping("/login")
     public ResponseEntity<LoginResponse> login(@Valid @RequestBody LoginRequest request) {
