@@ -126,6 +126,15 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void weatherGetIsPublicWithoutAuthenticationOrCsrf() throws Exception {
+        var result = mvc.perform(get("/api/weather"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("weather"))
+                .andReturn();
+        assertThat(result.getRequest().getSession(false)).isNull();
+    }
+
+    @Test
     void profileWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized())
@@ -230,5 +239,9 @@ class SecurityIntegrationTests {
 
         @GetMapping("/api/private")
         String privateResource() { return "protected"; }
+
+        // 날씨 조회는 공용 예보 데이터만 반환하므로 비인증 GET을 허용한다.
+        @GetMapping("/api/weather")
+        String weather() { return "weather"; }
     }
 }
