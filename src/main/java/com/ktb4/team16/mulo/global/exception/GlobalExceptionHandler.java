@@ -7,12 +7,18 @@ import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
+import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
+import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
+import jakarta.validation.ConstraintViolationException;
 import java.util.List;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
+import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.method.annotation.HandlerMethodValidationException;
+import org.springframework.web.method.annotation.MethodArgumentTypeMismatchException;
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
@@ -56,6 +62,19 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(errorCode));
     }
 
+    @ExceptionHandler(WeatherApiException.class)
+    public ResponseEntity<ErrorResponse> handleWeatherApi(WeatherApiException exception) {
+        return ResponseEntity.status(ErrorCode.WEATHER_API_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.WEATHER_API_ERROR));
+    }
+
+    @ExceptionHandler(WeatherRequestTimeException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidWeatherRequestTime(
+            WeatherRequestTimeException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_WEATHER_REQUEST_TIME.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_WEATHER_REQUEST_TIME));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleInvalidRequest(MethodArgumentNotValidException exception) {
         List<com.ktb4.team16.mulo.global.error.FieldError> errors = exception.getBindingResult()
@@ -64,6 +83,15 @@ public class GlobalExceptionHandler {
                 .map(this::toFieldError)
                 .toList();
         return response(ErrorCode.INVALID_INPUT_VALUE, errors);
+    }
+
+    @ExceptionHandler({MissingServletRequestParameterException.class,
+            MethodArgumentTypeMismatchException.class,
+            ConstraintViolationException.class,
+            HandlerMethodValidationException.class})
+    public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
     }
 
     @ExceptionHandler(Exception.class)
