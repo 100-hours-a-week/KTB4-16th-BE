@@ -22,6 +22,8 @@ repositories {
 dependencies {
     // Security: URL 인가, CSRF 방어 및 BCrypt 비밀번호 해싱
     implementation 'org.springframework.boot:spring-boot-starter-security'
+    // JWT 발급·검증
+    implementation 'org.springframework.security:spring-security-oauth2-jose'
     // REST API
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
 

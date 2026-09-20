@@ -5,6 +5,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
+import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.context.WebApplicationContext;
@@ -22,6 +23,11 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 
 @SpringJUnitConfig(SecurityIntegrationTests.TestConfig.class)
 @WebAppConfiguration
+@TestPropertySource(properties = {
+        "mulo.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "mulo.jwt.access-token-ttl=PT1H",
+        "mulo.jwt.refresh-token-ttl=P7D"
+})
 class ProductionSecurityTests {
     @Autowired WebApplicationContext context;
     @Autowired PasswordEncoder encoder;

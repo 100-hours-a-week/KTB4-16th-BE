@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.global.security;
 
+import com.ktb4.team16.mulo.global.error.ErrorCode;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import java.io.IOException;
@@ -18,6 +19,6 @@ public class ApiAuthenticationEntryPoint implements AuthenticationEntryPoint {
     @Override
     public void commence(HttpServletRequest request, HttpServletResponse response,
             AuthenticationException exception) throws IOException {
-        writer.write(response, 401, "UNAUTHORIZED", "로그인이 필요합니다.");
+        writer.write(response, ErrorCode.UNAUTHORIZED);
     }
 }

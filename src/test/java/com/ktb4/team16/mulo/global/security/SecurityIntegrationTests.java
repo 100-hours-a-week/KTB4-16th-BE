@@ -1,10 +1,14 @@
 package com.ktb4.team16.mulo.global.security;
 
+import com.ktb4.team16.mulo.auth.controller.AuthController;
+import com.ktb4.team16.mulo.auth.service.AuthService;
+import com.ktb4.team16.mulo.user.repository.UserRepository;
 import jakarta.servlet.http.Cookie;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.Bean;
 import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
@@ -21,9 +25,11 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -35,7 +41,10 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 @WebAppConfiguration
 @TestPropertySource(properties = {
         "mulo.security.allowed-origins=http://localhost:3000",
-        "mulo.security.cookie-secure=false"
+        "mulo.security.cookie-secure=false",
+        "mulo.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
+        "mulo.jwt.access-token-ttl=PT1H",
+        "mulo.jwt.refresh-token-ttl=P7D"
 })
 class SecurityIntegrationTests {
     @Autowired WebApplicationContext context;
@@ -60,30 +69,51 @@ class SecurityIntegrationTests {
     }
 
     @Test
-    void signupAcceptsActualCookieAndMatchingHeaderWithoutAuthentication() throws Exception {
-        Cookie cookie = csrfCookie();
-        var result = mvc.perform(post("/api/users/signup").cookie(cookie)
-                        .header("X-XSRF-TOKEN", cookie.getValue()))
+    void signupDoesNotRequireCsrfOrAuthentication() throws Exception {
+        var result = mvc.perform(post("/api/users/signup"))
                 .andExpect(status().isCreated()).andReturn();
         assertThat(result.getRequest().getSession(false)).isNull();
     }
 
     @Test
-    void signupWithoutCsrfIsForbiddenJson() throws Exception {
-        mvc.perform(post("/api/users/signup"))
+    void loginIsPublicButStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/auth/login"))
                 .andExpect(status().isForbidden())
-                .andExpect(content().contentTypeCompatibleWith("application/json"))
                 .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
     }
 
     @Test
-    void cookieAloneAndWrongHeaderCannotAuthorizeSignup() throws Exception {
+    void refreshIsPublicButStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/auth/refresh"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
         Cookie cookie = csrfCookie();
-        mvc.perform(post("/api/users/signup").cookie(cookie)).andExpect(status().isForbidden());
-        mvc.perform(post("/api/users/signup").cookie(cookie).header("X-XSRF-TOKEN", "wrong"))
-                .andExpect(status().isForbidden());
-        mvc.perform(post("/api/users/signup").header("X-XSRF-TOKEN", cookie.getValue()))
-                .andExpect(status().isForbidden());
+        mvc.perform(post("/api/auth/refresh")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void logoutIsPublicButStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/auth/logout"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/auth/logout")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
+    void otherStateChangingApiStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/private"))
+                .andExpect(status().isForbidden())
+                .andExpect(content().contentTypeCompatibleWith("application/json"))
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
     }
 
     @Test
@@ -93,6 +123,43 @@ class SecurityIntegrationTests {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(header().doesNotExist("Location")).andReturn();
         assertThat(result.getRequest().getSession(false)).isNull();
+    }
+
+    @Test
+    void profileWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/users/me"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+    }
+
+    @Test
+    void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/users/me/nickname"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/users/me/nickname")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void passwordUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/users/me/password"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/users/me/password")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
@@ -128,8 +195,18 @@ class SecurityIntegrationTests {
     @EnableWebMvc
     @EnableWebSecurity
     @ComponentScan("com.ktb4.team16.mulo.global")
-    @Import(ProbeController.class)
-    static class TestConfig { }
+    @Import({ProbeController.class, AuthController.class})
+    static class TestConfig {
+        @Bean
+        UserRepository userRepository() {
+            return mock(UserRepository.class);
+        }
+
+        @Bean
+        AuthService authService() {
+            return mock(AuthService.class);
+        }
+    }
 
     // 실제 회원가입을 구현하지 않고 필터 통과 여부만 관찰하는 테스트 전용 엔드포인트.
     @RestController
