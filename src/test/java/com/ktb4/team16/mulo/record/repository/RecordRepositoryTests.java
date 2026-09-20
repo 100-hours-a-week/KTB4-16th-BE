@@ -2,10 +2,10 @@ package com.ktb4.team16.mulo.record.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto;
+import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
-import com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto;
 import com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
@@ -64,20 +64,20 @@ class RecordRepositoryTests {
         insertRecord(userId, secondInBounds, trackId, createdAtFrom.plusDays(1), null);
         insertRecord(userId, outOfBounds, trackId, createdAtFrom.plusDays(1), null);
 
-        List<PopularPlaceMarkerResponseDto> markers = recordRepository.findPopularPlacesInBounds(
+        List<PopularPlaceMarkerResponse> markers = recordRepository.findPopularPlacesInBounds(
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, createdAtFrom);
 
         assertThat(markers).hasSize(2);
-        assertThat(markers).filteredOn(marker -> marker.getPlaceId().equals(firstInBounds))
+        assertThat(markers).filteredOn(marker -> marker.placeId().equals(firstInBounds))
                 .singleElement()
                 .satisfies(marker -> {
-                    assertThat(marker.getRecordCount()).isEqualTo(2L);
-                    assertThat(marker.getLatitude()).isEqualByComparingTo("-33.0000000");
-                    assertThat(marker.getLongitude()).isEqualByComparingTo("-150.0000000");
+                    assertThat(marker.recordCount()).isEqualTo(2L);
+                    assertThat(marker.latitude()).isEqualByComparingTo("-33.0000000");
+                    assertThat(marker.longitude()).isEqualByComparingTo("-150.0000000");
                 });
-        assertThat(markers).filteredOn(marker -> marker.getPlaceId().equals(secondInBounds))
+        assertThat(markers).filteredOn(marker -> marker.placeId().equals(secondInBounds))
                 .singleElement()
-                .satisfies(marker -> assertThat(marker.getRecordCount()).isEqualTo(1L));
+                .satisfies(marker -> assertThat(marker.recordCount()).isEqualTo(1L));
         assertThat(placeRepository.findById(outOfBounds)).isPresent();
     }
 
@@ -112,11 +112,11 @@ class RecordRepositoryTests {
         List<PopularTrackAggregateDto> tracks = recordRepository.findPopularTrackAggregates(
                 placeIds, createdAtFrom);
 
-        assertThat(tracks).extracting(PopularTrackAggregateDto::getMusicTrackId)
+        assertThat(tracks).extracting(PopularTrackAggregateDto::musicTrackId)
                 .containsExactly(mostCount, tiedFirst, tiedSecond, older);
-        assertThat(tracks).extracting(PopularTrackAggregateDto::getCount)
+        assertThat(tracks).extracting(PopularTrackAggregateDto::count)
                 .containsExactly(3L, 2L, 2L, 2L);
-        assertThat(tracks.get(1).getLatestRecordCreatedAt()).isEqualTo(FIRST_DAY.plusDays(9));
+        assertThat(tracks.get(1).latestRecordCreatedAt()).isEqualTo(FIRST_DAY.plusDays(9));
         assertThat(recordRepository.countActiveRecordsAtPlaces(placeIds, createdAtFrom)).isEqualTo(9L);
     }
 
@@ -139,12 +139,12 @@ class RecordRepositoryTests {
         insertRecord(other, deletedOnly, trackId, FIRST_DAY, null);
         insertRecord(me, outOfBounds, trackId, FIRST_DAY, null);
 
-        List<MyPlaceMarkerResponseDto> markers = recordRepository.findMyPlaceMarkersInBounds(
+        List<MyPlaceMarkerResponse> markers = recordRepository.findMyPlaceMarkersInBounds(
                 me, SW_LAT, SW_LNG, NE_LAT, NE_LNG);
 
         assertThat(markers).hasSize(1);
-        assertThat(markers.getFirst().getPlaceId()).isEqualTo(inBounds);
-        assertThat(markers.getFirst().getMyRecordsCount()).isEqualTo(2L);
+        assertThat(markers.getFirst().placeId()).isEqualTo(inBounds);
+        assertThat(markers.getFirst().myRecordsCount()).isEqualTo(2L);
         assertThat(recordRepository.findMyPlaceMarkersInBounds(
                 -1L, SW_LAT, SW_LNG, NE_LAT, NE_LNG)).isEmpty();
     }
@@ -173,21 +173,21 @@ class RecordRepositoryTests {
         List<MyPlaceRecordResponseDto> first = recordRepository.findMyPlaceRecordsFirstPage(
                 me, placeIds, PageRequest.of(0, 2));
         List<MyPlaceRecordResponseDto> second = recordRepository.findMyPlaceRecordsAfterCursor(
-                me, placeIds, first.getLast().getCreatedAt(), first.getLast().getRecordId(),
+                me, placeIds, first.getLast().createdAt(), first.getLast().recordId(),
                 PageRequest.of(0, 2));
         List<MyPlaceRecordResponseDto> third = recordRepository.findMyPlaceRecordsAfterCursor(
-                me, placeIds, second.getLast().getCreatedAt(), second.getLast().getRecordId(),
+                me, placeIds, second.getLast().createdAt(), second.getLast().recordId(),
                 PageRequest.of(0, 2));
 
         List<Long> ids = new ArrayList<>();
-        first.forEach(row -> ids.add(row.getRecordId()));
-        second.forEach(row -> ids.add(row.getRecordId()));
-        third.forEach(row -> ids.add(row.getRecordId()));
+        first.forEach(row -> ids.add(row.recordId()));
+        second.forEach(row -> ids.add(row.recordId()));
+        third.forEach(row -> ids.add(row.recordId()));
         assertThat(ids).containsExactly(newest, sameTimeThird, sameTimeSecond, sameTimeFirst, oldest);
         assertThat(new HashSet<>(ids)).hasSize(5);
-        assertThat(first.getFirst().getMusicTrackId()).isEqualTo(trackId);
-        assertThat(first.getFirst().getPlaceId()).isEqualTo(secondPlace);
-        assertThat(second.getFirst().getPlaceId()).isEqualTo(secondPlace);
+        assertThat(first.getFirst().musicTrackId()).isEqualTo(trackId);
+        assertThat(first.getFirst().placeId()).isEqualTo(secondPlace);
+        assertThat(second.getFirst().placeId()).isEqualTo(secondPlace);
     }
 
     private long insertUser() {

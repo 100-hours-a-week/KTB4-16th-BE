@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
+import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
@@ -73,6 +74,13 @@ public class GlobalExceptionHandler {
             WeatherRequestTimeException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_WEATHER_REQUEST_TIME.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_WEATHER_REQUEST_TIME));
+    }
+
+    @ExceptionHandler(InvalidMapBoundsException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMapBounds(
+            InvalidMapBoundsException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_MAP_BOUNDS.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_MAP_BOUNDS));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

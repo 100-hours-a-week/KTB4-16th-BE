@@ -1,8 +1,8 @@
 package com.ktb4.team16.mulo.record.repository;
 
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto;
+import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
-import com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto;
 import com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.entity.Record;
 import java.math.BigDecimal;
@@ -16,7 +16,7 @@ import org.springframework.data.repository.query.Param;
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
-        SELECT new com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto(
+        SELECT new com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse(
             p.placeId, COUNT(r), p.latitude, p.longitude
         )
         FROM Record r
@@ -27,7 +27,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             AND p.longitude BETWEEN :swLng AND :neLng
         GROUP BY p.placeId, p.latitude, p.longitude
         """)
-    List<PopularPlaceMarkerResponseDto> findPopularPlacesInBounds(
+    List<PopularPlaceMarkerResponse> findPopularPlacesInBounds(
             @Param("swLat") BigDecimal swLat,
             @Param("swLng") BigDecimal swLng,
             @Param("neLat") BigDecimal neLat,
@@ -65,7 +65,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     );
 
     @Query("""
-        SELECT new com.ktb4.team16.mulo.record.dto.MyPlaceMarkerResponseDto(
+        SELECT new com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse(
             p.placeId, p.legalDongName, COUNT(r), p.latitude, p.longitude
         )
         FROM Record r
@@ -76,7 +76,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             AND p.longitude BETWEEN :swLng AND :neLng
         GROUP BY p.placeId, p.legalDongName, p.latitude, p.longitude
         """)
-    List<MyPlaceMarkerResponseDto> findMyPlaceMarkersInBounds(
+    List<MyPlaceMarkerResponse> findMyPlaceMarkersInBounds(
             @Param("userId") Long userId,
             @Param("swLat") BigDecimal swLat,
             @Param("swLng") BigDecimal swLng,

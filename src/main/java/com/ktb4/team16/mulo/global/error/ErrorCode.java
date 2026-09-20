@@ -10,6 +10,13 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효한 Refresh Token이 없습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    SW_LAT_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 위도 값이 필요합니다."),
+    SW_LNG_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 경도 값이 필요합니다."),
+    NE_LAT_REQUIRED(HttpStatus.BAD_REQUEST, "북동쪽 위도 값이 필요합니다."),
+    NE_LNG_REQUIRED(HttpStatus.BAD_REQUEST, "북동쪽 경도 값이 필요합니다."),
+    INVALID_LATITUDE(HttpStatus.BAD_REQUEST, "위도 값이 올바르지 않습니다."),
+    INVALID_LONGITUDE(HttpStatus.BAD_REQUEST, "경도 값이 올바르지 않습니다."),
+    INVALID_MAP_BOUNDS(HttpStatus.BAD_REQUEST, "지도 범위 정보가 올바르지 않습니다."),
     INVALID_WEATHER_REQUEST_TIME(HttpStatus.BAD_REQUEST, "지난 시간대의 날씨는 조회할 수 없습니다."),
     NICKNAME_REQUIRED(HttpStatus.BAD_REQUEST, "닉네임을 입력해주세요."),
     INVALID_NICKNAME_FORMAT(HttpStatus.BAD_REQUEST, "닉네임은 띄어쓰기와 특수문자 없이 2~10자로 입력해주세요."),

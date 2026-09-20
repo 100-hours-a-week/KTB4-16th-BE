@@ -5,7 +5,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponseDto;
+import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -25,14 +25,14 @@ class PlaceServiceTests {
 
     @Test
     void returnsPopularPlaceMarkersFromRepository() {
-        PopularPlaceMarkerResponseDto marker = new PopularPlaceMarkerResponseDto(
+        PopularPlaceMarkerResponse marker = new PopularPlaceMarkerResponse(
                 1L, 3L, new BigDecimal("37.5000000"), new BigDecimal("127.5000000"));
-        List<PopularPlaceMarkerResponseDto> markers = List.of(marker);
+        List<PopularPlaceMarkerResponse> markers = List.of(marker);
         when(recordRepository.findPopularPlacesInBounds(
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, CREATED_AT_FROM))
                 .thenReturn(markers);
 
-        List<PopularPlaceMarkerResponseDto> result = placeService.getPopularPlaceMarkersInBounds(
+        List<PopularPlaceMarkerResponse> result = placeService.getPopularPlaceMarkersInBounds(
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, CREATED_AT_FROM);
 
         assertThat(result).containsExactly(marker);
@@ -46,7 +46,7 @@ class PlaceServiceTests {
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, CREATED_AT_FROM))
                 .thenReturn(List.of());
 
-        List<PopularPlaceMarkerResponseDto> result = placeService.getPopularPlaceMarkersInBounds(
+        List<PopularPlaceMarkerResponse> result = placeService.getPopularPlaceMarkersInBounds(
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, CREATED_AT_FROM);
 
         assertThat(result).isEmpty();
