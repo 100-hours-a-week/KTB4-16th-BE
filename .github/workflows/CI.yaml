@@ -1,0 +1,57 @@
+name : main CI with backend
+
+on:
+  pull_request:
+    branches:
+      - develop
+
+# 버전 작업 동시에 실행되지 않게 
+concurrency:
+  group: backend-main-release
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Backend CI
+    runs-on: ubuntu-latest
+
+    # 워크플로우 권한 정의
+    permissions:
+      contents: write      # Git 태그, Release 생성
+      id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
+      
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+      
+    steps:
+      # 1. 코드 체크아웃
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+            fetch-depth: 0
+        
+      # 2. JDK 환경 설정 (캐싱 포함)
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+          
+      # 3. Gradle 
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+          
+      # 4. Gradle 실행 권한 부여
+      - name: Grant execute permission
+        run: chmod +x gradlew
+        
+
+      # Phase 1: Lint (Checkstyle)
+      - name: Run Checkstyle
+        run: ./gradlew checkstyleMain
+        
+
+      # Phase 2: Compile 및 JAR 생성
+      - name: Run Compile 
+        run: ./gradlew bootJar
+
