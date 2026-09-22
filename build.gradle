@@ -26,6 +26,8 @@ dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     // REST API
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    // Swagger/OpenAPI 문서 및 Swagger UI 제공을 위한 의존성
+    implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 
     // Persistence / MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
