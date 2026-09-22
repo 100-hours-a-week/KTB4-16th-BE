@@ -6,6 +6,10 @@ import com.ktb4.team16.mulo.place.dto.MyPlacesResponse;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.place.message.PlaceMessage;
 import com.ktb4.team16.mulo.place.service.PlaceService;
+import com.ktb4.team16.mulo.record.dto.request.MyPlaceRecordsSearchRequest;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsSearchResponse;
+import com.ktb4.team16.mulo.record.message.RecordMessage;
 import com.ktb4.team16.mulo.user.dto.request.UpdateNicknameRequest;
 import com.ktb4.team16.mulo.user.dto.request.UpdatePasswordRequest;
 import com.ktb4.team16.mulo.user.dto.request.UserSignupRequest;
@@ -17,6 +21,7 @@ import com.ktb4.team16.mulo.user.message.UserMessage;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+import com.ktb4.team16.mulo.record.service.RecordService;
 
 import jakarta.validation.Valid;
 import java.util.List;
@@ -40,6 +45,7 @@ public class UserController {
     private final UserSignupService userSignupService;
     private final UserProfileService userProfileService;
     private final PlaceService placeService;
+    private final RecordService recordService;
 
     @PostMapping("/signup")
     @ResponseStatus(HttpStatus.CREATED)
@@ -88,6 +94,24 @@ public class UserController {
         return new MyPlacesResponse(
                 PlaceMessage.MY_PLACES_RETRIEVED.message(),
                 places
+        );
+    }
+
+    @PostMapping("/me/records/search")
+    public MyPlaceRecordsSearchResponse searchMyPlaceRecords(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody MyPlaceRecordsSearchRequest request
+    ) {
+        MyPlaceRecordsResponseDto data =
+                recordService.getMyPlaceRecords(
+                        userId,
+                        request.placeIds(),
+                        request.cursor()
+                );
+
+        return new MyPlaceRecordsSearchResponse(
+                RecordMessage.MY_PLACE_RECORDS_RETRIEVED.message(),
+                data
         );
     }
 }

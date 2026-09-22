@@ -13,7 +13,12 @@ import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+import com.ktb4.team16.mulo.record.service.RecordService;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
+import java.time.LocalDateTime;
 import java.util.List;
+import java.util.stream.IntStream;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -25,6 +30,7 @@ import org.springframework.security.authentication.UsernamePasswordAuthenticatio
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.web.method.annotation.AuthenticationPrincipalArgumentResolver;
 import org.springframework.test.web.servlet.MockMvc;
+import org.springframework.test.web.servlet.ResultActions;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.hasItems;
@@ -41,12 +47,13 @@ class UserControllerTest {
     @Mock UserSignupService signupService;
     @Mock UserProfileService profileService;
     @Mock PlaceService placeService;
+    @Mock RecordService recordService;
     MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(signupService, profileService, placeService))
+                        new UserController(signupService, profileService, placeService, recordService))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -86,6 +93,106 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors.length()").value(3))
                 .andExpect(jsonPath("$.errors[*].code", hasItems(
                         "INVALID_NICKNAME_FORMAT", "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT")));
+    }
+
+    @Test
+    void searchesFirstPageForOnePlace() throws Exception {
+        when(recordService.getMyPlaceRecords(1L, List.of(10L), null))
+                .thenReturn(new MyPlaceRecordsResponseDto(
+                        List.of(new MyPlaceRecordResponseDto(101L, 10L, 583L,
+                                "밤편지", "아이유", LocalDateTime.of(2026, 9, 19, 15, 30))),
+                        null));
+
+        authenticatedUserRequest("{\"placeIds\":[10],\"cursor\":null}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("내 자물쇠 목록 조회 성공"))
+                .andExpect(jsonPath("$.data.records.length()").value(1))
+                .andExpect(jsonPath("$.data.records[0].placeId").value(10))
+                .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
+    }
+
+    @Test
+    void searchesMultiplePlaces() throws Exception {
+        when(recordService.getMyPlaceRecords(1L, List.of(10L, 20L), null))
+                .thenReturn(new MyPlaceRecordsResponseDto(List.of(), null));
+
+        authenticatedUserRequest("{\"placeIds\":[10,20],\"cursor\":null}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records").isEmpty())
+                .andExpect(jsonPath("$.data.nextCursor").value(org.hamcrest.Matchers.nullValue()));
+    }
+
+    @Test
+    void returnsTwentyRecordsAndNextCursorWhenMoreExist() throws Exception {
+        when(recordService.getMyPlaceRecords(1L, List.of(10L), null))
+                .thenReturn(new MyPlaceRecordsResponseDto(
+                        twentyRecords(),
+                        "next-cursor"));
+
+        authenticatedUserRequest("{\"placeIds\":[10]}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records.length()").value(20))
+                .andExpect(jsonPath("$.data.nextCursor").value("next-cursor"));
+    }
+
+    @Test
+    void searchesNextPageWithCursor() throws Exception {
+        when(recordService.getMyPlaceRecords(1L, List.of(10L, 20L), "cursor-value"))
+                .thenReturn(new MyPlaceRecordsResponseDto(List.of(), null));
+
+        authenticatedUserRequest("{\"placeIds\":[10,20],\"cursor\":\"cursor-value\"}")
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.records").isEmpty());
+    }
+
+    @Test
+    void missingOrEmptyPlaceIdsReturnsRequiredError() throws Exception {
+        authenticatedUserRequest("{\"cursor\":null}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("PLACE_IDS_REQUIRED"));
+
+        authenticatedUserRequest("{\"placeIds\":[],\"cursor\":null}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("PLACE_IDS_REQUIRED"));
+    }
+
+    @Test
+    void nullZeroOrNegativePlaceIdReturnsInvalidPlaceId() throws Exception {
+        authenticatedUserRequest("{\"placeIds\":[null]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_PLACE_ID"));
+        authenticatedUserRequest("{\"placeIds\":[0]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_PLACE_ID"));
+        authenticatedUserRequest("{\"placeIds\":[-1]}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_PLACE_ID"));
+    }
+
+    @Test
+    void invalidCursorReturnsInvalidCursor() throws Exception {
+        when(recordService.getMyPlaceRecords(1L, List.of(10L), "bad-cursor"))
+                .thenThrow(new com.ktb4.team16.mulo.record.exception.InvalidCursorException());
+
+        authenticatedUserRequest("{\"placeIds\":[10],\"cursor\":\"bad-cursor\"}")
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_CURSOR"));
+    }
+
+    private ResultActions authenticatedUserRequest(String body) throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        return mvc.perform(post("/api/users/me/records/search")
+                .contentType(MediaType.APPLICATION_JSON)
+                .content(body));
+    }
+
+    private List<MyPlaceRecordResponseDto> twentyRecords() {
+        return IntStream.rangeClosed(1, 20)
+                .mapToObj(id -> new MyPlaceRecordResponseDto(
+                        (long) id, 10L, 583L, "밤편지", "아이유",
+                        LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id)))
+                .toList();
     }
 
     @Test

@@ -5,6 +5,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
+import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
@@ -81,6 +82,13 @@ public class GlobalExceptionHandler {
             InvalidMapBoundsException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_MAP_BOUNDS.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_MAP_BOUNDS));
+    }
+
+    @ExceptionHandler(InvalidCursorException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidCursor(
+            InvalidCursorException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_CURSOR.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_CURSOR));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

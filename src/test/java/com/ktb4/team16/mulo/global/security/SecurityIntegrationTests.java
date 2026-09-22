@@ -157,6 +157,19 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void myRecordsSearchWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/users/me/records/search")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"placeIds\":[10],\"cursor\":null}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
+                .andExpect(jsonPath("$.message").value("로그인이 필요합니다."));
+    }
+
+    @Test
     void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
         mvc.perform(patch("/api/users/me/nickname"))
                 .andExpect(status().isForbidden())

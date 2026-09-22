@@ -3,7 +3,7 @@ package com.ktb4.team16.mulo.record.repository;
 import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
-import com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.entity.Record;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -85,7 +85,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     );
 
     @Query("""
-        SELECT new com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto(
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
             r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
         )
         FROM Record r
@@ -102,7 +102,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     );
 
     @Query("""
-        SELECT new com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto(
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
             r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
         )
         FROM Record r
