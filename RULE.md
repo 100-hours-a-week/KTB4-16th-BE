@@ -9,83 +9,94 @@
 
 ## 1. 고정 브랜치 전략
 
-MULO 백엔드는 아래 3개의 브랜치만 고정해서 사용한다.
+MULO 백엔드는 아래 2개의 장기 유지 브랜치를 사용한다.
 
 ```text
-feature
-develop
 main
+develop
 ```
 
 역할:
 
-### feature
+### main
 
-- 현재 개발 중인 코드를 모으는 브랜치다.
-- 백엔드 개발자는 기본적으로 `feature`에서 작업한다.
-- 작업 후 `feature -> develop` PR을 생성한다.
-- 직접 삭제하지 않는다.
+- 현재 배포 중이거나 배포 가능한 안정 버전
+- `develop`에서 검증이 끝난 변경만 PR로 반영
+- 직접 개발하지 않음
+- 직접 push하지 않음
+- 삭제하지 않음
 
 ### develop
 
-- 다음 배포 전에 기능을 통합하고 검증하는 브랜치다.
-- `feature`에서 PR을 통해 변경을 받는다.
-- 검증이 끝난 후 `develop -> main` PR을 생성한다.
-- 직접 삭제하지 않는다.
-
-### main
-
-- 현재 배포 중이거나 배포 가능한 안정 버전이다.
-- `develop`에서 검증된 변경만 PR로 받는다.
-- 직접 개발하지 않는다.
-- 직접 삭제하지 않는다.
+- 개발 통합 및 다음 배포 준비 브랜치
+- 실제 개발자는 최신 `develop`에서 기능별 작업 브랜치를 생성해 작업
+- 작업 브랜치는 PR로 `develop`에 반영
+- 검증 완료 후 `develop -> main` PR 생성
+- 직접 개발하지 않음
+- 직접 push하지 않음
+- 삭제하지 않음
 
 전체 흐름:
 
 ```text
-feature
+작업 브랜치
    ↓ PR
 develop
    ↓ PR
- main
+main
    ↓
- 배포
+배포
 ```
 
 ---
 
-## 2. 기본 Git 원칙
+## 2. 작업 브랜치 규칙
 
-- 브랜치는 `feature`, `develop`, `main` 3개를 유지한다.
-- 별도의 `feat/*`, `fix/*` 작업 브랜치를 만들지 않는다.
-- 기능 개발은 `feature`에서 진행한다.
-- `develop`, `main`에서는 직접 기능 개발하지 않는다.
-- `develop`, `main`에 직접 push하지 않는다.
-- `feature -> develop`, `develop -> main`은 PR로 반영한다.
-- PR은 최소 1명의 리뷰어 승인을 받은 후 merge한다.
-- merge는 자동화하지 않고 팀원이 직접 수행한다.
-- force push를 사용하지 않는다.
-- 테스트가 실패한 상태로 merge하지 않는다.
-- 다른 개발자 담당 영역을 수정해야 하면 먼저 변경 의도를 공유한다.
+작업 브랜치는 항상 최신 `develop`에서 생성한다.
 
----
+형식:
 
-## 3. 작업 시작 절차
-
-작업 시작 전 반드시 최신 `feature`를 받는다.
-
-```bash
-git switch feature
-git pull origin feature
+```text
+<type>/<function>-<issueNumber>
 ```
 
-다른 팀원이 `feature`에 변경을 push했을 수 있으므로 오래된 local `feature`에서 개발을 시작하지 않는다.
+허용 type:
+
+```text
+feat
+fix
+docs
+style
+refactor
+test
+chore
+```
+
+예:
+
+```text
+feat/login-34
+feat/security-setup-51
+fix/token-expiration-52
+docs/api-guide-53
+refactor/user-service-54
+test/login-service-55
+chore/gradle-config-56
+```
+
+규칙:
+
+- `#` 기호는 브랜치 이름에 넣지 않는다.
+- 작업 브랜치에는 이슈 번호를 포함한다.
+- 이슈 번호를 임의로 만들지 않는다.
+- 작업 브랜치는 merge 완료 후 삭제할 수 있다.
+- `main`, `develop`은 삭제하지 않는다.
 
 ---
 
-## 4. 커밋 컨벤션
+## 3. 커밋 컨벤션
 
-허용 타입:
+허용 type:
 
 ```text
 feat: 새로운 기능 추가
@@ -111,20 +122,14 @@ chore: 빌드/패키지 관리
 feat: 로그인 API 구현 #34
 feat: implement login API #34
 fix: 로그인 토큰 오류 수정 #52
-fix: fix token expiration issue #52
 docs: API 문서 수정 #53
-refactor: 사용자 조회 로직 정리 #54
-test: 로그인 서비스 테스트 추가 #55
-chore: Gradle 설정 수정 #56
 ```
-
-이슈 번호는 실제 이슈 번호를 사용하고 임의로 만들지 않는다.
 
 ---
 
-## 5. PR 제목 규칙
+## 4. PR 제목 규칙
 
-`feature -> develop` PR 제목 형식:
+PR 제목 형식:
 
 ```text
 <type>: <작업 내용> #<이슈번호>
@@ -135,18 +140,19 @@ chore: Gradle 설정 수정 #56
 예:
 
 ```text
-feat: 로그인 API 구현 #34
 feat: login #34
-fix: 로그인 토큰 오류 수정 #52
+feat: 로그인 API 구현 #34
 fix: token expiration #52
 docs: API 문서 수정 #53
 ```
 
-예를 들어 로그인 API 작업은 다음과 같다.
+Commit과 PR Title은 같은 언어일 필요가 없다.
+
+예:
 
 ```text
-현재 브랜치
-feature
+Branch
+feat/login-34
 
 Commit
 feat: 로그인 API 구현 #34
@@ -160,21 +166,63 @@ develop
 
 ---
 
-## 6. Push 규칙
+## 5. 작업 시작 절차
 
-개발자는 `feature`에 push한다.
-
-push 전 반드시 remote 최신 상태를 확인한다.
+항상 최신 `develop`에서 작업 브랜치를 만든다.
 
 ```bash
-git switch feature
-git pull origin feature
+git switch develop
+git pull origin develop
+git switch -c feat/login-34
 ```
 
-충돌이 없고 테스트가 통과한 뒤:
+오래된 local `develop`을 기준으로 작업 브랜치를 만들지 않는다.
+
+---
+
+## 6. 작업 중 기본 원칙
+
+- 작업 브랜치에서만 기능 개발
+- `main`, `develop`에서 직접 기능 개발 금지
+- `main`, `develop` 직접 push 금지
+- force push 금지
+- 다른 개발자 담당 영역을 수정해야 하면 먼저 공유
+- 관련 없는 변경을 한 작업 브랜치에 섞지 않음
+
+---
+
+## 7. PR 전 최신 develop 반영
+
+작업 브랜치에서 PR을 만들기 전에 최신 `origin/develop`를 반영한다.
 
 ```bash
-git push origin feature
+git fetch origin
+git switch feat/login-34
+git merge origin/develop
+```
+
+충돌이 없으면 테스트한다.
+
+```bash
+./gradlew test
+```
+
+충돌이 발생하면 작업 브랜치에서 해결한다.
+
+다른 개발자 담당 코드와 충돌한 경우 임의로 한쪽을 덮어쓰지 않고 해당 개발자와 확인한다.
+
+force push로 해결하지 않는다.
+
+---
+
+## 8. Push 규칙
+
+작업 브랜치만 push한다.
+
+예:
+
+```bash
+git push origin feat/login-34
 ```
 
 금지:
@@ -186,133 +234,70 @@ git push --force
 git push --force-with-lease
 ```
 
-`develop`, `main`은 PR을 통해서만 변경한다.
-
 ---
 
-## 7. feature 동시 작업 규칙
+## 9. PR 흐름
 
-두 명의 개발자가 같은 `feature` 브랜치를 사용하므로 push 전에 반드시 최신 상태를 반영한다.
+### 9.1 작업 브랜치 -> develop
 
-권장 흐름:
-
-```bash
-git switch feature
-git pull origin feature
-
-# 개발
-
-./gradlew test
-
-git pull origin feature
-# 충돌이 있으면 해결하고 다시 테스트
-
-git push origin feature
-```
-
-다른 개발자의 변경과 충돌하면 임의로 덮어쓰지 않는다.
-
-충돌 파일에 상대 개발자의 담당 로직이 포함되어 있다면 먼저 의도를 확인한다.
-
----
-
-## 8. PR 흐름
-
-### feature -> develop
-
-일반 개발 완료 후:
+일상적인 개발 PR:
 
 ```text
-feature
+feat/login-34
    ↓ PR
 develop
 ```
 
-PR 조건:
+조건:
 
-- 최소 1명 승인
-- 필요한 테스트 통과
+- 최신 `origin/develop` 반영
 - conflict 없음
+- 관련 테스트 통과
 - Secret 없음
-- DB/API/Dependency 변경 여부 표시
+- DB/API/Dependency 변경 여부 확인
 - 관련 이슈 번호 명시
+- 최소 1명 리뷰 승인
+- merge는 수동
 
-### develop -> main
+merge 완료 후 작업 브랜치는 삭제할 수 있다.
 
-다음 배포 준비가 완료되면:
+### 9.2 develop -> main
+
+배포 전 검증이 완료되면:
 
 ```text
 develop
    ↓ PR
- main
+main
 ```
 
-이 PR은 배포 전 최종 통합 PR이다.
-
-확인:
-
-- 주요 테스트 통과
-- Flyway migration 검토
-- 운영 설정 검토
-- 배포 범위 확인
-- 팀원 합의
+`develop` 브랜치는 merge 후에도 유지한다.
 
 ---
 
-## 9. PR 본문 기본 형식
+## 10. PR 템플릿
 
-`.github/PULL_REQUEST_TEMPLATE.md`가 존재하면 해당 템플릿을 우선 사용한다.
+저장소에 다음 파일이 있으면 우선 사용한다.
 
-기본 형식:
-
-```markdown
-## 작업 내용
-
-- 실제 작업 내용을 요약
-
-## 관련 이슈
-
-- Closes #34
-
-## 주요 변경 사항
-
-- 변경 사항 1
-- 변경 사항 2
-
-## 테스트
-
-- 실행한 명령
-- 테스트 결과
-
-## DB 변경
-
-- [ ] DB 변경 없음
-- [ ] Flyway migration 추가
-
-Migration:
-- 해당 시 파일명 작성
-
-## API 변경
-
-- [ ] 없음
-- [ ] 있음
-
-## Dependency 변경
-
-- [ ] 없음
-- [ ] 있음
-
-## 체크리스트
-
-- [ ] 관련 테스트를 수행했습니다.
-- [ ] Secret이 포함되지 않았습니다.
-- [ ] API 변경 여부를 확인했습니다.
-- [ ] DB 변경 여부를 확인했습니다.
+```text
+.github/PULL_REQUEST_TEMPLATE.md
 ```
+
+PR에는 실제 변경 내용과 실제 테스트 결과를 작성한다.
+
+필수 확인 항목:
+
+- 관련 이슈
+- 변경 내용
+- 테스트
+- DB/Flyway 변경 여부
+- API 변경 여부
+- Dependency 변경 여부
+- Secret 포함 여부
 
 ---
 
-## 10. 리뷰 및 Merge 규칙
+## 11. 리뷰 및 Merge 규칙
 
 - PR은 최소 1명 승인을 받아야 한다.
 - 작성자는 자기 PR을 승인한 것으로 간주하지 않는다.
@@ -320,13 +305,9 @@ Migration:
 - 리뷰 후 중요한 변경이 추가되면 다시 리뷰한다.
 - merge는 사람이 직접 수행한다.
 - auto-merge는 사용하지 않는다.
+- force push를 사용하지 않는다.
 
-권장 GitHub 보호 설정:
-
-### feature
-
-- Block force pushes
-- Prevent deletion
+권장 보호 설정:
 
 ### develop
 
@@ -348,7 +329,7 @@ Migration:
 
 ---
 
-## 11. Database / JPA / Flyway 기본 원칙
+## 12. Database / JPA / Flyway 기본 원칙
 
 DB Schema 변경 이력의 Source of Truth는 Flyway migration이다.
 
@@ -369,7 +350,7 @@ spring:
       ddl-auto: validate
 ```
 
-다음 값은 사용하지 않는다.
+사용하지 않는다:
 
 ```text
 ddl-auto=update
@@ -379,9 +360,9 @@ ddl-auto=create-drop
 
 ---
 
-## 12. Flyway Migration 규칙
+## 13. Flyway Migration 규칙
 
-migration 파일 형식:
+형식:
 
 ```text
 V{번호}__{변경내용}.sql
@@ -397,37 +378,35 @@ V3__add_profile_image_to_users.sql
 
 규칙:
 
-- DB schema 변경은 새로운 migration으로 작성한다.
-- 이미 공유되거나 적용된 migration은 수정하지 않는다.
-- Workbench에서 직접 수정한 DB 상태를 최종 결과로 사용하지 않는다.
-- migration 작성 전 최신 `feature`의 migration version을 확인한다.
-- version 번호를 중복 사용하지 않는다.
-- DB 변경이 있는 PR에는 migration 파일과 변경 내용을 기록한다.
+- DB schema 변경은 새로운 migration으로 작성
+- 이미 공유되거나 적용된 migration은 수정하지 않음
+- Workbench 직접 수정으로 DB 변경을 완료하지 않음
+- migration 작성 전 최신 `develop` 기준으로 version 확인
+- version 번호를 중복 사용하지 않음
+- DB 변경 PR에는 migration 파일과 변경 내용을 기록
 
 ---
 
-## 13. 동시에 Flyway 작업할 때
+## 14. 동시에 Flyway 작업할 때
 
-현재 최신 version이 `V8`이라면 예:
+최신 version이 `V8`이라면 예:
 
 ```text
 개발자 A -> V9
 개발자 B -> V10
 ```
 
-version을 서로 확인한 후 작업한다.
+같은 version이 생기지 않도록 서로 확인한다.
 
-같은 version이 생긴 경우:
+같은 version이 생겼다면:
 
-- 아직 공유 전이면 번호를 조정한다.
-- 이미 `feature`에 반영된 version은 수정하지 않는다.
-- 다른 변경은 새로운 version으로 작성한다.
-
-공용/운영 DB는 초기화하지 않는다.
+- 아직 공유 전이면 번호 조정
+- 이미 remote `develop`에 반영된 migration은 수정 금지
+- 새로운 변경은 새로운 migration으로 작성
 
 ---
 
-## 14. 기존 Migration 수정 기준
+## 15. 기존 Migration 수정 기준
 
 수정 가능:
 
@@ -436,22 +415,22 @@ version을 서로 확인한 후 작업한다.
 AND
 다른 개발자가 적용하지 않음
 AND
-remote feature에 공유되지 않음
+remote develop에 공유되지 않음
 ```
 
-다음부터 수정 금지:
+수정 금지:
 
 ```text
 다른 개발자가 적용함
 OR
-remote feature/develop/main에 반영됨
+remote develop/main에 반영됨
 ```
 
-이후 변경은 새로운 migration으로 작성한다.
+이후 변경은 새 migration을 추가한다.
 
 ---
 
-## 15. 로컬 DB 초기화 규칙
+## 16. 로컬 DB 초기화 규칙
 
 개발 초기 로컬 DB에서 migration 이력이 꼬였고 데이터 보존이 필요하지 않은 경우에만:
 
@@ -471,7 +450,7 @@ docker compose up -d
 
 ---
 
-## 16. 테스트 규칙
+## 17. 테스트 규칙
 
 기본:
 
@@ -485,24 +464,17 @@ docker compose up -d
 ./gradlew clean build
 ```
 
-DB 관련 검증이 필요한 경우:
-
-```bash
-docker compose up -d
-./gradlew test
-```
-
 규칙:
 
-- 기능 변경 시 관련 테스트를 추가/수정한다.
-- 테스트 실패를 숨기지 않는다.
-- 실패 테스트를 삭제해서 build를 통과시키지 않는다.
-- 테스트 실패 상태로 PR merge하지 않는다.
-- 실행하지 않은 테스트를 실행했다고 기록하지 않는다.
+- 기능 변경 시 관련 테스트 추가/수정
+- 테스트 실패 숨기지 않음
+- 실패 테스트를 삭제해서 통과시키지 않음
+- 테스트 실패 상태로 merge하지 않음
+- 실행하지 않은 테스트를 PASS라고 기록하지 않음
 
 ---
 
-## 17. Secret / 환경변수 규칙
+## 18. Secret / 환경변수 규칙
 
 Git에 commit하지 않는다.
 
@@ -519,16 +491,16 @@ Git에 commit하지 않는다.
 
 ---
 
-## 18. 다른 개발자 담당 영역 수정
+## 19. 다른 개발자 담당 영역 수정
 
 다른 개발자가 담당한 기능을 수정해야 하면:
 
-1. 변경 이유를 공유한다.
-2. 영향 범위를 설명한다.
-3. 충돌 가능성이 있는 파일을 알린다.
-4. 필요한 경우 함께 설계를 확인한다.
+1. 변경 이유 공유
+2. 영향 범위 설명
+3. 충돌 가능성이 있는 파일 공유
+4. 필요한 경우 함께 설계 확인
 
-특히 다음 영역은 사전 공유를 권장한다.
+특히 사전 공유를 권장:
 
 - 공통 Entity
 - 공통 Exception
@@ -542,12 +514,12 @@ Git에 commit하지 않는다.
 
 ---
 
-## 19. 금지 사항
+## 20. 금지 사항
 
-- `develop`, `main`에서 직접 기능 개발
-- `develop`, `main` 직접 push
+- `main`, `develop`에서 직접 기능 개발
+- `main`, `develop` 직접 push
 - force push
-- PR 없이 `develop`, `main` 변경
+- PR 없이 고정 브랜치 변경
 - 승인 없이 merge
 - 실패 테스트 무시
 - 기존 공유 migration 수정
@@ -559,18 +531,19 @@ Git에 commit하지 않는다.
 
 ---
 
-## 20. 일일 작업 흐름
+## 21. 일일 작업 흐름
 
 ### 작업 시작
 
 ```bash
-git switch feature
-git pull origin feature
+git switch develop
+git pull origin develop
+git switch -c feat/login-34
 ```
 
 ### 개발
 
-`feature`에서 작업한다.
+작업 브랜치에서 개발한다.
 
 ### 검증
 
@@ -585,24 +558,25 @@ git add <변경 파일>
 git commit -m "feat: 로그인 API 구현 #34"
 ```
 
-### Push 전 최신화
+### 최신 develop 반영
 
 ```bash
-git pull origin feature
+git fetch origin
+git merge origin/develop
 ```
 
-충돌이 발생하면 해결 후 테스트를 다시 수행한다.
+충돌이 발생하면 작업 브랜치에서 해결 후 테스트를 다시 수행한다.
 
 ### Push
 
 ```bash
-git push origin feature
+git push origin feat/login-34
 ```
 
 ### PR
 
 ```text
-feature -> develop
+feat/login-34 -> develop
 ```
 
 예:
@@ -625,18 +599,19 @@ develop
 develop -> main
 ```
 
-PR을 생성하고 팀원 검토 후 수동 merge한다.
+PR 생성 후 수동 merge한다.
 
 ---
 
-## 21. PR 생성 전 체크리스트
+## 22. PR 생성 전 체크리스트
 
-### feature -> develop
+### 작업 브랜치 -> develop
 
 - [ ] Issue 번호가 맞는가
+- [ ] Branch 이름이 규칙에 맞는가
 - [ ] Commit 메시지가 규칙에 맞는가
 - [ ] PR 제목이 규칙에 맞는가
-- [ ] 최신 remote `feature`가 반영되었는가
+- [ ] 최신 remote `develop`가 반영되었는가
 - [ ] conflict가 없는가
 - [ ] 관련 테스트가 통과했는가
 - [ ] Secret이 없는가
@@ -655,26 +630,35 @@ PR을 생성하고 팀원 검토 후 수동 merge한다.
 
 ---
 
-## 22. 핵심 요약
+## 23. 핵심 요약
 
 ```text
-브랜치는 3개만 유지
-feature / develop / main
+고정 브랜치
+main / develop
 
-개발
-feature
+작업 브랜치
+<type>/<function>-<issueNumber>
 
-일반 PR
-feature -> develop
-
-배포 PR
-develop -> main
+예
+feat/login-34
 
 Commit
+<type>: <작업 내용> #<이슈번호>
+
+예
 feat: 로그인 API 구현 #34
 
 PR Title
+<type>: <작업 내용> #<이슈번호>
+
+예
 feat: login #34
+
+일반 개발 PR
+작업 브랜치 -> develop
+
+배포 PR
+develop -> main
 
 PR 최소 1명 승인
 Merge는 수동

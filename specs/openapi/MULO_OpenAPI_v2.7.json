@@ -629,9 +629,7 @@
         },
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "implemented"
@@ -1555,9 +1553,7 @@
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "implemented"
@@ -1570,7 +1566,7 @@
         ],
         "summary": "음악 검색",
         "operationId": "getApiMusicSearch",
-        "description": "필수\nq: String\n\n백엔드가 Spotify 검색 API를 프록시한다.\n\n정책 및 설명\n- 사용자가 입력한 검색어를 기준으로 음악을 검색한다.\n- 백엔드가 Spotify 검색 API를 프록시한다.\n- 검색어 q는 Query Parameter로 전달한다.\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\n- 검색 단계에서는 Spotify의 음악 식별자인 externalTrackId를 반환한다.\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\n- 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.",
+        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
         "responses": {
           "200": {
             "description": "검색 요청이 정상 처리되었으므로 200.\n\n추가 케이스: 검색 조건에 해당하는 음악이 없더라도 검색 요청 자체는 정상적으로 처리되었으므로 200과 빈 배열을 반환한다.",
@@ -1595,6 +1591,18 @@
                           },
                           "artistName": {
                             "type": "string"
+                          },
+                          "provider": {
+                            "type": "string",
+                            "enum": [
+                              "SPOTIFY"
+                            ]
+                          },
+                          "albumImageUrl": {
+                            "type": "string"
+                          },
+                          "externalUrl": {
+                            "type": "string"
                           }
                         }
                       }
@@ -1602,12 +1610,15 @@
                   }
                 },
                 "example": {
-                  "message": "음악 검색 성공",
+                  "message": "음악 검색에 성공했습니다.",
                   "data": [
                     {
+                      "provider": "SPOTIFY",
                       "externalTrackId": "6rqhFgbbKwnb9MLmUQDhG6",
                       "title": "밤편지",
-                      "artistName": "아이유"
+                      "artistName": "아이유",
+                      "albumImageUrl": "https://i.scdn.co/image/example",
+                      "externalUrl": "https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6"
                     }
                   ]
                 }
@@ -1615,7 +1626,7 @@
             }
           },
           "400": {
-            "description": "검색어가 없으면 유효한 검색 요청을 수행할 수 없으므로 400.",
+            "description": "검색어가 없거나 공백 정리 후 2~255자 범위를 벗어나면 400.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1626,36 +1637,12 @@
                     },
                     "message": {
                       "type": "string"
-                    },
-                    "errors": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "field": {
-                            "type": "string"
-                          },
-                          "code": {
-                            "type": "string"
-                          },
-                          "message": {
-                            "type": "string"
-                          }
-                        }
-                      }
                     }
                   }
                 },
                 "example": {
                   "code": "INVALID_INPUT_VALUE",
-                  "message": "입력값을 확인해주세요.",
-                  "errors": [
-                    {
-                      "field": "q",
-                      "code": "SEARCH_QUERY_REQUIRED",
-                      "message": "검색어를 입력해주세요."
-                    }
-                  ]
+                  "message": "입력값을 확인해주세요."
                 }
               }
             }
@@ -1682,6 +1669,37 @@
               }
             }
           },
+          "429": {
+            "description": "사용자별 또는 Spotify 호출 제한으로 음악 검색을 잠시 처리할 수 없으므로 429. Retry-After 헤더의 초 단위만큼 기다린 뒤 다시 요청한다.",
+            "headers": {
+              "Retry-After": {
+                "description": "다시 요청하기 전에 기다릴 초 단위 시간",
+                "schema": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "MUSIC_SEARCH_RATE_LIMITED",
+                  "message": "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          },
           "500": {
             "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
             "content": {
@@ -1704,8 +1722,8 @@
               }
             }
           },
-          "502": {
-            "description": "MULO 백엔드는 요청을 정상적으로 수신했지만 외부 의존 서비스인 Spotify API 호출에 실패하여 음악 검색 결과를 제공할 수 없으므로 502.",
+          "503": {
+            "description": "Spotify 인증·검색 호출 또는 할당량 문제로 음악 검색 결과를 제공할 수 없으므로 503.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1720,8 +1738,8 @@
                   }
                 },
                 "example": {
-                  "code": "SPOTIFY_API_ERROR",
-                  "message": "Spotify 서비스 연동 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                  "code": "MUSIC_PROVIDER_UNAVAILABLE",
+                  "message": "음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요."
                 }
               }
             }
@@ -1737,7 +1755,7 @@
             }
           }
         ],
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       }
     },
     "/api/uploads": {
@@ -2468,9 +2486,7 @@
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -2826,9 +2842,7 @@
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "contract-only"
@@ -3164,8 +3178,7 @@
                   "comment": {
                     "type": "string"
                   },
-                  "recordId": {
-                  }
+                  "recordId": {}
                 },
                 "required": [
                   "recordId",
@@ -3704,40 +3717,6 @@
         "operationId": "postApiUsersMeFriendRequests",
         "description": "필수\nnickname: String\n\n닉네임으로 요청한다. 반대 방향 pending 요청이 이미 있으면 pending을 삭제하고 바로 friendship을 생성한다.",
         "responses": {
-          "201": {
-            "description": "새 pending friend_request가 생성되므로 201.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "friendRequestId": {
-                          "type": "integer",
-                          "format": "int64"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
-                },
-                "example": {
-                  "message": "친구 요청 성공",
-                  "data": {
-                    "friendRequestId": 21,
-                    "message": "친구 요청을 보냈습니다."
-                  }
-                }
-              }
-            }
-          },
           "200": {
             "description": "반대 방향 요청이 이미 존재해 새 요청 자원 대신 최종 friendship 상태로 전환되므로 200.",
             "content": {
@@ -3767,6 +3746,40 @@
                   "data": {
                     "friendshipId": 11,
                     "message": "서로의 친구 요청이 확인되어 친구가 되었습니다."
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "새 pending friend_request가 생성되므로 201.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "friendRequestId": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "친구 요청 성공",
+                  "data": {
+                    "friendRequestId": 21,
+                    "message": "친구 요청을 보냈습니다."
                   }
                 }
               }
@@ -4193,28 +4206,6 @@
               }
             }
           },
-          "404": {
-            "description": "현재 사용자가 소유한 관계가 존재하지 않으므로 404.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "FRIENDSHIP_NOT_FOUND",
-                  "message": "친구 관계를 찾을 수 없습니다."
-                }
-              }
-            }
-          },
           "401": {
             "description": "친구 삭제는 인증된 사용자만 수행할 수 있으므로 유효한 Access Token이 없거나 인증에 실패한 경우 401.",
             "content": {
@@ -4233,6 +4224,28 @@
                 "example": {
                   "code": "UNAUTHORIZED",
                   "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "현재 사용자가 소유한 관계가 존재하지 않으므로 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "FRIENDSHIP_NOT_FOUND",
+                  "message": "친구 관계를 찾을 수 없습니다."
                 }
               }
             }
@@ -4924,9 +4937,7 @@
         "description": "필수\nlatitude: Double\nlongitude: Double\nat: ISO-8601 DateTime\n\n정책 및 설명\n- 요청 at은 받은 offset과 무관하게 KST로 정규화한다. 서버 KST의 현재 시간대 시작보다 이른 요청은 과거로 보고 400 INVALID_WEATHER_REQUEST_TIME으로 처리한다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한다.\n- 같은 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회한다.\n- 해당 날짜·격자의 캐시가 전혀 없을 때만 기상청 단기예보 getVilageFcst를 조회해 저장한다.\n- 응답은 forecastAt, temperature, weatherCondition만 제공한다.\n- weatherCondition은 CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER 중 하나다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각을 forecast_at으로 사용한다.\n- 예: 15:10 요청은 15:00 예보를 사용하고, 15:50 요청은 16:00 예보를 사용한다.\n\n- 기상청 getVilageFcst를 1회 호출하면 목표 예보시각 이후 항목을 시간대별로 파싱해 weather_grid_forecasts에 일괄 저장한다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n- 최초 호출은 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패 또는 미포함이면 바로 이전 후보 회차를 한 번만 시도한다.\n- 당일 캐시는 있으나 요청 시간대 예보가 없으면 WEATHER_API_ERROR로 처리한다.\n\n### 미정 정책\n- 국내 기상청 격자 범위 밖 좌표: 상태=미정, `WTH-002: HTTP 상태와 Error Code 미정` — 격자 범위 밖 좌표의 구체 상태와 오류 코드는 임의 확정하지 않는다.",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -5145,6 +5156,28 @@
               }
             }
           },
+          "403": {
+            "description": "users.music_genre가 NULL이면 취향 투표를 사용할 수 없으므로 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "MUSIC_GENRE_REQUIRED",
+                  "message": "대표 음악 장르 설정이 필요합니다."
+                }
+              }
+            }
+          },
           "404": {
             "description": "현재 사용자의 대표 음악 장르에 해당하는 오늘 날짜의 활성 질문이 존재하지 않으므로 404.",
             "content": {
@@ -5185,28 +5218,6 @@
                 "example": {
                   "code": "INTERNAL_SERVER_ERROR",
                   "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
-          },
-          "403": {
-            "description": "users.music_genre가 NULL이면 취향 투표를 사용할 수 없으므로 403.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "MUSIC_GENRE_REQUIRED",
-                  "message": "대표 음악 장르 설정이 필요합니다."
                 }
               }
             }
@@ -5338,6 +5349,28 @@
               }
             }
           },
+          "403": {
+            "description": "users.music_genre가 NULL이면 투표 답변을 제출할 수 없으므로 403.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "MUSIC_GENRE_REQUIRED",
+                  "message": "대표 음악 장르 설정이 필요합니다."
+                }
+              }
+            }
+          },
           "404": {
             "description": "투표할 질문이 없음\nvoteQuestionId에 해당하는 투표 질문이 존재하지 않으므로 404.",
             "content": {
@@ -5403,28 +5436,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "users.music_genre가 NULL이면 투표 답변을 제출할 수 없으므로 403.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "MUSIC_GENRE_REQUIRED",
-                  "message": "대표 음악 장르 설정이 필요합니다."
-                }
-              }
-            }
           }
         },
         "parameters": [
@@ -5448,8 +5459,7 @@
                   "selectedOption": {
                     "type": "string"
                   },
-                  "voteQuestionId": {
-                  }
+                  "voteQuestionId": {}
                 },
                 "required": [
                   "selectedOption",
@@ -5464,9 +5474,7 @@
         },
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "contract-only",
@@ -5804,9 +5812,7 @@
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "contract-only"
@@ -7355,9 +7361,7 @@
         "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 법정동 미확인 자물쇠는 `legalDongCode=null`, `legalDongName=null`인 하나의 그룹으로 반환한다.\n- 프론트는 NULL 그룹을 `확인할 수 없음` 폴더로 표시한다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -7454,9 +7458,7 @@
         "summary": "클러스터/장소 인기 음악 조회",
         "description": "필수\nplaceIds: List<Long> (1개 이상)\n\n선택\n없음\n\n정책\n- 비로그인 사용자도 조회할 수 있다.\n- 전달받은 모든 placeIds를 하나의 조회 범위로 합산한다.\n- Record의 placeId가 placeIds에 포함되는 기록만 집계한다.\n- 삭제된 Record는 제외한다.\n- API 조회 시점을 기준으로\n직전 7일 동안 생성된 Record만 집계한다.\n- recordCount는 선택된 placeIds 전체의\n최근 7일 활성 Record 총개수이다.\n- music[].count는 최근 7일 활성 Record 중\n해당 음악이 등록된 횟수이다.\n- 음악별 count DESC로 정렬한다.\n- count가 같으면 해당 음악의\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 클러스터링은 프론트의\nKakao MarkerClusterer가 담당한다.\n- 백엔드는 클러스터를 관리하지 않고\n전달받은 placeIds만 처리한다.\n- 개별 마커 클릭은 placeIds에\n1개의 ID를 전달해 동일하게 처리한다.\n- Cursor pagination과 클라이언트 size 입력은\n사용하지 않는다.\n\n정책 및 설명\n- 선택된 placeIds 전체의 삭제되지 않은 Record를 합산한다.\n- 조회 시점 기준 직전 7일의 Record만 집계한다.\n- recordCount와 music[].count 모두 최근 7일 기준이다.\n- 음악별 count DESC로 정렬하고 동률이면\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 개별 마커와 클러스터 클릭을 같은 API로 처리한다.\n- 클러스터 ID나 행정구역 정보는 전달하지 않는다.\n- Cursor pagination, size, TOP N 제한은 현재 명세에 적용하지 않는다.",
         "operationId": "post_api_places_popular_tracks_search",
-        "security": [
-
-        ],
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -7561,9 +7563,7 @@
                       "message": "인기 음악 조회 성공",
                       "data": {
                         "recordCount": 0,
-                        "music": [
-
-                        ]
+                        "music": []
                       }
                     }
                   }
@@ -7675,9 +7675,7 @@
         "operationId": "post_api_users_me_records_search",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "requestBody": {
@@ -7790,9 +7788,7 @@
                     "value": {
                       "message": "내 자물쇠 목록 조회 성공",
                       "data": {
-                        "records": [
-
-                        ],
+                        "records": [],
                         "nextCursor": null
                       }
                     }

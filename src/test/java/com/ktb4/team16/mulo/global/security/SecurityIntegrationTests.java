@@ -126,6 +126,13 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void musicSearchWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/music/search").param("q", "밤편지"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void weatherGetIsPublicWithoutAuthenticationOrCsrf() throws Exception {
         var result = mvc.perform(get("/api/weather"))
                 .andExpect(status().isOk())
@@ -252,6 +259,9 @@ class SecurityIntegrationTests {
 
         @GetMapping("/api/private")
         String privateResource() { return "protected"; }
+
+        @GetMapping("/api/music/search")
+        String musicSearch() { return "music"; }
 
         // 날씨 조회는 공용 예보 데이터만 반환하므로 비인증 GET을 허용한다.
         @GetMapping("/api/weather")
