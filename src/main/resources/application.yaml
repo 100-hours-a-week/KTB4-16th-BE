@@ -42,3 +42,14 @@ kakao:
 kma:
   base-url: https://apis.data.go.kr/1360000/VilageFcstInfoService_2.0
   service-key: ${KMA_SERVICE_KEY}
+
+spotify:
+  client-id: ${SPOTIFY_CLIENT_ID}
+  client-secret: ${SPOTIFY_CLIENT_SECRET}
+  accounts-base-url: https://accounts.spotify.com
+  api-base-url: https://api.spotify.com
+  connect-timeout: PT2S
+  read-timeout: PT3S
+  user-limit-30-seconds: 8
+  user-limit-60-seconds: 15
+  global-limit-30-seconds: 80

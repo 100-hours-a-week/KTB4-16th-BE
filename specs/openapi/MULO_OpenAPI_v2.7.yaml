@@ -1084,13 +1084,14 @@ paths:
         백엔드가 Spotify 검색 API를 프록시한다.
 
         정책 및 설명
-        - 사용자가 입력한 검색어를 기준으로 음악을 검색한다.
-        - 백엔드가 Spotify 검색 API를 프록시한다.
-        - 검색어 q는 Query Parameter로 전달한다.
+        - 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.
+        - 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.
         - 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.
-        - 검색 단계에서는 Spotify의 음악 식별자인 externalTrackId를 반환한다.
+        - 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.
         - 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.
         - 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.
+        - V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.
+        - 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.
       responses:
         '200':
           description: |-
@@ -1109,20 +1110,31 @@ paths:
                     items:
                       type: object
                       properties:
+                        provider:
+                          type: string
+                          enum:
+                          - SPOTIFY
                         externalTrackId:
                           type: string
                         title:
                           type: string
                         artistName:
                           type: string
+                        albumImageUrl:
+                          type: string
+                        externalUrl:
+                          type: string
               example:
-                message: 음악 검색 성공
+                message: 음악 검색에 성공했습니다.
                 data:
-                - externalTrackId: 6rqhFgbbKwnb9MLmUQDhG6
+                - provider: SPOTIFY
+                  externalTrackId: 6rqhFgbbKwnb9MLmUQDhG6
                   title: 밤편지
                   artistName: 아이유
+                  albumImageUrl: https://i.scdn.co/image/example
+                  externalUrl: https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6
         '400':
-          description: 검색어가 없으면 유효한 검색 요청을 수행할 수 없으므로 400.
+          description: 검색어가 없거나 공백 정리 후 2~255자 범위를 벗어나면 400.
           content:
             application/json:
               schema:
@@ -1132,24 +1144,9 @@ paths:
                     type: string
                   message:
                     type: string
-                  errors:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        field:
-                          type: string
-                        code:
-                          type: string
-                        message:
-                          type: string
               example:
                 code: INVALID_INPUT_VALUE
                 message: 입력값을 확인해주세요.
-                errors:
-                - field: q
-                  code: SEARCH_QUERY_REQUIRED
-                  message: 검색어를 입력해주세요.
         '401':
           description: 음악 검색은 자물쇠 생성 과정에서 사용하는 기능이며 인증된 활성 사용자에게만 제공되므로, 유효한 Access Token이 없거나 인증에 실패한 경우 401을 반환한다.
           content:
@@ -1178,8 +1175,14 @@ paths:
               example:
                 code: INTERNAL_SERVER_ERROR
                 message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-        '502':
-          description: MULO 백엔드는 요청을 정상적으로 수신했지만 외부 의존 서비스인 Spotify API 호출에 실패하여 음악 검색 결과를 제공할 수 없으므로 502.
+        '429':
+          description: 사용자별 또는 Spotify 호출 제한으로 음악 검색을 잠시 처리할 수 없으므로 429. Retry-After 헤더의 초 단위만큼 기다린 뒤 다시 요청한다.
+          headers:
+            Retry-After:
+              description: 다시 요청하기 전에 기다릴 초 단위 시간
+              schema:
+                type: integer
+                minimum: 1
           content:
             application/json:
               schema:
@@ -1190,15 +1193,29 @@ paths:
                   message:
                     type: string
               example:
-                code: SPOTIFY_API_ERROR
-                message: Spotify 서비스 연동 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
+                code: MUSIC_SEARCH_RATE_LIMITED
+                message: 음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요.
+        '503':
+          description: Spotify 인증·검색 호출 또는 할당량 문제로 음악 검색 결과를 제공할 수 없으므로 503.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: MUSIC_PROVIDER_UNAVAILABLE
+                message: 음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요.
       parameters:
       - name: q
         in: query
         required: true
         schema:
           type: string
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/uploads":
     post:
       tags:

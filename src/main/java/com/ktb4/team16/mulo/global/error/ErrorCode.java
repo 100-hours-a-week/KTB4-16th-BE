@@ -40,6 +40,10 @@ public enum ErrorCode {
 
     WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
             "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
+    MUSIC_SEARCH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS,
+            "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."),
+    MUSIC_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,
+            "음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");

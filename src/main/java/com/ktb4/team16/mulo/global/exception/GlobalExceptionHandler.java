@@ -4,6 +4,9 @@ import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
+import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
+import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
+import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
@@ -13,6 +16,7 @@ import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
+import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MissingServletRequestParameterException;
@@ -89,6 +93,34 @@ public class GlobalExceptionHandler {
             InvalidCursorException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_CURSOR.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_CURSOR));
+    }
+
+    @ExceptionHandler(MusicSearchRateLimitedException.class)
+    // 음악 검색 제한을 429와 Retry-After 헤더로 변환한다.
+    public ResponseEntity<ErrorResponse> handleMusicSearchRateLimited(
+            MusicSearchRateLimitedException exception) {
+        long retryAfterSeconds = Math.max(1,
+                (exception.retryAfter().toMillis() + 999) / 1_000);
+        // 중요: Spotify 오류 본문은 숨기고 클라이언트에 필요한 대기 시간만 전달한다.
+        return ResponseEntity.status(ErrorCode.MUSIC_SEARCH_RATE_LIMITED.status())
+                .header(HttpHeaders.RETRY_AFTER, Long.toString(retryAfterSeconds))
+                .body(ErrorResponse.of(ErrorCode.MUSIC_SEARCH_RATE_LIMITED));
+    }
+
+    @ExceptionHandler(MusicProviderUnavailableException.class)
+    // 공급자 상세 원인을 노출하지 않고 안정적인 503 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleMusicProviderUnavailable(
+            MusicProviderUnavailableException exception) {
+        return ResponseEntity.status(ErrorCode.MUSIC_PROVIDER_UNAVAILABLE.status())
+                .body(ErrorResponse.of(ErrorCode.MUSIC_PROVIDER_UNAVAILABLE));
+    }
+
+    @ExceptionHandler(MusicSearchInputException.class)
+    // 서비스 계층의 검색어 검증 실패를 공통 400 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleMusicSearchInput(
+            MusicSearchInputException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
