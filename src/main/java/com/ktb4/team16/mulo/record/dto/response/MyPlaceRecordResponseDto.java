@@ -1,4 +1,4 @@
-package com.ktb4.team16.mulo.record.dto;
+package com.ktb4.team16.mulo.record.dto.response;
 
 import java.time.LocalDateTime;
 

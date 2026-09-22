@@ -6,7 +6,7 @@ import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
-import com.ktb4.team16.mulo.record.dto.MyPlaceRecordResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;

@@ -11,6 +11,7 @@ import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.service.PlaceService;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+import com.ktb4.team16.mulo.record.service.RecordService;
 import java.math.BigDecimal;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -37,12 +38,18 @@ class MyPlacesControllerTest {
     @Mock UserSignupService signupService;
     @Mock UserProfileService profileService;
     @Mock PlaceService placeService;
+    @Mock RecordService recordService;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(signupService, profileService, placeService))
+                        new UserController(
+                                signupService,
+                                profileService,
+                                placeService,
+                                recordService
+                        ))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
