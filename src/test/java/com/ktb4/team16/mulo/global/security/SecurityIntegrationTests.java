@@ -151,6 +151,22 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void allRecordMarkersGetIsPublicWithoutAuthenticationOrCsrf() throws Exception {
+        mvc.perform(get("/api/places/popular"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("markers"));
+    }
+
+    @Test
+    void allRecordMarkersPostStillRequiresAuthentication() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/places/popular")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized());
+    }
+
+    @Test
     void myPlacesWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me/places")
                         .param("swLat", "37.0")
@@ -266,5 +282,8 @@ class SecurityIntegrationTests {
         // 날씨 조회는 공용 예보 데이터만 반환하므로 비인증 GET을 허용한다.
         @GetMapping("/api/weather")
         String weather() { return "weather"; }
+
+        @GetMapping("/api/places/popular")
+        String allRecordMarkers() { return "markers"; }
     }
 }

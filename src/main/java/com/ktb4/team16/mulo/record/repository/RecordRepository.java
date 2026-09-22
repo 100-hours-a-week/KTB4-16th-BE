@@ -1,7 +1,7 @@
 package com.ktb4.team16.mulo.record.repository;
 
 import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.entity.Record;
@@ -16,8 +16,8 @@ import org.springframework.data.repository.query.Param;
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
-        SELECT new com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse(
-            p.placeId, COUNT(r), p.latitude, p.longitude
+        SELECT new com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse(
+            p.placeId, COUNT(r), p.legalDongCode, p.legalDongName, p.latitude, p.longitude
         )
         FROM Record r
         JOIN r.place p
@@ -25,9 +25,9 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             AND r.createdAt >= :createdAtFrom
             AND p.latitude BETWEEN :swLat AND :neLat
             AND p.longitude BETWEEN :swLng AND :neLng
-        GROUP BY p.placeId, p.latitude, p.longitude
+        GROUP BY p.placeId, p.legalDongCode, p.legalDongName, p.latitude, p.longitude
         """)
-    List<PopularPlaceMarkerResponse> findPopularPlacesInBounds(
+    List<AllRecordMarkerResponse> findAllRecordMarkersInBounds(
             @Param("swLat") BigDecimal swLat,
             @Param("swLng") BigDecimal swLng,
             @Param("neLat") BigDecimal neLat,

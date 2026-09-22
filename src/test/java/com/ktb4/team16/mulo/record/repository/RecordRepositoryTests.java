@@ -3,7 +3,7 @@ package com.ktb4.team16.mulo.record.repository;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
@@ -46,7 +46,7 @@ class RecordRepositoryTests {
     private JdbcTemplate jdbcTemplate;
 
     @Test
-    void popularPlacesCountOnlyRecentActiveInBoundsRecordsPerPlace() {
+    void allRecordMarkersCountOnlyRecentActiveInBoundsRecordsPerPlace() {
         long userId = insertUser();
         long trackId = insertTrack("track");
         long firstInBounds = insertPlace(
@@ -64,20 +64,22 @@ class RecordRepositoryTests {
         insertRecord(userId, secondInBounds, trackId, createdAtFrom.plusDays(1), null);
         insertRecord(userId, outOfBounds, trackId, createdAtFrom.plusDays(1), null);
 
-        List<PopularPlaceMarkerResponse> markers = recordRepository.findPopularPlacesInBounds(
+        List<AllRecordMarkerResponse> markers = recordRepository.findAllRecordMarkersInBounds(
                 SW_LAT, SW_LNG, NE_LAT, NE_LNG, createdAtFrom);
 
         assertThat(markers).hasSize(2);
         assertThat(markers).filteredOn(marker -> marker.placeId().equals(firstInBounds))
                 .singleElement()
                 .satisfies(marker -> {
-                    assertThat(marker.recordCount()).isEqualTo(2L);
+                    assertThat(marker.recordsCount()).isEqualTo(2L);
+                    assertThat(marker.legalDongCode()).isEqualTo(LEGAL_DONG_CODE);
+                    assertThat(marker.legalDongName()).isEqualTo(LEGAL_DONG_NAME);
                     assertThat(marker.latitude()).isEqualByComparingTo("-33.0000000");
                     assertThat(marker.longitude()).isEqualByComparingTo("-150.0000000");
                 });
         assertThat(markers).filteredOn(marker -> marker.placeId().equals(secondInBounds))
                 .singleElement()
-                .satisfies(marker -> assertThat(marker.recordCount()).isEqualTo(1L));
+                .satisfies(marker -> assertThat(marker.recordsCount()).isEqualTo(1L));
         assertThat(placeRepository.findById(outOfBounds)).isPresent();
     }
 

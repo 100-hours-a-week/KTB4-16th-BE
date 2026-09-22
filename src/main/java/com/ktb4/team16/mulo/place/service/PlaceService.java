@@ -1,7 +1,9 @@
 package com.ktb4.team16.mulo.place.service;
 
 import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
-import com.ktb4.team16.mulo.place.dto.PopularPlaceMarkerResponse;
+import com.ktb4.team16.mulo.place.dto.request.MapBoundsQuery;
+import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
+import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -17,15 +19,17 @@ public class PlaceService {
     private final RecordRepository recordRepository;
 
     @Transactional(readOnly = true)
-    public List<PopularPlaceMarkerResponse> getPopularPlaceMarkersInBounds(
-            BigDecimal swLat,
-            BigDecimal swLng,
-            BigDecimal neLat,
-            BigDecimal neLng,
-            LocalDateTime createdAtFrom
+    public List<AllRecordMarkerResponse> getAllRecordMarkersInBounds(
+            MapBoundsQuery query
     ) {
-        return recordRepository.findPopularPlacesInBounds(
-                swLat, swLng, neLat, neLng, createdAtFrom);
+        if (!query.hasValidBounds()) {
+            throw new InvalidMapBoundsException();
+        }
+
+        LocalDateTime createdAtFrom = LocalDateTime.now().minusDays(7);
+
+        return recordRepository.findAllRecordMarkersInBounds(
+                query.swLat(), query.swLng(), query.neLat(), query.neLng(), createdAtFrom);
     }
 
     @Transactional(readOnly = true)

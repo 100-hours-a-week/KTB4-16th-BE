@@ -56,6 +56,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
                         // 날씨 조회는 사용자별 데이터가 아닌 공용 예보 데이터만 반환한다.
                         .requestMatchers(HttpMethod.GET, "/api/weather").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/api/places/popular").permitAll()
                         .requestMatchers(HttpMethod.POST, "/api/users/signup").permitAll()
                         // 로그인은 공개지만 CSRF 제외 대상이 아니므로 위 CSRF 규칙은 유지한다.
                         .requestMatchers(HttpMethod.POST, "/api/auth/login").permitAll()
