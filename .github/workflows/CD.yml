@@ -1,0 +1,110 @@
+name: Backend CD
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+env:
+  GCP_PROJECT_ID: project-7b071b48-8637-467a-80d
+  GCP_REGION: asia-northeast3
+  ZONE: asia-northeast3-a
+  AR_REPO: backend
+  IMAGE_NAME: backend
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    outputs:
+      image_tag: ${{ steps.vars.outputs.image_tag }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - id: vars
+        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
+
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
+
+      - run: |
+          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}"
+          docker build -t "$IMAGE" .
+          docker push "$IMAGE"
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    steps:
+      - id: auth
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - id: standby
+        run: |
+          VM=$(gcloud compute instances list \
+            --filter="labels.role=standby" \
+            --zones="${{ env.ZONE }}" \
+            --format="value(name)")
+          echo "vm=$VM" >> "$GITHUB_OUTPUT"
+
+      - run: |
+          cat > backend.env <<ENVEOF
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
+          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+          KMA_SERVICE_KEY=${{ secrets.KMA_SERVICE_KEY }}
+          SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
+          ENVEOF
+
+      - run: |
+          gcloud compute scp backend.env "${{ steps.standby.outputs.vm }}:~/app/backend.env" \
+            --zone="${{ env.ZONE }}" --tunnel-through-iap
+
+          gcloud compute ssh "${{ steps.standby.outputs.vm }}" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
+            cd ~/app &&
+            export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }} &&
+            docker compose pull backend &&
+            docker compose up -d backend
+          "
+
+      - run: |
+          gcloud compute ssh "${{ steps.standby.outputs.vm }}" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
+            curl -fsS http://localhost:8080/actuator/health
+          "
+
+      - run: |
+          ACTIVE_VM=$(gcloud compute instances list \
+            --filter="labels.role=active" \
+            --zones="${{ env.ZONE }}" \
+            --format="value(name)")
+
+          gcloud compute instances delete-access-config "$ACTIVE_VM" \
+            --zone="${{ env.ZONE }}" --access-config-name="External NAT"
+
+          gcloud compute instances add-access-config "${{ steps.standby.outputs.vm }}" \
+            --zone="${{ env.ZONE }}" --access-config-name="External NAT" \
+            --address="${{ secrets.MURO_PROD_IP }}"
+
+          gcloud compute instances add-labels "${{ steps.standby.outputs.vm }}" --zone="${{ env.ZONE }}" --labels=role=active
+          gcloud compute instances add-labels "$ACTIVE_VM" --zone="${{ env.ZONE }}" --labels=role=standby
