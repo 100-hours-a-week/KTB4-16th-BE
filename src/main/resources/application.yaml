@@ -22,6 +22,16 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      # photo 한 장과 multipart boundary/header overhead를 허용한다.
+      max-request-size: 11MB
+
+gcs:
+  project-id: ${GCP_PROJECT_ID}
+  bucket-name: ${GCS_BUCKET_NAME}
+
 logging:
   level:
     org.flywaydb: info
