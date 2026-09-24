@@ -31,8 +31,7 @@ public class RecordService {
         List<MyPlaceRecordResponseDto> records;
 
         if (cursor == null) {
-            records =
-                    recordRepository.findMyPlaceRecordsFirstPage(
+            records = recordRepository.findMyPlaceRecordsFirstPage(
                             userId,
                             placeIds,
                             pageable
@@ -40,8 +39,7 @@ public class RecordService {
         } else {
             RecordCursor decodedCursor = recordCursorCodec.decode(cursor);
 
-            records =
-                    recordRepository.findMyPlaceRecordsAfterCursor(
+            records = recordRepository.findMyPlaceRecordsAfterCursor(
                             userId,
                             placeIds,
                             decodedCursor.createdAt(),
@@ -62,8 +60,7 @@ public class RecordService {
 
         String nextCursor = null;
         if (hasNext) {
-            MyPlaceRecordResponseDto lastRecord =
-                    responseRecords.get(responseRecords.size() - 1);
+            MyPlaceRecordResponseDto lastRecord = responseRecords.get(responseRecords.size() - 1);
 
             nextCursor = recordCursorCodec.encode(
                     lastRecord.createdAt(),

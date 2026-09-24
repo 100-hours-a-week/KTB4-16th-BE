@@ -29,8 +29,7 @@ public class PlaceController {
             throw new InvalidMapBoundsException();
         }
 
-        List<AllRecordMarkerResponse> markers =
-                placeService.getAllRecordMarkersInBounds(query);
+        List<AllRecordMarkerResponse> markers = placeService.getAllRecordMarkersInBounds(query);
 
         return new AllRecordMarkersResponse(
                 PlaceMessage.ALL_RECORD_MARKERS_RETRIEVED.message(),
