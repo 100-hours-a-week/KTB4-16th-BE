@@ -52,7 +52,7 @@ public final class ImageFileValidator {
         return switch (contentType) {
             case "image/jpeg" -> "jpg";
             case "image/png" -> "png";
-            case "image/heic", "image/heif" -> "heic";
+            case "image/heic" -> "heic";
             case "image/webp" -> "webp";
             default -> null;
         };
@@ -70,7 +70,7 @@ public final class ImageFileValidator {
         String actualExtension = lowerFilename.substring(dotIndex + 1);
         return switch (extension) {
             case "jpg" -> actualExtension.equals("jpg") || actualExtension.equals("jpeg");
-            case "heic" -> actualExtension.equals("heic") || actualExtension.equals("heif");
+            case "heic" -> actualExtension.equals("heic");
             default -> actualExtension.equals(extension);
         };
     }
@@ -91,7 +91,7 @@ public final class ImageFileValidator {
                         && bytes[2] == 'F' && bytes[3] == 'F'
                         && bytes[8] == 'W' && bytes[9] == 'E'
                         && bytes[10] == 'B' && bytes[11] == 'P';
-                case "image/heic", "image/heif" -> isHeif(bytes);
+                case "image/heic" -> isHeif(bytes);
                 default -> false;
         };
     }

@@ -41,13 +41,23 @@ class ImageFileValidatorTest {
     }
 
     @Test
-    void acceptsHeicAndHeifFtypBrands() {
+    void acceptsHeicFtypBrands() {
         assertThat(ImageFileValidator.validate(
                 file("photo.HEIC", "image/heic", heif("heic", "mif1"))).extension())
                 .isEqualTo("heic");
-        assertThat(ImageFileValidator.validate(
-                file("photo.heif", "image/heif", heif("mif1", "heif"))).extension())
-                .isEqualTo("heic");
+    }
+
+    @Test
+    void rejectsHeifMimeTypeAndExtension() {
+        assertThatThrownBy(() -> ImageFileValidator.validate(
+                file("photo.heic", "image/heif", heif("heic", "mif1"))))
+                .isInstanceOf(InvalidImageFormatException.class);
+        assertThatThrownBy(() -> ImageFileValidator.validate(
+                file("photo.heif", "image/heic", heif("heic", "mif1"))))
+                .isInstanceOf(InvalidImageFormatException.class);
+        assertThatThrownBy(() -> ImageFileValidator.validate(
+                file("photo.heif", "image/heif", heif("mif1", "heif"))))
+                .isInstanceOf(InvalidImageFormatException.class);
     }
 
     @Test
