@@ -123,19 +123,19 @@ jobs:
                   "fields": [
                     {
                       "name": "커밋",
-                      "value": "(${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                      "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
                       "inline": true
                     },
                     {
-                      "name": "작성자",
+                      "name": "푸시한 사람",
                       "value": ${{ toJSON(github.actor) }},
                       "inline": true
                     },
                     {
                       "name": "브랜치",
-                      "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                      "value": ${{ toJSON(github.ref_name) }},
                       "inline": true
-                    },
+                    }
                   ]
                 }
               ]
