@@ -57,6 +57,7 @@ public class SecurityConfig {
                         // 날씨 조회는 사용자별 데이터가 아닌 공용 예보 데이터만 반환한다.
                         .requestMatchers(HttpMethod.GET, "/api/weather").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/places/popular").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/places/popular-tracks/search").permitAll()
                         // Swagger UI와 OpenAPI 문서의 공개 조회만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
