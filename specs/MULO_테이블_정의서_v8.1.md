@@ -29,7 +29,7 @@
 - `legal_dong_code`와 `legal_dong_name`은 둘 다 존재하거나 둘 다 NULL이어야 하도록 CHECK 제약을 둔다
 - 자물쇠 생성 위치는 프론트가 브라우저 Geolocation API로 최초 좌표를 얻고 Kakao Maps SDK에서 사용자가 수정한 최종 좌표를 확정한다
 - 프론트는 최종 좌표에 대해 Kakao Maps SDK `services.Geocoder.coord2RegionCode()`를 호출해 법정동 코드/명을 얻고 `latitude`, `longitude`, `legalDongCode`, `legalDongName`을 백엔드에 전달한다
-- 대시보드 지역 그룹 키는 `legal_dong_code`이며 `legal_dong_name`은 표시용이다. `legal_dong_code IS NULL`인 데이터는 하나의 미확인 그룹으로 집계하고 화면에는 `확인할 수 없음`으로 표시한다
+- 대시보드 지역 그룹 키는 `legal_dong_code`이며 `legal_dong_name`은 표시용이다. `legal_dong_code IS NULL`인 데이터는 하나의 미확인 그룹으로 집계하고 `GET /api/records/regions` 응답에서만 `legalDongCode=UNKNOWN`, `legalDongName=위치 정보 없음`으로 반환한다. 이 약속값은 DB에 저장하지 않는다
 - 홈의 인기 자물쇠 지도는 조회 시점 기준 최근 7일 이내 생성된 삭제되지 않은 자물쇠만 대상으로 한다
 - 인기 자물쇠 마커 클릭 후 음악 랭킹도 동일한 최근 7일 자물쇠만 집계하며 음악별 `count DESC`, 동률은 해당 음악의 가장 최근 Record 생성 시각 내림차순으로 정렬한다
 - 내 자물쇠 보기는 7일 제한을 적용하지 않고 현재 사용자의 삭제되지 않은 모든 자물쇠를 대상으로 한다
@@ -181,7 +181,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_place_legal_dong_frontend` | 프론트는 최종 좌표에 대해 Kakao Maps SDK `services.Geocoder.coord2RegionCode()`를 호출하고 `region_type=B` 결과의 `code`와 `region_3depth_name`을 각각 `legalDongCode`, `legalDongName`으로 백엔드에 전달한다. |
 | `rule_place_legal_dong_nullable_pair` | Kakao SDK 호출은 정상 성공했으나 `region_type=B` 결과가 없는 경우 `legal_dong_code`, `legal_dong_name`을 모두 NULL로 저장할 수 있다. 둘 중 하나만 NULL인 상태는 허용하지 않는다. |
 | `rule_place_kakao_sdk_failure` | Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 이를 법정동 없음으로 간주하지 않는다. 프론트는 자물쇠 생성 요청을 중단하거나 재시도한다. |
-| `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 화면에는 `확인할 수 없음`으로 표시한다. |
+| `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. 최초 진입에서는 지역 그룹만 조회하며 목록 preview는 포함하지 않는다. 지역 그룹은 최신 활성 Record `created_at` 내림차순으로 정렬한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 `GET /api/records/regions` 응답에서만 `legalDongCode=UNKNOWN`, `legalDongName=위치 정보 없음`으로 반환한다. 약속값은 DB에 저장하지 않는다. |
 | `rule_place_reuse_open_question` | 동일·근접 좌표에서 기존 `place`를 재사용할지 새 `place`를 생성할지는 아직 미정이다. 구현자가 임의로 확정하지 않는다. |
 
 #### 4. 관계
@@ -275,7 +275,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_popular_marker_count` | 인기 자물쇠 지도 마커의 `recordsCount`는 해당 장소에서 조회 시점 기준 최근 7일 이내 생성되고 삭제되지 않은 자물쇠 수다. |
 | `rule_my_marker_count` | 내 자물쇠 지도 마커의 `myRecordsCount`는 해당 장소에 저장된 현재 사용자의 전체 삭제되지 않은 자물쇠 수이며 7일 제한을 적용하지 않는다. |
 | `rule_user_record_region_group` | 현재 사용자의 자물쇠 지역 폴더는 `places.legal_dong_code` 기준으로 그룹화하고 `places.legal_dong_name`을 표시명으로 사용한다. `legal_dong_code IS NULL`은 하나의 미확인 그룹으로 묶어 UI에서 `확인할 수 없음`으로 표시한다. |
-| `rule_user_record_region_detail` | 지역 폴더 선택 시 해당 법정동 그룹에 속한 현재 사용자의 삭제되지 않은 자물쇠 목록을 조회하며, 자물쇠 선택 시 기존 자물쇠 상세 조회를 사용한다. |
+| `rule_user_record_region_detail` | 지역 폴더 선택 시 별도 `GET /api/records`로 해당 법정동 그룹에 속한 현재 사용자의 삭제되지 않은 자물쇠 목록을 조회한다. `legalDongCode=UNKNOWN`은 `legal_dong_code IS NULL` 그룹을 의미하며, 목록은 `created_at DESC, record_id DESC` Cursor 방식으로 서버 20개 고정이다. 자물쇠 선택 시 기존 자물쇠 상세 조회를 사용한다. |
 | `rule_cursor_page_size` | 커서 기반 목록 조회의 `size` 기본값은 20, 최대값은 100이다. |
 
 #### 4. 관계

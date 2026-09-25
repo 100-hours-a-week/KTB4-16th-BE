@@ -180,6 +180,20 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void myRecordRegionsWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/records/regions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void myRecordsByRegionWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/records").param("legalDongCode", "4111710100"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void myRecordsSearchWithoutAccessTokenReturnsUnauthorized() throws Exception {
         Cookie cookie = csrfCookie();
         mvc.perform(post("/api/users/me/records/search")
