@@ -16,6 +16,7 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.test.context.web.WebAppConfiguration;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
@@ -28,6 +29,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -193,6 +195,27 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void uploadWithoutCsrfReturnsForbidden() throws Exception {
+        mvc.perform(multipart("/api/uploads")
+                        .file(new MockMultipartFile("photo", "photo.jpg", "image/jpeg",
+                                new byte[]{1})))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+    }
+
+    @Test
+    void uploadWithCsrfWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(multipart("/api/uploads")
+                        .file(new MockMultipartFile("photo", "photo.jpg", "image/jpeg",
+                                new byte[]{1}))
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
         mvc.perform(patch("/api/users/me/nickname"))
                 .andExpect(status().isForbidden())
@@ -272,6 +295,10 @@ class SecurityIntegrationTests {
         @PostMapping("/api/users/signup")
         @ResponseStatus(HttpStatus.CREATED)
         void signup() { }
+
+        @PostMapping("/api/uploads")
+        @ResponseStatus(HttpStatus.CREATED)
+        void upload() { }
 
         @GetMapping("/api/private")
         String privateResource() { return "protected"; }
