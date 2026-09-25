@@ -9,6 +9,10 @@ import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
+import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
+import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
+import com.ktb4.team16.mulo.upload.exception.InvalidImageFormatException;
+import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
@@ -20,6 +24,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -140,6 +146,48 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingPart(
+            MissingServletRequestPartException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        exception.getRequestPartName(), ErrorCode.PHOTO_REQUIRED)));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(ErrorCode.IMAGE_SIZE_EXCEEDED.status())
+                .body(ErrorResponse.of(ErrorCode.IMAGE_SIZE_EXCEEDED));
+    }
+
+    @ExceptionHandler(EmptyImageException.class)
+    public ResponseEntity<ErrorResponse> handleEmptyImage(EmptyImageException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        "photo", ErrorCode.PHOTO_REQUIRED)));
+    }
+
+    @ExceptionHandler(ImageSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleImageSizeExceeded(
+            ImageSizeExceededException exception) {
+        return ResponseEntity.status(ErrorCode.IMAGE_SIZE_EXCEEDED.status())
+                .body(ErrorResponse.of(ErrorCode.IMAGE_SIZE_EXCEEDED));
+    }
+
+    @ExceptionHandler(InvalidImageFormatException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidImageFormat(
+            InvalidImageFormatException exception) {
+        return ResponseEntity.status(ErrorCode.UNSUPPORTED_IMAGE_FORMAT.status())
+                .body(ErrorResponse.of(ErrorCode.UNSUPPORTED_IMAGE_FORMAT));
+    }
+
+    @ExceptionHandler(UploadNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUploadNotFound(UploadNotFoundException exception) {
+        return ResponseEntity.status(ErrorCode.UPLOAD_NOT_FOUND.status())
+                .body(ErrorResponse.of(ErrorCode.UPLOAD_NOT_FOUND));
     }
 
     @ExceptionHandler(Exception.class)
