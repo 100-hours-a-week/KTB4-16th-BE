@@ -1,48 +1,17 @@
 name: Backend CD
 
 on:
-  push:
-    branches: [main]
+  workflow_run:
+    workflows: ["main CI with backend"]
+    types: [completed]
   workflow_dispatch:
 
 env:
-  GCP_PROJECT_ID: project-7b071b48-8637-467a-80d
-  GCP_REGION: asia-northeast3
   ZONE: asia-northeast3-a
-  AR_REPO: backend
-  IMAGE_NAME: backend
 
 jobs:
-  build-and-push:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      image_tag: ${{ steps.vars.outputs.image_tag }}
-    steps:
-      - uses: actions/checkout@v4
-
-      - id: vars
-        run: echo "image_tag=${GITHUB_SHA::7}" >> "$GITHUB_OUTPUT"
-
-      - id: auth
-        uses: google-github-actions/auth@v2
-        with:
-          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
-          service_account: ${{ secrets.SERVICE_ACCOUNT }}
-
-      - uses: google-github-actions/setup-gcloud@v2
-
-      - run: gcloud auth configure-docker ${{ env.GCP_REGION }}-docker.pkg.dev
-
-      - run: |
-          IMAGE="${{ env.GCP_REGION }}-docker.pkg.dev/${{ env.GCP_PROJECT_ID }}/${{ env.AR_REPO }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.image_tag }}"
-          docker build -t "$IMAGE" .
-          docker push "$IMAGE"
-
   deploy:
-    needs: build-and-push
+    if: ${{ github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
     permissions:
       contents: read
@@ -64,6 +33,14 @@ jobs:
             --format="value(name)")
           echo "vm=$VM" >> "$GITHUB_OUTPUT"
 
+      - id: image
+        run: |
+          TAG=$(gcloud artifacts docker images list \
+            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}" \
+            --include-tags --sort-by="~UPDATE_TIME" --limit=1 \
+            --format="value(TAGS)" | cut -d',' -f1)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
       - run: |
           cat > backend.env <<ENVEOF
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
@@ -73,7 +50,7 @@ jobs:
           KMA_SERVICE_KEY=${{ secrets.KMA_SERVICE_KEY }}
           SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
-          GCP_PROJECT_ID=${{ env.GCP_PROJECT_ID }}
+          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
           ENVEOF
 
@@ -83,7 +60,7 @@ jobs:
 
           gcloud compute ssh "${{ steps.standby.outputs.vm }}" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
             cd ~/app &&
-            export IMAGE_TAG=${{ needs.build-and-push.outputs.image_tag }} &&
+            export IMAGE_TAG=${{ steps.image.outputs.tag }} &&
             docker compose pull backend &&
             docker compose up -d backend
           "
