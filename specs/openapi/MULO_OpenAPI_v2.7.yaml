@@ -1089,7 +1089,7 @@ paths:
         - 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.
         - 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.
         - 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.
-        - 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.
+        - 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.
         - V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.
         - 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.
       responses:
@@ -1493,7 +1493,11 @@ paths:
         location.latitude: Double
         location.longitude: Double
         music.externalTrackId: String
-        moodScore: Integer
+        music.title: String
+        music.artistName: String
+        music.albumImageUrl: String
+        music.externalUrl: String
+        moodScore: Integer (-50 이상 50 이하)
         uploadId: Long
 
         선택
@@ -1515,10 +1519,10 @@ paths:
         - legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.
         - Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.
         - 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.
-        - 동일·근접 좌표에서 기존 place를 재사용할지 신규 place를 생성할지는 아직 미정이며 구현자가 임의로 확정하지 않는다.
+        - latitude와 longitude가 모두 정확히 동일한 기존 place가 있는 경우에만 재사용한다. 근접 좌표는 기존 place로 판단하지 않으며, 동일 좌표가 없으면 새로운 place를 생성한다.
         - 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 "확인할 수 없음"으로 표시한다.
         - legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. "확인할 수 없음" 문자열은 DB/API 값으로 저장하지 않는다.
-        - 신규 externalTrackId는 Spotify API를 통해 재검증한다.
+        - 요청으로 전달된 음악 메타데이터를 사용하며, 기존 externalTrackId는 재사용하고 신규 externalTrackId는 요청값으로 music_tracks에 저장한다. 자물쇠 생성 과정에서는 Spotify API를 재호출하지 않는다.
         - 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.
         - 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.
         - 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.
@@ -1677,13 +1681,28 @@ paths:
                   properties:
                     externalTrackId:
                       type: string
+                    title:
+                      type: string
+                    artistName:
+                      type: string
+                    albumImageUrl:
+                      type: string
+                    externalUrl:
+                      type: string
                   required:
                   - externalTrackId
+                  - title
+                  - artistName
+                  - albumImageUrl
+                  - externalUrl
                 moodScore:
                   type: integer
                   format: int64
+                  minimum: -50
+                  maximum: 50
                 comment:
                   type: string
+                  maxLength: 80
                 uploadId:
                   type: integer
                   format: int64
@@ -1700,6 +1719,10 @@ paths:
                 legalDongName: 오산동
               music:
                 externalTrackId: "..."
+                title: "..."
+                artistName: "..."
+                albumImageUrl: "..."
+                externalUrl: "..."
               moodScore: 4
               comment: 좋았다
               uploadId: 123

@@ -10,6 +10,10 @@ import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
+import com.ktb4.team16.mulo.place.repository.PlaceRepository;
+import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.user.repository.UserRepository;
+import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -18,8 +22,18 @@ import org.springframework.data.domain.Pageable;
 class MyPlaceRecordsServiceTests {
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final RecordCursorCodec cursorCodec = mock(RecordCursorCodec.class);
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final PlaceRepository placeRepository = mock(PlaceRepository.class);
+    private final WeatherService weatherService = mock(WeatherService.class);
+    private final UploadService uploadService = mock(UploadService.class);
+    private final com.ktb4.team16.mulo.music.service.MusicTrackService musicTrackService =
+            mock(com.ktb4.team16.mulo.music.service.MusicTrackService.class);
+    private final com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository
+            recordPhotoRepository = mock(
+                    com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository.class);
     private final RecordService recordService = new RecordService(
-            recordRepository, cursorCodec);
+            recordRepository, cursorCodec, userRepository, placeRepository,
+            weatherService, uploadService, musicTrackService, recordPhotoRepository);
 
     @Test
     void returnsTwentyRecordsAndCursorWhenRepositoryReturnsMoreThanTwenty() {

@@ -68,6 +68,11 @@ public class UploadService {
                 .orElseThrow(UploadNotFoundException::new);
     }
 
+    @Transactional
+    public void deleteMetadata(Upload upload) {
+        uploadRepository.delete(upload);
+    }
+
     @Transactional(readOnly = true)
     public String createReadSignedUrl(Long userId, Long uploadId) {
         return gcsStorageService.createReadSignedUrl(findValidUpload(userId, uploadId).getImageUrl());

@@ -38,4 +38,38 @@ public class MusicTrack {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    private MusicTrack(
+            String externalTrackId,
+            String title,
+            String artistName,
+            String albumImageUrl,
+            String externalUrl,
+            LocalDateTime createdAt
+    ) {
+        this.externalTrackId = externalTrackId;
+        this.title = title;
+        this.artistName = artistName;
+        this.albumImageUrl = albumImageUrl;
+        this.externalUrl = externalUrl;
+        this.createdAt = createdAt;
+    }
+
+    public static MusicTrack create(
+            String externalTrackId,
+            String title,
+            String artistName,
+            String albumImageUrl,
+            String externalUrl,
+            LocalDateTime createdAt
+    ) {
+        return new MusicTrack(
+                externalTrackId,
+                title,
+                artistName,
+                albumImageUrl,
+                externalUrl,
+                createdAt
+        );
+    }
 }
