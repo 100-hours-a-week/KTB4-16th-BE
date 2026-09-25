@@ -86,7 +86,7 @@ jobs:
       # 5. 스모크 테스트 (지금은 placeholder — 백엔드 API 완성되면 실제 핵심 기능 검증으로 교체 예정)
       #    지금은 컨테이너가 응답만 하는지 확인한다 (Health Check 수준).
       #    이 스텝이 실패하면 job 전체가 실패 처리되고, switch-traffic job은 자동 스킵된다.
-      - name: Smoke Test (TODO: 백엔드 API 완성되면 실제 검증 로직으로 교체)
+      - name: "Smoke Test (TODO: 백엔드 API 완성되면 실제 검증 로직으로 교체)"
         run: |
           gcloud compute ssh "${{ steps.standby.outputs.vm }}" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
             curl -fsS http://localhost:8080/actuator/health
