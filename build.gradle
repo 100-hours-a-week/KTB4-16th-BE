@@ -29,6 +29,10 @@ dependencies {
     // Swagger/OpenAPI 문서 및 Swagger UI 제공을 위한 의존성
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 
+    // 사진 임시 업로드를 위해 Google Cloud Storage 연동에 필요한 의존성
+    implementation platform('com.google.cloud:libraries-bom:26.86.0')
+    implementation 'com.google.cloud:google-cloud-storage'
+
     // Persistence / MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     runtimeOnly 'com.mysql:mysql-connector-j'
