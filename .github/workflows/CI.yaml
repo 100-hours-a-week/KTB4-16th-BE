@@ -133,7 +133,7 @@ jobs:
                     },
                     {
                       "name": "브랜치",
-                      "value": ${{ toJSON(github.ref_name) }},
+                      "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
                       "inline": true
                     },
                   ]
