@@ -122,8 +122,8 @@ jobs:
                   "color": ${{ needs.ci.result == 'success' && 3066993 || 15158332 }},
                   "fields": [
                     {
-                      "name": "PR",
-                      "value": "[${{ github.sha }}](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                      "name": "커밋",
+                      "value": "(${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
                       "inline": true
                     },
                     {
@@ -132,15 +132,10 @@ jobs:
                       "inline": true
                     },
                     {
-                      "name": "작업 브랜치",
-                      "value": ${{ toJSON(github.head_ref) }},
+                      "name": "브랜치",
+                      "value": ${{ toJSON(github.ref_name) }},
                       "inline": true
                     },
-                    {
-                      "name": "대상 브랜치",
-                      "value": ${{ toJSON(github.base_ref) }},
-                      "inline": true
-                    }
                   ]
                 }
               ]
