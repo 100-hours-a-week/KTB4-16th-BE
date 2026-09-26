@@ -3356,7 +3356,7 @@ paths:
               example:
                 code: INTERNAL_SERVER_ERROR
                 message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
     post:
       tags:
       - RECOMMEND / 추천
@@ -3377,6 +3377,31 @@ paths:
         - 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.
         - 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.
         - 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - latitude
+              - longitude
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                  description: 현재 위치의 위도
+                longitude:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                  description: 현재 위치의 경도
+            example:
+              latitude: 37.5665
+              longitude: 126.9780
       responses:
         '201':
           description: 새 추천 플레이리스트 리소스가 생성되므로 201.
@@ -3469,6 +3494,20 @@ paths:
               example:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
+        '502':
+          description: 현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: WEATHER_API_ERROR
+                message: 날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
         '500':
           description: MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.
           content:
@@ -3483,43 +3522,7 @@ paths:
               example:
                 code: INTERNAL_SERVER_ERROR
                 message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-        '502':
-          description: |-
-            추천 생성에 필수적인 날씨·기온을 최신 발표본 조회와 허용된 바로 직전 발표본 fallback 모두에서 확보하지 못한 경우 502.
-
-            추가 케이스: MULO 백엔드가 의존하는 AI 추천 서버 처리 실패이므로 502. AI 연동 오류 코드는 AI_SERVICE_ERROR로 통일한다.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: string
-                  message:
-                    type: string
-              example:
-                code: WEATHER_API_ERROR
-                message: 날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                latitude:
-                  type: number
-                  format: double
-                longitude:
-                  type: number
-                  format: double
-              required:
-              - latitude
-              - longitude
-            example:
-              latitude: 37.54
-              longitude: 127.03
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/weather":
     get:

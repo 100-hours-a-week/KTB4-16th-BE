@@ -10,6 +10,8 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효한 Refresh Token이 없습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
+    LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
     PHOTO_REQUIRED(HttpStatus.BAD_REQUEST, "사진 파일이 필요합니다."),
     IMAGE_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "사진 최대 용량은 10MB입니다."),
     UNSUPPORTED_IMAGE_FORMAT(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 이미지 파일 형식입니다."),

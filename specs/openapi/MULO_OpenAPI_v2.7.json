@@ -629,7 +629,9 @@
         },
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "implemented"
@@ -1553,7 +1555,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "implemented"
@@ -2400,28 +2404,28 @@
                   "music": {
                     "type": "object",
                     "properties": {
-                        "externalTrackId": {
-                          "type": "string"
-                        },
-                        "title": {
-                          "type": "string"
-                        },
-                        "artistName": {
-                          "type": "string"
-                        },
-                        "albumImageUrl": {
-                          "type": "string"
-                        },
-                        "externalUrl": {
-                          "type": "string"
-                        }
+                      "externalTrackId": {
+                        "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "artistName": {
+                        "type": "string"
+                      },
+                      "albumImageUrl": {
+                        "type": "string"
+                      },
+                      "externalUrl": {
+                        "type": "string"
+                      }
                     },
                     "required": [
-                        "externalTrackId",
-                        "title",
-                        "artistName",
-                        "albumImageUrl",
-                        "externalUrl"
+                      "externalTrackId",
+                      "title",
+                      "artistName",
+                      "albumImageUrl",
+                      "externalUrl"
                     ]
                   },
                   "moodScore": {
@@ -2454,11 +2458,11 @@
                   "legalDongName": "오산동"
                 },
                 "music": {
-                    "externalTrackId": "...",
-                    "title": "...",
-                    "artistName": "...",
-                    "albumImageUrl": "...",
-                    "externalUrl": "..."
+                  "externalTrackId": "...",
+                  "title": "...",
+                  "artistName": "...",
+                  "albumImageUrl": "...",
+                  "externalUrl": "..."
                 },
                 "moodScore": 4,
                 "comment": "좋았다",
@@ -2509,7 +2513,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -2870,7 +2876,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "implemented"
@@ -4735,7 +4743,7 @@
             }
           }
         },
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       },
       "post": {
         "tags": [
@@ -4744,6 +4752,40 @@
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
         "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. 사용자의 기록 + 현재 위치 주변 장소의 자물쇠 + 현재 위치/장소 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -90,
+                    "maximum": 90,
+                    "description": "현재 위치의 위도"
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -180,
+                    "maximum": 180,
+                    "description": "현재 위치의 경도"
+                  }
+                }
+              },
+              "example": {
+                "latitude": 37.5665,
+                "longitude": 126.978
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "새 추천 플레이리스트 리소스가 생성되므로 201.",
@@ -4884,6 +4926,28 @@
               }
             }
           },
+          "502": {
+            "description": "현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "WEATHER_API_ERROR",
+                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          },
           "500": {
             "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
             "content": {
@@ -4905,59 +4969,9 @@
                 }
               }
             }
-          },
-          "502": {
-            "description": "추천 생성에 필수적인 날씨·기온을 최신 발표본 조회와 허용된 바로 직전 발표본 fallback 모두에서 확보하지 못한 경우 502.\n\n추가 케이스: MULO 백엔드가 의존하는 AI 추천 서버 처리 실패이므로 502. AI 연동 오류 코드는 AI_SERVICE_ERROR로 통일한다.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "WEATHER_API_ERROR",
-                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
           }
         },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "latitude": {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  "longitude": {
-                    "type": "number",
-                    "format": "double"
-                  }
-                },
-                "required": [
-                  "latitude",
-                  "longitude"
-                ]
-              },
-              "example": {
-                "latitude": 37.54,
-                "longitude": 127.03
-              }
-            }
-          }
-        },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -4971,7 +4985,9 @@
         "description": "필수\nlatitude: Double\nlongitude: Double\nat: ISO-8601 DateTime\n\n정책 및 설명\n- 요청 at은 받은 offset과 무관하게 KST로 정규화한다. 서버 KST의 현재 시간대 시작보다 이른 요청은 과거로 보고 400 INVALID_WEATHER_REQUEST_TIME으로 처리한다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한다.\n- 같은 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회한다.\n- 해당 날짜·격자의 캐시가 전혀 없을 때만 기상청 단기예보 getVilageFcst를 조회해 저장한다.\n- 응답은 forecastAt, temperature, weatherCondition만 제공한다.\n- weatherCondition은 CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER 중 하나다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각을 forecast_at으로 사용한다.\n- 예: 15:10 요청은 15:00 예보를 사용하고, 15:50 요청은 16:00 예보를 사용한다.\n\n- 기상청 getVilageFcst를 1회 호출하면 목표 예보시각 이후 항목을 시간대별로 파싱해 weather_grid_forecasts에 일괄 저장한다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n- 최초 호출은 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패 또는 미포함이면 바로 이전 후보 회차를 한 번만 시도한다.\n- 당일 캐시는 있으나 요청 시간대 예보가 없으면 WEATHER_API_ERROR로 처리한다.\n\n### 미정 정책\n- 국내 기상청 격자 범위 밖 좌표: 상태=미정, `WTH-002: HTTP 상태와 Error Code 미정` — 격자 범위 밖 좌표의 구체 상태와 오류 코드는 임의 확정하지 않는다.",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -5493,7 +5509,8 @@
                   "selectedOption": {
                     "type": "string"
                   },
-                  "voteQuestionId": {}
+                  "voteQuestionId": {
+                  }
                 },
                 "required": [
                   "selectedOption",
@@ -5508,7 +5525,9 @@
         },
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "contract-only",
@@ -5846,7 +5865,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "contract-only"
@@ -7395,7 +7416,9 @@
         "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 법정동 미확인 자물쇠는 `legalDongCode=null`, `legalDongName=null`인 하나의 그룹으로 반환한다.\n- 프론트는 NULL 그룹을 `확인할 수 없음` 폴더로 표시한다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -7492,7 +7515,9 @@
         "summary": "클러스터/장소 인기 음악 조회",
         "description": "필수\nplaceIds: List<Long> (1개 이상)\n\n선택\n없음\n\n정책\n- 비로그인 사용자도 조회할 수 있다.\n- 전달받은 모든 placeIds를 하나의 조회 범위로 합산한다.\n- Record의 placeId가 placeIds에 포함되는 기록만 집계한다.\n- 삭제된 Record는 제외한다.\n- API 조회 시점을 기준으로\n직전 7일 동안 생성된 Record만 집계한다.\n- recordCount는 선택된 placeIds 전체의\n최근 7일 활성 Record 총개수이다.\n- music[].count는 최근 7일 활성 Record 중\n해당 음악이 등록된 횟수이다.\n- 음악별 count DESC로 정렬한다.\n- count가 같으면 해당 음악의\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 클러스터링은 프론트의\nKakao MarkerClusterer가 담당한다.\n- 백엔드는 클러스터를 관리하지 않고\n전달받은 placeIds만 처리한다.\n- 개별 마커 클릭은 placeIds에\n1개의 ID를 전달해 동일하게 처리한다.\n- Cursor pagination과 클라이언트 size 입력은\n사용하지 않는다.\n\n정책 및 설명\n- 선택된 placeIds 전체의 삭제되지 않은 Record를 합산한다.\n- 조회 시점 기준 직전 7일의 Record만 집계한다.\n- recordCount와 music[].count 모두 최근 7일 기준이다.\n- 음악별 count DESC로 정렬하고 동률이면\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 개별 마커와 클러스터 클릭을 같은 API로 처리한다.\n- 클러스터 ID나 행정구역 정보는 전달하지 않는다.\n- Cursor pagination, size, TOP N 제한은 현재 명세에 적용하지 않는다.",
         "operationId": "post_api_places_popular_tracks_search",
-        "security": [],
+        "security": [
+
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7598,7 +7623,9 @@
                       "message": "인기 음악 조회 성공",
                       "data": {
                         "recordCount": 0,
-                        "music": []
+                        "music": [
+
+                        ]
                       }
                     }
                   }
@@ -7710,7 +7737,9 @@
         "operationId": "post_api_users_me_records_search",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "requestBody": {
@@ -7823,7 +7852,9 @@
                     "value": {
                       "message": "내 자물쇠 목록 조회 성공",
                       "data": {
-                        "records": [],
+                        "records": [
+
+                        ],
                         "nextCursor": null
                       }
                     }
