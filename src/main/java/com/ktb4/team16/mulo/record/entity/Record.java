@@ -78,6 +78,11 @@ public class Record {
                 moodScore, comment, createdAt);
     }
 
+    public void updateComment(String comment, LocalDateTime updatedAt) {
+        this.comment = comment;
+        this.updatedAt = updatedAt;
+    }
+
     public enum WeatherCondition {
         CLEAR,
         CLOUDY,

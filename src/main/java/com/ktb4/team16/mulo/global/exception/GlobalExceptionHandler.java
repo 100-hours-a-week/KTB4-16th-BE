@@ -10,6 +10,7 @@ import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
 import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
@@ -109,6 +110,14 @@ public class GlobalExceptionHandler {
         return response(ErrorCode.INVALID_INPUT_VALUE,
                 List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
                         "recordId", ErrorCode.INVALID_RECORD_ID)));
+    }
+
+    @ExceptionHandler(MissingCommentFieldException.class)
+    public ResponseEntity<ErrorResponse> handleMissingCommentField(
+            MissingCommentFieldException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        "comment", ErrorCode.INVALID_INPUT_VALUE)));
     }
 
     @ExceptionHandler(RecordNotFoundException.class)

@@ -3036,7 +3036,7 @@
         ],
         "summary": "자물쇠 코멘트 수정",
         "operationId": "patchApiRecordsRecordIdComment",
-        "description": "필수\nrecordId: Long\ncomment: String | null (최대 80자)\n\n선택\n없음\n\n생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다.",
+        "description": "필수\npath recordId: Long\nbody comment: String | null (키 필수, 최대 80자)\n\n선택\n없음\n\n생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다. 빈 문자열은 변환하지 않고 그대로 저장한다.",
         "responses": {
           "200": {
             "description": "기존 자원의 부분 수정이 정상 완료되었으므로 200.",
@@ -3056,7 +3056,8 @@
                           "format": "int64"
                         },
                         "comment": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         }
                       }
                     }
@@ -3204,12 +3205,12 @@
                 "type": "object",
                 "properties": {
                   "comment": {
-                    "type": "string"
-                  },
-                  "recordId": {}
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 80
+                  }
                 },
                 "required": [
-                  "recordId",
                   "comment"
                 ]
               },
@@ -3219,7 +3220,12 @@
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
