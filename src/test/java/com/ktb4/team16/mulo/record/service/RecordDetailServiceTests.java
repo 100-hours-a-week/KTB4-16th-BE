@@ -86,15 +86,14 @@ class RecordDetailServiceTests {
     }
 
     @Test
-    void returnsNullPhotoUrlWhenRecordHasNoPhoto() {
+    void throwsExceptionWhenRecordHasNoPhoto() {
         Record record = detailRecord();
         when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(10L, 35L))
                 .thenReturn(Optional.of(record));
         when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.empty());
 
-        RecordDetailData detail = recordService.getRecordDetail(35L, 10L);
-
-        assertThat(detail.photoUrl()).isNull();
+        assertThatThrownBy(() -> recordService.getRecordDetail(35L, 10L))
+                .isInstanceOf(IllegalStateException.class);
         verifyNoInteractions(gcsStorageService);
     }
 

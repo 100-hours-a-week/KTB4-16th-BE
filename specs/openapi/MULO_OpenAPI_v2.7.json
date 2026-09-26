@@ -2704,7 +2704,6 @@
                         "photoUrl": {
                           "type": "string",
                           "format": "uri",
-                          "nullable": true,
                           "description": "private GCS 객체에 대한 read Signed URL이며, 발급 후 10분간 유효하다."
                         },
                         "createdAt": {

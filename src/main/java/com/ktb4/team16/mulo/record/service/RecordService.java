@@ -68,10 +68,9 @@ public class RecordService {
     @Transactional(readOnly = true)
     public RecordDetailData getRecordDetail(Long userId, Long recordId) {
         Record record = findActiveRecordForOwner(userId, recordId);
-        String photoUrl = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
-                .map(RecordPhoto::getImageUrl)
-                .map(gcsStorageService::createReadSignedUrl)
-                .orElse(null);
+        RecordPhoto recordPhoto = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
+                .orElseThrow(IllegalStateException::new);
+        String photoUrl = gcsStorageService.createReadSignedUrl(recordPhoto.getImageUrl());
 
         Place place = record.getPlace();
         MusicTrack musicTrack = record.getMusicTrack();
