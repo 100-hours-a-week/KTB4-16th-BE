@@ -6,11 +6,11 @@ import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursor;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
-import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
+import com.ktb4.team16.mulo.record.cursor.RecordCursorPagination;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
-import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
+import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
@@ -33,13 +33,14 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
+
+import java.util.List;
+import java.util.Objects;
+import java.util.Optional;
 
 @Service
 @RequiredArgsConstructor
 public class RecordService {
-
-    private static final int PAGE_SIZE = 20;
 
     private final RecordRepository recordRepository;
     private final RecordCursorCodec recordCursorCodec;
@@ -56,7 +57,7 @@ public class RecordService {
             List<Long> placeIds,
             String cursor
     ) {
-        Pageable pageable = PageRequest.of(0, PAGE_SIZE + 1);
+        Pageable pageable = PageRequest.of(0, RecordCursorPagination.fetchSize());
 
         List<MyPlaceRecordResponseDto> records;
 
@@ -78,30 +79,89 @@ public class RecordService {
                     );
         }
 
-        boolean hasNext = records.size() > PAGE_SIZE;
+        RecordCursorPagination.CursorPage<MyPlaceRecordResponseDto> page =
+                RecordCursorPagination.paginate(
+                        records,
+                        recordCursorCodec,
+                        MyPlaceRecordResponseDto::createdAt,
+                        MyPlaceRecordResponseDto::recordId);
 
-        List<MyPlaceRecordResponseDto> responseRecords;
+        return new MyPlaceRecordsResponseDto(
+                page.records(),
+                page.nextCursor()
+        );
+    }
 
-        if (hasNext) {
-            responseRecords = records.subList(0, PAGE_SIZE);
+    public List<RecordRegionGroupResponse> getMyRecordRegions(Long userId) {
+        return recordRepository.findMyRecordRegions(userId).stream()
+                .map(this::toApiRegionGroup)
+                .toList();
+    }
+
+    public RecordRegionRecordsData getMyRecords(
+            Long userId,
+            String legalDongCode,
+            String cursor
+    ) {
+        Pageable pageable = PageRequest.of(0, RecordCursorPagination.fetchSize());
+        List<MyPlaceRecordResponseDto> records;
+
+        if (cursor == null) {
+            records = findRecordsByRegion(userId, legalDongCode, pageable);
         } else {
-            responseRecords = records;
+            RecordCursor decodedCursor = recordCursorCodec.decode(cursor);
+            records = findRecordsByRegionAfterCursor(
+                    userId,
+                    legalDongCode,
+                    decodedCursor,
+                    pageable
+            );
         }
 
         String nextCursor = null;
         if (hasNext) {
             MyPlaceRecordResponseDto lastRecord = responseRecords.get(responseRecords.size() - 1);
 
-            nextCursor = recordCursorCodec.encode(
-                    lastRecord.createdAt(),
-                    lastRecord.recordId()
-            );
+    private Optional<RecordRegionGroupResponse> findRecordRegion(Long userId, String legalDongCode) {
+        if (RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)) {
+            return recordRepository.findMyUnknownRecordRegion(userId);
         }
+        return recordRepository.findMyRecordRegion(userId, legalDongCode);
+    }
 
-        return new MyPlaceRecordsResponseDto(
-                responseRecords,
-                nextCursor
-        );
+    private List<MyPlaceRecordResponseDto> findRecordsByRegion(
+            Long userId,
+            String legalDongCode,
+            Pageable pageable
+    ) {
+        if (RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)) {
+            return recordRepository.findMyRecordsInUnknownRegion(userId, pageable);
+        }
+        return recordRepository.findMyRecordsByLegalDongCode(userId, legalDongCode, pageable);
+    }
+
+    private List<MyPlaceRecordResponseDto> findRecordsByRegionAfterCursor(
+            Long userId,
+            String legalDongCode,
+            RecordCursor cursor,
+            Pageable pageable
+    ) {
+        if (RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)) {
+            return recordRepository.findMyRecordsInUnknownRegionAfterCursor(
+                    userId, cursor.createdAt(), cursor.recordId(), pageable);
+        }
+        return recordRepository.findMyRecordsByLegalDongCodeAfterCursor(
+                userId, legalDongCode, cursor.createdAt(), cursor.recordId(), pageable);
+    }
+
+    private RecordRegionGroupResponse toApiRegionGroup(RecordRegionGroupResponse regionGroup) {
+        if (Objects.isNull(regionGroup.legalDongCode())) {
+            return new RecordRegionGroupResponse(
+                    RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE,
+                    "위치 정보 없음",
+                    regionGroup.recordsCount());
+        }
+        return regionGroup;
     }
 
 
