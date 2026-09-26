@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.entity.Record;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
@@ -19,6 +20,21 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     Optional<Record> findByRecordIdAndUser_UserIdAndDeletedAtIsNull(
             Long recordId,
             Long userId
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse(
+            p.legalDongCode, p.legalDongName, COUNT(r)
+        )
+        FROM Record r
+        JOIN r.place p
+        WHERE r.user.userId = :userId
+            AND r.deletedAt IS NULL
+        GROUP BY p.legalDongCode, p.legalDongName
+        ORDER BY MAX(r.createdAt) DESC, COALESCE(p.legalDongCode, 'UNKNOWN') ASC
+        """)
+    List<RecordRegionGroupResponse> findMyRecordRegions(
+            @Param("userId") Long userId
     );
 
     @Query("""
@@ -126,5 +142,110 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
             @Param("cursorRecordId") Long cursorRecordId,
             Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+        )
+        FROM Record r
+        JOIN r.musicTrack m
+        WHERE r.user.userId = :userId
+            AND r.place.legalDongCode = :legalDongCode
+            AND r.deletedAt IS NULL
+        ORDER BY r.createdAt DESC, r.recordId DESC
+        """)
+    List<MyPlaceRecordResponseDto> findMyRecordsByLegalDongCode(
+            @Param("userId") Long userId,
+            @Param("legalDongCode") String legalDongCode,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+        )
+        FROM Record r
+        JOIN r.musicTrack m
+        WHERE r.user.userId = :userId
+            AND r.place.legalDongCode IS NULL
+            AND r.deletedAt IS NULL
+        ORDER BY r.createdAt DESC, r.recordId DESC
+        """)
+    List<MyPlaceRecordResponseDto> findMyRecordsInUnknownRegion(
+            @Param("userId") Long userId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+        )
+        FROM Record r
+        JOIN r.musicTrack m
+        WHERE r.user.userId = :userId
+            AND r.place.legalDongCode = :legalDongCode
+            AND r.deletedAt IS NULL
+            AND (r.createdAt < :cursorCreatedAt
+                OR (r.createdAt = :cursorCreatedAt AND r.recordId < :cursorRecordId))
+        ORDER BY r.createdAt DESC, r.recordId DESC
+        """)
+    List<MyPlaceRecordResponseDto> findMyRecordsByLegalDongCodeAfterCursor(
+            @Param("userId") Long userId,
+            @Param("legalDongCode") String legalDongCode,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorRecordId") Long cursorRecordId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+        )
+        FROM Record r
+        JOIN r.musicTrack m
+        WHERE r.user.userId = :userId
+            AND r.place.legalDongCode IS NULL
+            AND r.deletedAt IS NULL
+            AND (r.createdAt < :cursorCreatedAt
+                OR (r.createdAt = :cursorCreatedAt AND r.recordId < :cursorRecordId))
+        ORDER BY r.createdAt DESC, r.recordId DESC
+        """)
+    List<MyPlaceRecordResponseDto> findMyRecordsInUnknownRegionAfterCursor(
+            @Param("userId") Long userId,
+            @Param("cursorCreatedAt") LocalDateTime cursorCreatedAt,
+            @Param("cursorRecordId") Long cursorRecordId,
+            Pageable pageable
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse(
+            p.legalDongCode, p.legalDongName, COUNT(r)
+        )
+        FROM Record r
+        JOIN r.place p
+        WHERE r.user.userId = :userId
+            AND p.legalDongCode = :legalDongCode
+            AND r.deletedAt IS NULL
+        GROUP BY p.legalDongCode, p.legalDongName
+        """)
+    Optional<RecordRegionGroupResponse> findMyRecordRegion(
+            @Param("userId") Long userId,
+            @Param("legalDongCode") String legalDongCode
+    );
+
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse(
+            p.legalDongCode, p.legalDongName, COUNT(r)
+        )
+        FROM Record r
+        JOIN r.place p
+        WHERE r.user.userId = :userId
+            AND p.legalDongCode IS NULL
+            AND r.deletedAt IS NULL
+        GROUP BY p.legalDongCode, p.legalDongName
+        """)
+    Optional<RecordRegionGroupResponse> findMyUnknownRecordRegion(
+            @Param("userId") Long userId
     );
 }
