@@ -1566,7 +1566,7 @@
         ],
         "summary": "음악 검색",
         "operationId": "getApiMusicSearch",
-        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
+        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
         "responses": {
           "200": {
             "description": "검색 요청이 정상 처리되었으므로 200.\n\n추가 케이스: 검색 조건에 해당하는 음악이 없더라도 검색 요청 자체는 정상적으로 처리되었으므로 200과 빈 배열을 반환한다.",
@@ -2176,7 +2176,7 @@
         ],
         "summary": "자물쇠 생성",
         "operationId": "postApiRecords",
-        "description": "필수\nlocation.latitude: Double\nlocation.longitude: Double\nmusic.externalTrackId: String\nmoodScore: Integer\nuploadId: Long\n\n선택\nlocation.legalDongCode: String | null\nlocation.legalDongName: String | null\ncomment: String (최대 80자)\n\n서버 자동 처리\nplaceId: Long\nmusicTrackId: Long\nweatherCondition: String | null\ntemperature: Number | null\n\n정책\n- 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 latitude/longitude를 확정한다.\n- 프론트는 최종 좌표에 대해 Kakao Maps SDK services.Geocoder.coord2RegionCode()를 호출한다.\n- region_type=B 결과가 있으면 code → legalDongCode, region_3depth_name → legalDongName으로 매핑해 백엔드에 전달한다.\n- Kakao SDK 호출은 정상 성공했지만 region_type=B 결과가 없으면 legalDongCode와 legalDongName을 모두 null로 전달할 수 있으며 자물쇠 생성을 허용한다.\n- legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.\n- Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.\n- 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.\n- 동일·근접 좌표에서 기존 place를 재사용할지 신규 place를 생성할지는 아직 미정이며 구현자가 임의로 확정하지 않는다.\n- 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 \"확인할 수 없음\"으로 표시한다.\n- legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. \"확인할 수 없음\" 문자열은 DB/API 값으로 저장하지 않는다.\n- 신규 externalTrackId는 Spotify API를 통해 재검증한다.\n- 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.\n- weatherCondition은 CLEAR, CLOUDY, OVERCAST, RAIN, SNOW, RAIN_SNOW, SHOWER 중 하나만 사용한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨/기온을 확보하지 못한 경우에도 기록 생성 실패로 처리하지 않고 null로 저장한다.\n- 사진은 필수이며 현재 사용자가 소유한 유효한 uploadId를 반드시 전달해야 한다.\n- 자물쇠 생성 완료 시 사진은 정확히 1장 연결된다.\n- uploadId는 생성 후 1시간 이내의 유효한 임시 업로드여야 한다.\n- 자물쇠 생성이 성공하면 record_photos에 최종 사진 정보를 저장하고 해당 uploads 레코드는 삭제한다.",
+        "description": "필수\nlocation.latitude: Double\nlocation.longitude: Double\nmusic.externalTrackId: String\nmoodScore: Integer (-50 이상 50 이하)\nuploadId: Long\n\n선택\nlocation.legalDongCode: String | null\nlocation.legalDongName: String | null\ncomment: String (최대 80자)\n\n서버 자동 처리\nplaceId: Long\nmusicTrackId: Long\nweatherCondition: String | null\ntemperature: Number | null\n\n정책\n- 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 latitude/longitude를 확정한다.\n- 프론트는 최종 좌표에 대해 Kakao Maps SDK services.Geocoder.coord2RegionCode()를 호출한다.\n- region_type=B 결과가 있으면 code → legalDongCode, region_3depth_name → legalDongName으로 매핑해 백엔드에 전달한다.\n- Kakao SDK 호출은 정상 성공했지만 region_type=B 결과가 없으면 legalDongCode와 legalDongName을 모두 null로 전달할 수 있으며 자물쇠 생성을 허용한다.\n- legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.\n- Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.\n- 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.\n- latitude와 longitude가 모두 정확히 동일한 기존 place가 있는 경우에만 재사용한다. 근접 좌표는 기존 place로 판단하지 않으며, 동일 좌표가 없으면 새로운 place를 생성한다.\n- 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 \"확인할 수 없음\"으로 표시한다.\n- legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. \"확인할 수 없음\" 문자열은 DB/API 값으로 저장하지 않는다.\n- 요청으로 전달된 음악 메타데이터를 사용하며, 기존 externalTrackId는 재사용하고 신규 externalTrackId는 요청값으로 music_tracks에 저장한다. 자물쇠 생성 과정에서는 Spotify API를 재호출하지 않는다.\n- 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.\n- weatherCondition은 CLEAR, CLOUDY, OVERCAST, RAIN, SNOW, RAIN_SNOW, SHOWER 중 하나만 사용한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨/기온을 확보하지 못한 경우에도 기록 생성 실패로 처리하지 않고 null로 저장한다.\n- 사진은 필수이며 현재 사용자가 소유한 유효한 uploadId를 반드시 전달해야 한다.\n- 자물쇠 생성 완료 시 사진은 정확히 1장 연결된다.\n- uploadId는 생성 후 1시간 이내의 유효한 임시 업로드여야 한다.\n- 자물쇠 생성이 성공하면 record_photos에 최종 사진 정보를 저장하고 해당 uploads 레코드는 삭제한다.",
         "responses": {
           "201": {
             "description": "새 기록 리소스가 생성되므로 201.",
@@ -2400,20 +2400,39 @@
                   "music": {
                     "type": "object",
                     "properties": {
-                      "externalTrackId": {
-                        "type": "string"
-                      }
+                        "externalTrackId": {
+                          "type": "string"
+                        },
+                        "title": {
+                          "type": "string"
+                        },
+                        "artistName": {
+                          "type": "string"
+                        },
+                        "albumImageUrl": {
+                          "type": "string"
+                        },
+                        "externalUrl": {
+                          "type": "string"
+                        }
                     },
                     "required": [
-                      "externalTrackId"
+                        "externalTrackId",
+                        "title",
+                        "artistName",
+                        "albumImageUrl",
+                        "externalUrl"
                     ]
                   },
                   "moodScore": {
                     "type": "integer",
-                    "format": "int64"
+                    "format": "int64",
+                    "minimum": -50,
+                    "maximum": 50
                   },
                   "comment": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 80
                   },
                   "uploadId": {
                     "type": "integer",
@@ -2435,7 +2454,11 @@
                   "legalDongName": "오산동"
                 },
                 "music": {
-                  "externalTrackId": "..."
+                    "externalTrackId": "...",
+                    "title": "...",
+                    "artistName": "...",
+                    "albumImageUrl": "...",
+                    "externalUrl": "..."
                 },
                 "moodScore": 4,
                 "comment": "좋았다",
