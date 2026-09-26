@@ -7,7 +7,6 @@ import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
-import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -150,86 +149,6 @@ class RecordRepositoryTests {
         assertThat(markers.getFirst().myRecordsCount()).isEqualTo(2L);
         assertThat(recordRepository.findMyPlaceMarkersInBounds(
                 -1L, SW_LAT, SW_LNG, NE_LAT, NE_LNG)).isEmpty();
-    }
-
-    @Test
-    void myRecordRegionsCountOnlyMyActiveRecordsAndGroupNullRegion() {
-        long me = insertUser();
-        long other = insertUser();
-        long trackId = insertTrack("track");
-        long firstRegion = insertPlace("1111010100", "종로동", "-33.0000000", "-150.0000000");
-        long secondRegion = insertPlace("1111010200", "청운동", "-33.1000000", "-150.1000000");
-        long unknownRegion = insertPlace(null, null, "-33.2000000", "-150.2000000");
-
-        insertRecord(me, firstRegion, trackId, FIRST_DAY, null);
-        insertRecord(me, firstRegion, trackId, FIRST_DAY.plusDays(1), null);
-        insertRecord(me, secondRegion, trackId, FIRST_DAY, null);
-        insertRecord(me, unknownRegion, trackId, FIRST_DAY, null);
-        insertRecord(me, unknownRegion, trackId, FIRST_DAY.plusDays(1), null);
-        insertRecord(other, firstRegion, trackId, FIRST_DAY, null);
-        insertRecord(me, secondRegion, trackId, FIRST_DAY, FIRST_DAY.plusDays(1));
-
-        List<RecordRegionGroupResponse> regions = recordRepository.findMyRecordRegions(me);
-
-        assertThat(regions).hasSize(3);
-        assertThat(regions).filteredOn(region -> "1111010100".equals(region.legalDongCode()))
-                .singleElement()
-                .satisfies(region -> assertThat(region.recordsCount()).isEqualTo(2L));
-        assertThat(regions).filteredOn(region -> "1111010200".equals(region.legalDongCode()))
-                .singleElement()
-                .satisfies(region -> assertThat(region.recordsCount()).isEqualTo(1L));
-        assertThat(regions).filteredOn(region -> region.legalDongCode() == null)
-                .singleElement()
-                .satisfies(region -> {
-                    assertThat(region.legalDongName()).isNull();
-                    assertThat(region.recordsCount()).isEqualTo(2L);
-                });
-    }
-
-    @Test
-    void myRecordRegionsAreOrderedByLatestActiveRecord() {
-        long me = insertUser();
-        long trackId = insertTrack("track");
-        long olderRegion = insertPlace("1111010100", "종로동", "-33.0000000", "-150.0000000");
-        long newerRegion = insertPlace("1111010200", "청운동", "-33.1000000", "-150.1000000");
-        long unknownRegion = insertPlace(null, null, "-33.2000000", "-150.2000000");
-
-        insertRecord(me, olderRegion, trackId, FIRST_DAY.plusDays(5), null);
-        insertRecord(me, newerRegion, trackId, FIRST_DAY.plusDays(6), null);
-        insertRecord(me, unknownRegion, trackId, FIRST_DAY.plusDays(7), null);
-        insertRecord(me, olderRegion, trackId, FIRST_DAY.plusDays(10), FIRST_DAY.plusDays(11));
-
-        List<RecordRegionGroupResponse> regions = recordRepository.findMyRecordRegions(me);
-
-        assertThat(regions).extracting(RecordRegionGroupResponse::legalDongCode)
-                .containsExactly(null, "1111010200", "1111010100");
-    }
-
-    @Test
-    void myRegionRecordsFilterByLegalDongCodeAndUnknownNullCode() {
-        long me = insertUser();
-        long other = insertUser();
-        long trackId = insertTrack("track");
-        long selectedRegion = insertPlace("1111010100", "종로동", "-33.0000000", "-150.0000000");
-        long otherRegion = insertPlace("1111010200", "청운동", "-33.1000000", "-150.1000000");
-        long unknownRegion = insertPlace(null, null, "-33.2000000", "-150.2000000");
-
-        insertRecord(me, selectedRegion, trackId, FIRST_DAY, null);
-        insertRecord(me, selectedRegion, trackId, FIRST_DAY.plusDays(1), null);
-        insertRecord(me, otherRegion, trackId, FIRST_DAY.plusDays(2), null);
-        insertRecord(me, unknownRegion, trackId, FIRST_DAY.plusDays(3), null);
-        insertRecord(me, selectedRegion, trackId, FIRST_DAY.plusDays(4), FIRST_DAY.plusDays(5));
-        insertRecord(other, selectedRegion, trackId, FIRST_DAY.plusDays(6), null);
-
-        List<MyPlaceRecordResponseDto> selected = recordRepository.findMyRecordsByLegalDongCode(
-                me, "1111010100", PageRequest.of(0, 21));
-        List<MyPlaceRecordResponseDto> unknown = recordRepository.findMyRecordsInUnknownRegion(
-                me, PageRequest.of(0, 21));
-
-        assertThat(selected).extracting(MyPlaceRecordResponseDto::placeId)
-                .containsExactly(selectedRegion, selectedRegion);
-        assertThat(unknown).extracting(MyPlaceRecordResponseDto::placeId)
-                .containsExactly(unknownRegion);
     }
 
     @Test

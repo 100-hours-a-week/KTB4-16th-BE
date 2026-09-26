@@ -2476,16 +2476,16 @@
         ],
         "summary": "내 자물쇠 목록 조회",
         "operationId": "getApiRecords",
-        "description": "현재 사용자의 삭제되지 않은 자물쇠 목록을 조회한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- `legalDongCode`는 필수이며 해당 법정동 그룹으로 필터링한다.\n- `legalDongCode=UNKNOWN`이면 `places.legal_dong_code IS NULL` 그룹을 조회한다.\n- 커서 기반 페이지네이션을 사용하며 서버가 20개로 고정한다.\n- `recordsCount`는 지역 전체 활성 자물쇠 수이며 `records`는 현재 페이지 결과다.\n- 자물쇠 선택 시 `GET /api/records/{recordId}`를 사용한다.\n- `UNKNOWN`은 이 API에서만 사용하는 sentinel이며 DB에는 저장하지 않는다.",
+        "description": "현재 사용자의 삭제되지 않은 자물쇠 목록을 조회한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- `legalDongCode`가 있으면 해당 법정동 그룹으로 필터링한다.\n- 커서 기반 페이지네이션을 사용하며 `size` 기본값은 20, 최대 100이다.\n- 자물쇠 선택 시 `GET /api/records/{recordId}`를 사용한다.\n- `legal_dong_code IS NULL`인 `확인할 수 없음` 폴더를 query parameter에서 표현하는 방식은 아직 미정이며 임의 sentinel 값은 정의하지 않는다.",
         "parameters": [
           {
             "name": "legalDongCode",
             "in": "query",
-            "required": true,
+            "required": false,
             "schema": {
               "type": "string"
             },
-            "description": "법정동 코드 필터. UNKNOWN은 legal_dong_code IS NULL 그룹을 의미한다."
+            "description": "법정동 코드 필터. 법정동 미확인(NULL) 그룹의 query 표현은 아직 미정."
           },
           {
             "name": "cursor",
@@ -2493,6 +2493,17 @@
             "required": false,
             "schema": {
               "type": "string"
+            }
+          },
+          {
+            "name": "size",
+            "in": "query",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "minimum": 1,
+              "maximum": 100
             }
           }
         ],
@@ -2534,10 +2545,6 @@
                             "type": "object",
                             "properties": {
                               "recordId": {
-                                "type": "integer",
-                                "format": "int64"
-                              },
-                              "placeId": {
                                 "type": "integer",
                                 "format": "int64"
                               },
@@ -2597,7 +2604,7 @@
             "description": "서버 내부 오류"
           }
         },
-        "x-implementation-status": "implemented"
+        "x-implementation-status": "contract-only"
       }
     },
     "/api/records/{recordId}": {
@@ -7374,7 +7381,7 @@
         ],
         "summary": "내 자물쇠 법정동 그룹 조회",
         "operationId": "getApiRecordsRegions",
-        "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 최초 진입에서는 지역 그룹만 반환하며 자물쇠 목록 preview는 포함하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 지역 그룹은 최신 활성 Record의 `createdAt` 내림차순으로 정렬한다.\n- 법정동 미확인 자물쇠는 `legalDongCode=UNKNOWN`, `legalDongName=위치 정보 없음`인 하나의 그룹으로 반환한다.\n- `UNKNOWN`은 이 API에서만 사용하는 sentinel 값이며 DB에는 저장하지 않는다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
+        "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 법정동 미확인 자물쇠는 `legalDongCode=null`, `legalDongName=null`인 하나의 그룹으로 반환한다.\n- 프론트는 NULL 그룹을 `확인할 수 없음` 폴더로 표시한다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
         "security": [
           {
             "bearerAuth": []
@@ -7397,10 +7404,12 @@
                         "type": "object",
                         "properties": {
                           "legalDongCode": {
-                            "type": "string"
+                            "type": "string",
+                            "nullable": true
                           },
                           "legalDongName": {
-                            "type": "string"
+                            "type": "string",
+                            "nullable": true
                           },
                           "recordsCount": {
                             "type": "integer",
@@ -7421,8 +7430,8 @@
                       "recordsCount": 12
                     },
                     {
-                    "legalDongCode": "UNKNOWN",
-                    "legalDongName": "위치 정보 없음",
+                      "legalDongCode": null,
+                      "legalDongName": null,
                       "recordsCount": 2
                     }
                   ]
@@ -7437,7 +7446,7 @@
             "description": "서버 내부 오류"
           }
         },
-      "x-implementation-status": "implemented"
+        "x-implementation-status": "contract-only"
       }
     },
     "/api/csrf": {
