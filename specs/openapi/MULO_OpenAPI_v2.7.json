@@ -3033,7 +3033,12 @@
             }
           }
         ],
-        "x-implementation-status": "contract-only",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },

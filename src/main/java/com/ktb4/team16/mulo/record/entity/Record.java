@@ -83,6 +83,10 @@ public class Record {
         this.updatedAt = updatedAt;
     }
 
+    public void softDelete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
+
     public enum WeatherCondition {
         CLEAR,
         CLOUDY,
