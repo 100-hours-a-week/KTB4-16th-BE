@@ -1,7 +1,6 @@
 package com.ktb4.team16.mulo.recommendation.service;
 
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.when;
 
