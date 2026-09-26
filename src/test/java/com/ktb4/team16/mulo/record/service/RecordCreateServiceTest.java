@@ -19,6 +19,7 @@ import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
@@ -44,7 +45,8 @@ class RecordCreateServiceTest {
             weatherService,
             uploadService,
             musicTrackService,
-            recordPhotoRepository
+            recordPhotoRepository,
+            mock(GcsStorageService.class)
     );
 
     @Test

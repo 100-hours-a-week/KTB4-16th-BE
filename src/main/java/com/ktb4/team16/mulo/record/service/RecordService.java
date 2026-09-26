@@ -10,13 +10,17 @@ import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
+import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.weather.dto.WeatherResponse;
@@ -49,7 +53,51 @@ public class RecordService {
     private final UploadService uploadService;
     private final MusicTrackService musicTrackService;
     private final RecordPhotoRepository recordPhotoRepository;
+    private final GcsStorageService gcsStorageService;
 
+
+    public Record findActiveRecordForOwner(Long userId, Long recordId) {
+        if (recordId == null || recordId <= 0) {
+            throw new InvalidRecordIdException();
+        }
+
+        return recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(recordId, userId)
+                .orElseThrow(RecordNotFoundException::new);
+    }
+
+    @Transactional(readOnly = true)
+    public RecordDetailData getRecordDetail(Long userId, Long recordId) {
+        Record record = findActiveRecordForOwner(userId, recordId);
+        String photoUrl = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
+                .map(RecordPhoto::getImageUrl)
+                .map(gcsStorageService::createReadSignedUrl)
+                .orElse(null);
+
+        Place place = record.getPlace();
+        MusicTrack musicTrack = record.getMusicTrack();
+
+        return new RecordDetailData(
+                record.getRecordId(),
+                record.getUser().getUserId(),
+                new RecordDetailData.Place(
+                        place.getPlaceId(),
+                        place.getLegalDongName(),
+                        place.getLatitude(),
+                        place.getLongitude(),
+                        place.getLegalDongCode()),
+                new RecordDetailData.Music(
+                        musicTrack.getMusicTrackId(),
+                        musicTrack.getTitle(),
+                        musicTrack.getArtistName(),
+                        musicTrack.getAlbumImageUrl(),
+                        musicTrack.getExternalUrl()),
+                record.getWeatherCondition(),
+                record.getTemperature(),
+                record.getMoodScore(),
+                record.getComment(),
+                photoUrl,
+                record.getCreatedAt());
+    }
 
     public MyPlaceRecordsResponseDto getMyPlaceRecords(
             Long userId,

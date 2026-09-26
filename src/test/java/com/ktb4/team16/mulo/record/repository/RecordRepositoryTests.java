@@ -7,6 +7,7 @@ import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
+import com.ktb4.team16.mulo.record.entity.Record;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -81,6 +82,28 @@ class RecordRepositoryTests {
                 .singleElement()
                 .satisfies(marker -> assertThat(marker.recordsCount()).isEqualTo(1L));
         assertThat(placeRepository.findById(outOfBounds)).isPresent();
+    }
+
+    @Test
+    void findsOnlyActiveRecordOwnedByRequestedUser() {
+        long owner = insertUser();
+        long other = insertUser();
+        long placeId = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long trackId = insertTrack("detail");
+        long active = insertRecord(owner, placeId, trackId, FIRST_DAY, null);
+        long deleted = insertRecord(owner, placeId, trackId, FIRST_DAY.plusDays(1), FIRST_DAY.plusDays(2));
+        long otherRecord = insertRecord(other, placeId, trackId, FIRST_DAY.plusDays(2), null);
+
+        assertThat(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(active, owner))
+                .isPresent()
+                .get()
+                .extracting(Record::getRecordId)
+                .isEqualTo(active);
+        assertThat(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(deleted, owner))
+                .isEmpty();
+        assertThat(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(otherRecord, owner))
+                .isEmpty();
     }
 
     @Test

@@ -12,6 +12,7 @@ import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
@@ -31,9 +32,11 @@ class MyPlaceRecordsServiceTests {
     private final com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository
             recordPhotoRepository = mock(
                     com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository.class);
+    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository, cursorCodec, userRepository, placeRepository,
-            weatherService, uploadService, musicTrackService, recordPhotoRepository);
+            weatherService, uploadService, musicTrackService, recordPhotoRepository,
+            gcsStorageService);
 
     @Test
     void returnsTwentyRecordsAndCursorWhenRepositoryReturnsMoreThanTwenty() {

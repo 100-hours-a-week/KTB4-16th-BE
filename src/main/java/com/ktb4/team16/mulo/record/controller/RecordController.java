@@ -2,12 +2,16 @@ package com.ktb4.team16.mulo.record.controller;
 
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
+import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
+import com.ktb4.team16.mulo.record.dto.response.RecordDetailResponse;
 import com.ktb4.team16.mulo.record.message.RecordMessage;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -31,6 +35,18 @@ public class RecordController {
         return new RecordCreateApiResponse(
                 RecordMessage.RECORD_CREATED.message(),
                 record
+        );
+    }
+
+    @GetMapping("/{recordId}")
+    public RecordDetailResponse getRecordDetail(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long recordId
+    ) {
+        RecordDetailData recordDetail = recordService.getRecordDetail(userId, recordId);
+        return new RecordDetailResponse(
+                RecordMessage.RECORD_DETAIL_RETRIEVED.message(),
+                recordDetail
         );
     }
 

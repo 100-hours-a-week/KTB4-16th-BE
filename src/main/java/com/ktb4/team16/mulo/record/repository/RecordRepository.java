@@ -8,12 +8,18 @@ import com.ktb4.team16.mulo.record.entity.Record;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RecordRepository extends JpaRepository<Record, Long> {
+
+    Optional<Record> findByRecordIdAndUser_UserIdAndDeletedAtIsNull(
+            Long recordId,
+            Long userId
+    );
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse(
