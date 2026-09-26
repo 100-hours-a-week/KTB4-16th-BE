@@ -114,6 +114,12 @@ public class RecordService {
         return new RecordCommentUpdateResponse(record.getRecordId(), comment);
     }
 
+    @Transactional
+    public void deleteRecord(Long userId, Long recordId) {
+        Record record = findActiveRecordForOwner(userId, recordId);
+        record.softDelete(LocalDateTime.now());
+    }
+
     public MyPlaceRecordsResponseDto getMyPlaceRecords(
             Long userId,
             List<Long> placeIds,

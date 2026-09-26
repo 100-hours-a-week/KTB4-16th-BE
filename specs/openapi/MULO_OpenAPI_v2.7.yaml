@@ -2127,7 +2127,9 @@ paths:
         schema:
           type: integer
           format: int64
-      x-implementation-status: contract-only
+      security:
+      - bearerAuth: []
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/records/{recordId}/comment":
     patch:

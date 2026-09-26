@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.request.RecordCommentUpdateRequest;
 import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
+import com.ktb4.team16.mulo.record.dto.response.RecordDeleteResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsResponse;
@@ -17,6 +18,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PatchMapping;
@@ -58,6 +60,15 @@ public class RecordController {
                 RecordMessage.RECORD_DETAIL_RETRIEVED.message(),
                 recordDetail
         );
+    }
+
+    @DeleteMapping("/{recordId}")
+    public RecordDeleteResponse deleteRecord(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long recordId
+    ) {
+        recordService.deleteRecord(userId, recordId);
+        return new RecordDeleteResponse(RecordMessage.RECORD_DELETED.message());
     }
 
     @PatchMapping("/{recordId}/comment")

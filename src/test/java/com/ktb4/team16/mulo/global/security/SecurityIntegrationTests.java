@@ -19,6 +19,7 @@ import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -28,6 +29,8 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
@@ -275,6 +278,27 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void recordDeleteRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(delete("/api/records/1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(delete("/api/records/1")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(delete("/api/records/1")
+                        .with(user("record-owner"))
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk())
+                .andExpect(content().string("record deleted"));
+    }
+
+    @Test
     void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
         Cookie cookie = csrfCookie();
         mvc.perform(post("/api/private").cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
@@ -349,5 +373,8 @@ class SecurityIntegrationTests {
 
         @org.springframework.web.bind.annotation.PatchMapping("/api/records/{recordId}/comment")
         String updateRecordComment() { return "comment updated"; }
+
+        @DeleteMapping("/api/records/{recordId}")
+        String deleteRecord() { return "record deleted"; }
     }
 }
