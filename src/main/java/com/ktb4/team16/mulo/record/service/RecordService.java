@@ -43,6 +43,8 @@ import org.springframework.transaction.annotation.Transactional;
 @RequiredArgsConstructor
 public class RecordService {
 
+    private static final int PAGE_SIZE = 20;
+
     private final RecordRepository recordRepository;
     private final RecordCursorCodec recordCursorCodec;
     private final UserRepository userRepository;
@@ -58,13 +60,12 @@ public class RecordService {
             List<Long> placeIds,
             String cursor
     ) {
-        Pageable pageable = PageRequest.of(0, RecordCursorPagination.fetchSize());
+        Pageable pageable = PageRequest.of(0, PAGE_SIZE + 1);
 
         List<MyPlaceRecordResponseDto> records;
 
         if (cursor == null) {
-            records =
-                    recordRepository.findMyPlaceRecordsFirstPage(
+            records = recordRepository.findMyPlaceRecordsFirstPage(
                             userId,
                             placeIds,
                             pageable
@@ -72,8 +73,7 @@ public class RecordService {
         } else {
             RecordCursor decodedCursor = recordCursorCodec.decode(cursor);
 
-            records =
-                    recordRepository.findMyPlaceRecordsAfterCursor(
+            records = recordRepository.findMyPlaceRecordsAfterCursor(
                             userId,
                             placeIds,
                             decodedCursor.createdAt(),
@@ -82,16 +82,30 @@ public class RecordService {
                     );
         }
 
-        RecordCursorPagination.CursorPage<MyPlaceRecordResponseDto> page =
-                RecordCursorPagination.paginate(
-                        records,
-                        recordCursorCodec,
-                        MyPlaceRecordResponseDto::createdAt,
-                        MyPlaceRecordResponseDto::recordId);
+        boolean hasNext = records.size() > PAGE_SIZE;
+
+        List<MyPlaceRecordResponseDto> responseRecords;
+
+        if (hasNext) {
+            responseRecords = records.subList(0, PAGE_SIZE);
+        } else {
+            responseRecords = records;
+        }
+
+        String nextCursor = null;
+        if (hasNext) {
+            MyPlaceRecordResponseDto lastRecord =
+                    responseRecords.get(responseRecords.size() - 1);
+
+            nextCursor = recordCursorCodec.encode(
+                    lastRecord.createdAt(),
+                    lastRecord.recordId()
+            );
+        }
 
         return new MyPlaceRecordsResponseDto(
-                page.records(),
-                page.nextCursor()
+                responseRecords,
+                nextCursor
         );
     }
 

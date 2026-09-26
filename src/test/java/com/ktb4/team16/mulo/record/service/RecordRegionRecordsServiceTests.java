@@ -7,12 +7,18 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ktb4.team16.mulo.music.service.MusicTrackService;
+import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
+import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
+import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.user.repository.UserRepository;
+import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Optional;
@@ -22,7 +28,21 @@ import org.springframework.data.domain.Pageable;
 class RecordRegionRecordsServiceTests {
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final RecordCursorCodec cursorCodec = mock(RecordCursorCodec.class);
-    private final RecordService recordService = new RecordService(recordRepository, cursorCodec);
+    private final UserRepository userRepository = mock(UserRepository.class);
+    private final PlaceRepository placeRepository = mock(PlaceRepository.class);
+    private final WeatherService weatherService = mock(WeatherService.class);
+    private final UploadService uploadService = mock(UploadService.class);
+    private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
+    private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
+    private final RecordService recordService = new RecordService(
+            recordRepository,
+            cursorCodec,
+            userRepository,
+            placeRepository,
+            weatherService,
+            uploadService,
+            musicTrackService,
+            recordPhotoRepository);
 
     @Test
     void returnsOnlySelectedRegionRecords() {

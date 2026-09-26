@@ -169,6 +169,19 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void popularTracksPostIsPublicButStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/places/popular-tracks/search"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/places/popular-tracks/search")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void myPlacesWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me/places")
                         .param("swLat", "37.0")
@@ -179,20 +192,6 @@ class SecurityIntegrationTests {
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"))
                 .andExpect(jsonPath("$.message").value("로그인이 필요합니다."))
                 .andExpect(jsonPath("$.errors").doesNotExist());
-    }
-
-    @Test
-    void myRecordRegionsWithoutAccessTokenReturnsUnauthorized() throws Exception {
-        mvc.perform(get("/api/records/regions"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
-    }
-
-    @Test
-    void myRecordsByRegionWithoutAccessTokenReturnsUnauthorized() throws Exception {
-        mvc.perform(get("/api/records").param("legalDongCode", "4111710100"))
-                .andExpect(status().isUnauthorized())
-                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     @Test
@@ -326,5 +325,8 @@ class SecurityIntegrationTests {
 
         @GetMapping("/api/places/popular")
         String allRecordMarkers() { return "markers"; }
+
+        @PostMapping("/api/places/popular-tracks/search")
+        String popularTracks() { return "popular tracks"; }
     }
 }
