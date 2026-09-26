@@ -184,6 +184,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. 최초 진입에서는 지역 그룹만 조회하며 목록 preview는 포함하지 않는다. 지역 그룹은 최신 활성 Record `created_at` 내림차순으로 정렬한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 `GET /api/records/regions` 응답에서만 `legalDongCode=UNKNOWN`, `legalDongName=위치 정보 없음`으로 반환한다. 약속값은 DB에 저장하지 않는다. |
 | `rule_place_reuse_open_question` | 동일·근접 좌표에서 기존 `place`를 재사용할지 새 `place`를 생성할지는 아직 미정이다. 구현자가 임의로 확정하지 않는다. |
 
+
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 설명 |
@@ -302,7 +303,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `record_photo_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 자물쇠 사진 레코드의 고유 ID | 사진 데이터를 고유하게 식별하고 향후 사진 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 개별 자물쇠 사진 정보를 식별한다. |
 | `record_id` | `BIGINT` | - | NOT NULL | - | FK | 사진이 첨부된 자물쇠 ID | `records.record_id`와 동일한 타입을 사용하여 사진과 자물쇠를 연결한다. | 어떤 자물쇠에 첨부된 사진인지 식별한다. |
 | `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | 자물쇠 사진을 조회하고 화면에 표시할 때 이미지의 저장 위치를 확인한다. |
-| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | `image/jpeg`, `image/png`, `image/heic` 등 파일 형식을 문자열로 표현하므로 `VARCHAR`를 사용한다. | 업로드된 이미지 형식을 확인하고 파일 검증·처리에 활용한다. |
+| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | `image/jpeg`, `image/png`, `image/heic`, `image/webp` 등 파일 형식을 문자열로 표현하므로 `VARCHAR`를 사용한다. | 업로드된 이미지 형식을 확인하고 파일 검증·처리에 활용한다. |
 | `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 파일 크기는 정수이며 파일 크기가 커질 가능성을 충분히 수용하기 위해 `BIGINT`를 사용할 수 있다. | 이미지 업로드 용량 제한 검증 및 파일 관리에 활용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사진 정보가 생성된 시각 | 사진 등록 시점을 날짜와 시간으로 기록하기 위해 `DATETIME` 계열을 사용한다. | 사진이 자물쇠에 등록된 시점을 기록한다. |
 
@@ -343,7 +344,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `upload_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 임시 업로드 고유 ID | `/api/uploads`가 `uploadId: Long`을 발급하므로 다른 서비스 내부 식별자와 동일하게 `BIGINT`를 사용한다. | 사진 기반 음악 추천과 최종 자물쇠 생성에서 동일한 임시 이미지를 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 임시 이미지를 업로드한 사용자 ID | 임시 업로드는 인증된 사용자가 소유하는 리소스이며, `users.user_id`와 연결하여 소유권을 확인한다. | 다른 사용자의 `uploadId` 사용을 방지하고 현재 사용자 소유 업로드인지 검증한다. |
 | `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 임시 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | AI 사진 추천 및 최종 자물쇠 생성 시 사용할 이미지의 저장 위치를 확인한다. |
-| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | 업로드 API에서 JPG, JPEG, PNG, HEIC 이미지를 허용하며 파일 형식을 서버에서 검증하므로 MIME 타입을 저장한다. | 파일 형식 확인 및 최종 `record_photos` 메타데이터 생성에 사용한다. |
+| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | 업로드 API에서 JPG, JPEG, PNG, HEIC, WebP 이미지를 허용하며 파일 형식을 서버에서 검증하므로 MIME 타입을 저장한다. | 파일 형식 확인 및 최종 `record_photos` 메타데이터 생성에 사용한다. |
 | `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 업로드 API는 최대 10MB 제한을 적용하며 파일 크기는 정수이므로 `BIGINT`를 사용한다. | 업로드 용량 검증 및 최종 사진 메타데이터 생성에 사용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 임시 업로드 생성 시각 | 임시 업로드가 생성된 시점을 기록한다. | 미연결 임시 업로드 cleanup 대상 판단의 기준 시각으로 사용한다. |
 
@@ -364,7 +365,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_upload_validity` | 임시 업로드는 생성 시점부터 1시간 동안 유효하다. 유효시간이 지난 업로드는 사진 기반 음악 추천 및 자물쇠 생성에 사용할 수 없다. |
 | `rule_upload_cleanup` | 생성 후 1시간이 지나도록 최종 자물쇠에 연결되지 않은 임시 업로드는 `uploads` 레코드와 Google Cloud Storage의 임시 이미지 cleanup 대상이다. |
 | `rule_upload_finalize` | 자물쇠 생성 성공 시 임시 업로드의 이미지 위치 및 메타데이터를 `record_photos`에 저장하고 해당 `uploads` 레코드는 삭제한다. |
-| `rule_upload_format` | 허용 이미지 형식은 JPG, JPEG, PNG, HEIC이며 최대 파일 크기는 10MB이다. |
+| `rule_upload_format` | 허용 이미지 형식은 JPG, JPEG, PNG, HEIC, WebP이며 최대 파일 크기는 10MB이다. |
 
 #### 4. 관계
 

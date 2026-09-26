@@ -1,5 +1,9 @@
 package com.ktb4.team16.mulo.record.service;
 
+import com.ktb4.team16.mulo.music.entity.MusicTrack;
+import com.ktb4.team16.mulo.music.service.MusicTrackService;
+import com.ktb4.team16.mulo.place.entity.Place;
+import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursor;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorPagination;
@@ -8,6 +12,23 @@ import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
+import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
+import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
+import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
+import com.ktb4.team16.mulo.upload.entity.Upload;
+import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.user.entity.User;
+import com.ktb4.team16.mulo.user.repository.UserRepository;
+import com.ktb4.team16.mulo.weather.dto.WeatherResponse;
+import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
+import com.ktb4.team16.mulo.weather.service.WeatherService;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
+import java.util.List;
+import java.util.Optional;
+
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
@@ -23,6 +44,13 @@ public class RecordService {
 
     private final RecordRepository recordRepository;
     private final RecordCursorCodec recordCursorCodec;
+    private final UserRepository userRepository;
+    private final PlaceRepository placeRepository;
+    private final WeatherService weatherService;
+    private final UploadService uploadService;
+    private final MusicTrackService musicTrackService;
+    private final RecordPhotoRepository recordPhotoRepository;
+
 
     public MyPlaceRecordsResponseDto getMyPlaceRecords(
             Long userId,
@@ -156,5 +184,104 @@ public class RecordService {
                     regionGroup.recordsCount());
         }
         return regionGroup;
+    }
+
+
+    @Transactional
+    public RecordCreateResponse createRecord(
+            Long userId,
+            RecordCreateRequest request
+    ) {
+        User user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(UnauthenticatedUserException::new);
+
+        BigDecimal longitude = request.location().longitude();
+        BigDecimal latitude = request.location().latitude();
+        String legalDongCode = request.location().legalDongCode();
+        String legalDongName = request.location().legalDongName();
+        Long uploadId = request.uploadId();
+
+        Optional<Place> existingPlace =
+                placeRepository.findByLatitudeAndLongitude(
+                        latitude,
+                        longitude
+                );
+
+        Place place;
+
+        if (existingPlace.isPresent()) {
+            place = existingPlace.get();
+        } else {
+            place = new Place(
+                    legalDongCode,
+                    legalDongName,
+                    latitude,
+                    longitude
+            );
+            placeRepository.save(place);
+        }
+
+        Upload upload = uploadService.findValidUpload(userId, uploadId);
+
+        BigDecimal temperature = null;
+        Record.WeatherCondition weatherCondition = null;
+
+        try {
+            WeatherResponse weatherResponse = weatherService.getWeather(
+                    latitude.doubleValue(),
+                    longitude.doubleValue(),
+                    OffsetDateTime.now()
+            );
+
+            WeatherResponse.WeatherData weatherData =
+                    weatherResponse.data();
+
+            temperature = weatherData.temperature();
+
+            weatherCondition = Record.WeatherCondition.valueOf(
+                    weatherData.weatherCondition().name()
+            );
+
+        } catch (WeatherApiException exception) {
+        // 날씨 조회에 실패해도 자물쇠 생성은 계속한다.
+        }
+
+        RecordCreateRequest.Music music = request.music();
+
+        MusicTrack musicTrack = musicTrackService.findOrCreate(
+                music.externalTrackId(),
+                music.title(),
+                music.artistName(),
+                music.albumImageUrl(),
+                music.externalUrl()
+        );
+
+        Byte moodScore = request.moodScore().byteValue();
+        String comment = request.comment();
+
+        Record record = Record.create(
+                user,
+                place,
+                musicTrack,
+                weatherCondition,
+                temperature,
+                moodScore,
+                comment,
+                LocalDateTime.now()
+        );
+
+        recordRepository.save(record);
+
+        RecordPhoto recordPhoto = RecordPhoto.create(
+                record,
+                upload.getImageUrl(),
+                upload.getMimeType(),
+                upload.getFileSize()
+        );
+
+        recordPhotoRepository.save(recordPhoto);
+        uploadService.deleteMetadata(upload);
+
+        return new RecordCreateResponse(record.getRecordId());
     }
 }
