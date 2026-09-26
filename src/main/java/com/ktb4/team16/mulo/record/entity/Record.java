@@ -58,6 +58,26 @@ public class Record {
 
     private LocalDateTime deletedAt;
 
+    private Record(User user, Place place, MusicTrack musicTrack,
+            WeatherCondition weatherCondition, BigDecimal temperature,
+            Byte moodScore, String comment, LocalDateTime createdAt) {
+        this.user = user;
+        this.place = place;
+        this.musicTrack = musicTrack;
+        this.weatherCondition = weatherCondition;
+        this.temperature = temperature;
+        this.moodScore = moodScore;
+        this.comment = comment;
+        this.createdAt = createdAt;
+    }
+
+    public static Record create(User user, Place place, MusicTrack musicTrack,
+            WeatherCondition weatherCondition, BigDecimal temperature,
+            Byte moodScore, String comment, LocalDateTime createdAt) {
+        return new Record(user, place, musicTrack, weatherCondition, temperature,
+                moodScore, comment, createdAt);
+    }
+
     public enum WeatherCondition {
         CLEAR,
         CLOUDY,

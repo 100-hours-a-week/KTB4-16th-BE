@@ -182,7 +182,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_place_legal_dong_nullable_pair` | Kakao SDK 호출은 정상 성공했으나 `region_type=B` 결과가 없는 경우 `legal_dong_code`, `legal_dong_name`을 모두 NULL로 저장할 수 있다. 둘 중 하나만 NULL인 상태는 허용하지 않는다. |
 | `rule_place_kakao_sdk_failure` | Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 이를 법정동 없음으로 간주하지 않는다. 프론트는 자물쇠 생성 요청을 중단하거나 재시도한다. |
 | `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 화면에는 `확인할 수 없음`으로 표시한다. |
-| `rule_place_reuse_open_question` | 동일·근접 좌표에서 기존 `place`를 재사용할지 새 `place`를 생성할지는 아직 미정이다. 구현자가 임의로 확정하지 않는다. |
+| `rule_place_reuse_exact_coordinates` | latitude와 longitude가 모두 정확히 동일한 기존 `place`가 있는 경우에만 재사용한다. 근접 좌표는 기존 `place`로 판단하지 않으며, 동일 좌표가 없으면 새로운 `place`를 생성한다. |
 
 #### 4. 관계
 
