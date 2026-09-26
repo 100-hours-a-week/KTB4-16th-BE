@@ -7,9 +7,9 @@ import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursor;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
@@ -61,8 +61,7 @@ public class RecordService {
         List<MyPlaceRecordResponseDto> records;
 
         if (cursor == null) {
-            records =
-                    recordRepository.findMyPlaceRecordsFirstPage(
+            records = recordRepository.findMyPlaceRecordsFirstPage(
                             userId,
                             placeIds,
                             pageable
@@ -70,8 +69,7 @@ public class RecordService {
         } else {
             RecordCursor decodedCursor = recordCursorCodec.decode(cursor);
 
-            records =
-                    recordRepository.findMyPlaceRecordsAfterCursor(
+            records = recordRepository.findMyPlaceRecordsAfterCursor(
                             userId,
                             placeIds,
                             decodedCursor.createdAt(),

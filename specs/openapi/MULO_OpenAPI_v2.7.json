@@ -7493,7 +7493,8 @@
                     "type": "array",
                     "items": {
                       "type": "integer",
-                      "format": "int64"
+                      "format": "int64",
+                      "minimum": 1
                     }
                   }
                 },

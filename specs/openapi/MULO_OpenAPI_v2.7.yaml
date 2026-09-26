@@ -5354,6 +5354,7 @@ paths:
                   items:
                     type: integer
                     format: int64
+                    minimum: 1
               required:
               - placeIds
             example:
