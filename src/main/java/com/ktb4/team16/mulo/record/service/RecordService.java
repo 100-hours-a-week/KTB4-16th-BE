@@ -7,10 +7,13 @@ import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursor;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorCodec;
 import com.ktb4.team16.mulo.record.cursor.RecordCursorPagination;
+import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
+import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
@@ -33,6 +36,7 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 import java.util.Objects;
@@ -118,9 +122,29 @@ public class RecordService {
             );
         }
 
-        String nextCursor = null;
-        if (hasNext) {
-            MyPlaceRecordResponseDto lastRecord = responseRecords.get(responseRecords.size() - 1);
+        RecordCursorPagination.CursorPage<MyPlaceRecordResponseDto> page =
+                RecordCursorPagination.paginate(
+                        records,
+                        recordCursorCodec,
+                        MyPlaceRecordResponseDto::createdAt,
+                        MyPlaceRecordResponseDto::recordId);
+
+        Optional<RecordRegionGroupResponse> region = findRecordRegion(userId, legalDongCode);
+        String responseCode = RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)
+                ? RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE
+                : legalDongCode;
+        String responseName = RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)
+                ? "위치 정보 없음"
+                : region.map(RecordRegionGroupResponse::legalDongName).orElse(null);
+        Long recordsCount = region.map(RecordRegionGroupResponse::recordsCount).orElse(0L);
+
+        return new RecordRegionRecordsData(
+                responseCode,
+                responseName,
+                recordsCount,
+                page.records(),
+                page.nextCursor());
+    }
 
     private Optional<RecordRegionGroupResponse> findRecordRegion(Long userId, String legalDongCode) {
         if (RecordRegionGroupResponse.UNKNOWN_LEGAL_DONG_CODE.equals(legalDongCode)) {
