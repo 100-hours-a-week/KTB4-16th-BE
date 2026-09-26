@@ -11,6 +11,7 @@ import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
+import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.util.List;
@@ -25,6 +26,7 @@ class RecordRegionsServiceTests {
     private final UploadService uploadService = mock(UploadService.class);
     private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
+    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository,
             cursorCodec,
@@ -33,7 +35,8 @@ class RecordRegionsServiceTests {
             weatherService,
             uploadService,
             musicTrackService,
-            recordPhotoRepository);
+            recordPhotoRepository,
+            gcsStorageService);
 
     @Test
     void convertsNullRegionToUnknownApiGroup() {

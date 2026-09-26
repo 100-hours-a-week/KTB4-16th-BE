@@ -17,6 +17,11 @@ import org.springframework.data.repository.query.Param;
 
 public interface RecordRepository extends JpaRepository<Record, Long> {
 
+    Optional<Record> findByRecordIdAndUser_UserIdAndDeletedAtIsNull(
+            Long recordId,
+            Long userId
+    );
+
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse(
             p.legalDongCode, p.legalDongName, COUNT(r)
