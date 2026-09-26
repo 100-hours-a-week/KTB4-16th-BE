@@ -125,10 +125,10 @@
 | `PLACE-021` | **확정** | 클러스터·장소 내 자물쇠 조회 | `POST /api/users/me/records/search` Body에 `placeIds`와 선택적 `cursor`를 전달한다. ID 1개와 여러 개를 동일 API로 처리하며 현재 사용자의 삭제되지 않은 모든 자물쇠를 최신순으로 조회한다. 7일 제한은 없다. | 사용자 확정 2026-09-21 / 팀원 OpenAPI v2.4 |
 | `PLACE-022` | **확정** | 인기 마커 개수 | 인기 자물쇠 지도 마커의 `recordsCount`는 해당 장소의 최근 7일 이내 삭제되지 않은 자물쇠 수다. | 사용자 확정 |
 | `PLACE-023` | **확정** | 내 자물쇠 마커 개수 | 내 자물쇠 지도 마커의 `myRecordsCount`는 해당 장소에 속한 현재 사용자의 전체 삭제되지 않은 자물쇠 수다. 7일 제한은 없다. | 사용자 확정 |
-| `PLACE-024` | **확정** | 사용자 자물쇠 지역 폴더 | 별도 dashboard 리소스를 만들지 않고 현재 사용자의 `records`를 `places.legal_dong_code` 기준으로 그룹화한다. 폴더 표시명은 `legal_dong_name`이며 NULL 그룹은 UI에서 `확인할 수 없음`으로 표시한다. | 사용자 확정 |
-| `PLACE-025` | **확정** | 지역 폴더 자물쇠 목록 | 지역 폴더 선택 시 해당 `legal_dong_code`에 속한 현재 사용자의 삭제되지 않은 모든 자물쇠를 조회한다. 자물쇠 선택 시 기존 `GET /api/records/{recordId}` 상세 조회를 사용한다. | 사용자 확정 |
+| `PLACE-024` | **확정** | 사용자 자물쇠 지역 폴더 | 별도 dashboard 리소스를 만들지 않고 현재 사용자의 `records`를 `places.legal_dong_code` 기준으로 그룹화한다. 최초 진입에서는 지역 그룹만 반환하며 자물쇠 목록 preview는 포함하지 않는다. 폴더 표시명은 `legal_dong_name`이며 NULL 그룹은 UI에서 `확인할 수 없음`으로 표시한다. 지역 그룹은 각 그룹의 최신 활성 Record `createdAt` 내림차순으로 정렬한다. | 사용자 확정 |
+| `PLACE-025` | **확정** | 지역 폴더 자물쇠 목록 | 지역 폴더 선택 시 별도 `GET /api/records`로 해당 `legal_dong_code`에 속한 현재 사용자의 삭제되지 않은 모든 자물쇠를 조회한다. `legalDongCode=UNKNOWN`은 `legal_dong_code IS NULL` 그룹을 의미한다. 목록은 `createdAt DESC, recordId DESC` Cursor 방식이며 서버 페이지 크기는 20개로 고정한다. 자물쇠 선택 시 기존 `GET /api/records/{recordId}` 상세 조회를 사용한다. | 사용자 확정 |
 | `PLACE-026` | **확정** | REST 경로 | 사용자 자물쇠 지역 그룹은 `GET /api/records/regions`, 그룹 내 자물쇠 목록은 `GET /api/records`로 제공한다. `GET /api/records`는 인증된 현재 사용자의 records 컬렉션을 의미한다. | 사용자 확정 |
-| `PLACE-027` | **확인 필요** | 법정동 미확인 폴더 조회 표현 | `legal_dong_code IS NULL` 폴더를 `GET /api/records`의 query parameter에서 어떤 값으로 표현할지는 아직 확정하지 않는다. 임의 sentinel 문자열을 정의하지 않는다. | 추가 결정 필요 |
+| `PLACE-027` | **확정** | 지역 그룹 API의 미확인 표현 | DB의 `legal_dong_code`, `legal_dong_name`이 모두 NULL인 Record 그룹은 `GET /api/records/regions` 응답에서만 `legalDongCode=UNKNOWN`, `legalDongName=위치 정보 없음`으로 반환한다. `UNKNOWN`과 표시 문구는 DB에 저장하지 않는다. | 사용자 확정 |
 
 ## 음악
 
