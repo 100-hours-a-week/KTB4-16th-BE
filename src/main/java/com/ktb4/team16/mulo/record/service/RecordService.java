@@ -10,6 +10,7 @@ import com.ktb4.team16.mulo.record.cursor.RecordCursorPagination;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
+import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
@@ -100,6 +101,17 @@ public class RecordService {
                 record.getComment(),
                 photoUrl,
                 record.getCreatedAt());
+    }
+
+    @Transactional
+    public RecordCommentUpdateResponse updateRecordComment(
+            Long userId,
+            Long recordId,
+            String comment
+    ) {
+        Record record = findActiveRecordForOwner(userId, recordId);
+        record.updateComment(comment, LocalDateTime.now());
+        return new RecordCommentUpdateResponse(record.getRecordId(), comment);
     }
 
     public MyPlaceRecordsResponseDto getMyPlaceRecords(

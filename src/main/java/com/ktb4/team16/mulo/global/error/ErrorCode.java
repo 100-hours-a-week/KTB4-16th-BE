@@ -24,6 +24,7 @@ public enum ErrorCode {
     INVALID_MAP_BOUNDS(HttpStatus.BAD_REQUEST, "지도 범위 정보가 올바르지 않습니다."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 커서입니다."),
     INVALID_RECORD_ID(HttpStatus.BAD_REQUEST, "올바른 자물쇠 ID를 입력해주세요."),
+    COMMENT_TOO_LONG(HttpStatus.BAD_REQUEST, "코멘트는 80자 이하로 입력해주세요."),
     PLACE_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "장소 ID 목록이 필요합니다."),
     INVALID_PLACE_ID(HttpStatus.BAD_REQUEST, "장소 ID는 1 이상의 값이어야 합니다."),
     INVALID_WEATHER_REQUEST_TIME(HttpStatus.BAD_REQUEST, "지난 시간대의 날씨는 조회할 수 없습니다."),

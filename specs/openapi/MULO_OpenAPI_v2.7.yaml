@@ -2137,13 +2137,13 @@ paths:
       operationId: patchApiRecordsRecordIdComment
       description: |-
         필수
-        recordId: Long
-        comment: String | null (최대 80자)
+        path recordId: Long
+        body comment: String | null (키 필수, 최대 80자)
 
         선택
         없음
 
-        생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다.
+        생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다. 빈 문자열은 변환하지 않고 그대로 저장한다.
       responses:
         '200':
           description: 기존 자원의 부분 수정이 정상 완료되었으므로 200.
@@ -2162,6 +2162,7 @@ paths:
                         format: int64
                       comment:
                         type: string
+                        nullable: true
               example:
                 message: 코멘트 수정 성공
                 data:
@@ -2259,13 +2260,15 @@ paths:
               properties:
                 comment:
                   type: string
-                recordId: {}
+                  nullable: true
+                  maxLength: 80
               required:
-              - recordId
               - comment
             example:
               comment: 수정된 코멘트
-      x-implementation-status: contract-only
+      security:
+      - bearerAuth: []
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/users/me/friends":
     get:

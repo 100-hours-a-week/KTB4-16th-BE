@@ -257,6 +257,24 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void recordCommentUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/records/1/comment")
+                        .contentType("application/json")
+                        .content("{\"comment\":\"comment\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/records/1/comment")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"comment\":\"comment\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
         Cookie cookie = csrfCookie();
         mvc.perform(post("/api/private").cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
@@ -328,5 +346,8 @@ class SecurityIntegrationTests {
 
         @PostMapping("/api/places/popular-tracks/search")
         String popularTracks() { return "popular tracks"; }
+
+        @org.springframework.web.bind.annotation.PatchMapping("/api/records/{recordId}/comment")
+        String updateRecordComment() { return "comment updated"; }
     }
 }
