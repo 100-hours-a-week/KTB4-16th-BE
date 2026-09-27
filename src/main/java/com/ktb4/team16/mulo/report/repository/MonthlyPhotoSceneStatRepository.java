@@ -3,4 +3,6 @@ import com.ktb4.team16.mulo.report.entity.MonthlyPhotoSceneStat; import org.spri
 public interface MonthlyPhotoSceneStatRepository extends JpaRepository<MonthlyPhotoSceneStat, Long> {
     java.util.List<MonthlyPhotoSceneStat> findByMonthlyReport_MonthlyReportIdOrderByCountDesc(
             Long monthlyReportId);
+
+    void deleteByMonthlyReport_MonthlyReportId(Long monthlyReportId);
 }
