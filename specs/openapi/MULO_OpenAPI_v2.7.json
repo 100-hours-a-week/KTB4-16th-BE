@@ -629,7 +629,9 @@
         },
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "implemented"
@@ -1553,7 +1555,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "implemented"
@@ -1566,7 +1570,7 @@
         ],
         "summary": "음악 검색",
         "operationId": "getApiMusicSearch",
-        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
+        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
         "responses": {
           "200": {
             "description": "검색 요청이 정상 처리되었으므로 200.\n\n추가 케이스: 검색 조건에 해당하는 음악이 없더라도 검색 요청 자체는 정상적으로 처리되었으므로 200과 빈 배열을 반환한다.",
@@ -1765,7 +1769,7 @@
         ],
         "summary": "사진 임시 업로드",
         "operationId": "postApiUploads",
-        "description": "사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다.\n\n허용 형식: JPG, JPEG, PNG, HEIC\n최대 용량: 10MB",
+        "description": "사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다.\n\n허용 형식: JPG, JPEG, PNG, HEIC, WebP\n최대 용량: 10MB",
         "responses": {
           "201": {
             "description": "새 임시 업로드 리소스가 생성되므로 201.",
@@ -1888,7 +1892,7 @@
             }
           },
           "415": {
-            "description": "전달된 파일의 형식이 MULO에서 허용하는 JPG, JPEG, PNG, HEIC 이미지 형식에 해당하지 않으므로 415.",
+            "description": "전달된 파일의 형식이 MULO에서 허용하는 JPG, JPEG, PNG, HEIC, WebP 이미지 형식에 해당하지 않으므로 415.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1951,7 +1955,7 @@
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -1962,6 +1966,11 @@
         ],
         "summary": "사진 기반 음악 추천",
         "operationId": "postApiRecommendationsPhoto",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "description": "임시 업로드된 사진을 AI가 분석해 음악을 최대 3곡 추천한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.",
         "responses": {
           "200": {
@@ -1987,8 +1996,21 @@
                           },
                           "artistName": {
                             "type": "string"
+                          },
+                          "albumImageUrl": {
+                            "type": "string"
+                          },
+                          "externalUrl": {
+                            "type": "string"
                           }
-                        }
+                        },
+                        "required": [
+                          "externalTrackId",
+                          "title",
+                          "artistName",
+                          "albumImageUrl",
+                          "externalUrl"
+                        ]
                       }
                     }
                   }
@@ -2000,11 +2022,15 @@
                       "externalTrackId": "6rqhFgbbKwnb9MLmUQDhG6",
                       "title": "밤편지",
                       "artistName": "아이유"
+                      ,"albumImageUrl": "https://i.scdn.co/image/example"
+                      ,"externalUrl": "https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6"
                     },
                     {
                       "externalTrackId": "4exampleTrackId000001",
                       "title": "추천곡 2",
                       "artistName": "아티스트 2"
+                      ,"albumImageUrl": "https://i.scdn.co/image/example-2"
+                      ,"externalUrl": "https://open.spotify.com/track/4exampleTrackId000001"
                     }
                   ]
                 }
@@ -2049,8 +2075,8 @@
                   "errors": [
                     {
                       "field": "uploadId",
-                      "code": "UPLOAD_ID_REQUIRED",
-                      "message": "업로드 이미지 식별자가 필요합니다."
+                      "code": "INVALID_INPUT_VALUE",
+                      "message": "입력값을 확인해주세요."
                     }
                   ]
                 }
@@ -2157,7 +2183,10 @@
                     "type": "integer",
                     "format": "int64"
                   }
-                }
+                },
+                "required": [
+                  "uploadId"
+                ]
               },
               "example": {
                 "uploadId": 123
@@ -2165,7 +2194,7 @@
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -2176,7 +2205,7 @@
         ],
         "summary": "자물쇠 생성",
         "operationId": "postApiRecords",
-        "description": "필수\nlocation.latitude: Double\nlocation.longitude: Double\nmusic.externalTrackId: String\nmoodScore: Integer\nuploadId: Long\n\n선택\nlocation.legalDongCode: String | null\nlocation.legalDongName: String | null\ncomment: String (최대 80자)\n\n서버 자동 처리\nplaceId: Long\nmusicTrackId: Long\nweatherCondition: String | null\ntemperature: Number | null\n\n정책\n- 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 latitude/longitude를 확정한다.\n- 프론트는 최종 좌표에 대해 Kakao Maps SDK services.Geocoder.coord2RegionCode()를 호출한다.\n- region_type=B 결과가 있으면 code → legalDongCode, region_3depth_name → legalDongName으로 매핑해 백엔드에 전달한다.\n- Kakao SDK 호출은 정상 성공했지만 region_type=B 결과가 없으면 legalDongCode와 legalDongName을 모두 null로 전달할 수 있으며 자물쇠 생성을 허용한다.\n- legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.\n- Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.\n- 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.\n- 동일·근접 좌표에서 기존 place를 재사용할지 신규 place를 생성할지는 아직 미정이며 구현자가 임의로 확정하지 않는다.\n- 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 \"확인할 수 없음\"으로 표시한다.\n- legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. \"확인할 수 없음\" 문자열은 DB/API 값으로 저장하지 않는다.\n- 신규 externalTrackId는 Spotify API를 통해 재검증한다.\n- 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.\n- weatherCondition은 CLEAR, CLOUDY, OVERCAST, RAIN, SNOW, RAIN_SNOW, SHOWER 중 하나만 사용한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨/기온을 확보하지 못한 경우에도 기록 생성 실패로 처리하지 않고 null로 저장한다.\n- 사진은 필수이며 현재 사용자가 소유한 유효한 uploadId를 반드시 전달해야 한다.\n- 자물쇠 생성 완료 시 사진은 정확히 1장 연결된다.\n- uploadId는 생성 후 1시간 이내의 유효한 임시 업로드여야 한다.\n- 자물쇠 생성이 성공하면 record_photos에 최종 사진 정보를 저장하고 해당 uploads 레코드는 삭제한다.",
+        "description": "필수\nlocation.latitude: Double\nlocation.longitude: Double\nmusic.externalTrackId: String\nmoodScore: Integer (-50 이상 50 이하)\nuploadId: Long\n\n선택\nlocation.legalDongCode: String | null\nlocation.legalDongName: String | null\ncomment: String (최대 80자)\n\n서버 자동 처리\nplaceId: Long\nmusicTrackId: Long\nweatherCondition: String | null\ntemperature: Number | null\n\n정책\n- 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 latitude/longitude를 확정한다.\n- 프론트는 최종 좌표에 대해 Kakao Maps SDK services.Geocoder.coord2RegionCode()를 호출한다.\n- region_type=B 결과가 있으면 code → legalDongCode, region_3depth_name → legalDongName으로 매핑해 백엔드에 전달한다.\n- Kakao SDK 호출은 정상 성공했지만 region_type=B 결과가 없으면 legalDongCode와 legalDongName을 모두 null로 전달할 수 있으며 자물쇠 생성을 허용한다.\n- legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.\n- Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.\n- 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.\n- latitude와 longitude가 모두 정확히 동일한 기존 place가 있는 경우에만 재사용한다. 근접 좌표는 기존 place로 판단하지 않으며, 동일 좌표가 없으면 새로운 place를 생성한다.\n- 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 \"확인할 수 없음\"으로 표시한다.\n- legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. \"확인할 수 없음\" 문자열은 DB/API 값으로 저장하지 않는다.\n- 요청으로 전달된 음악 메타데이터를 사용하며, 기존 externalTrackId는 재사용하고 신규 externalTrackId는 요청값으로 music_tracks에 저장한다. 자물쇠 생성 과정에서는 Spotify API를 재호출하지 않는다.\n- 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.\n- weatherCondition은 CLEAR, CLOUDY, OVERCAST, RAIN, SNOW, RAIN_SNOW, SHOWER 중 하나만 사용한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨/기온을 확보하지 못한 경우에도 기록 생성 실패로 처리하지 않고 null로 저장한다.\n- 사진은 필수이며 현재 사용자가 소유한 유효한 uploadId를 반드시 전달해야 한다.\n- 자물쇠 생성 완료 시 사진은 정확히 1장 연결된다.\n- uploadId는 생성 후 1시간 이내의 유효한 임시 업로드여야 한다.\n- 자물쇠 생성이 성공하면 record_photos에 최종 사진 정보를 저장하고 해당 uploads 레코드는 삭제한다.",
         "responses": {
           "201": {
             "description": "새 기록 리소스가 생성되므로 201.",
@@ -2402,18 +2431,37 @@
                     "properties": {
                       "externalTrackId": {
                         "type": "string"
+                      },
+                      "title": {
+                        "type": "string"
+                      },
+                      "artistName": {
+                        "type": "string"
+                      },
+                      "albumImageUrl": {
+                        "type": "string"
+                      },
+                      "externalUrl": {
+                        "type": "string"
                       }
                     },
                     "required": [
-                      "externalTrackId"
+                      "externalTrackId",
+                      "title",
+                      "artistName",
+                      "albumImageUrl",
+                      "externalUrl"
                     ]
                   },
                   "moodScore": {
                     "type": "integer",
-                    "format": "int64"
+                    "format": "int64",
+                    "minimum": -50,
+                    "maximum": 50
                   },
                   "comment": {
-                    "type": "string"
+                    "type": "string",
+                    "maxLength": 80
                   },
                   "uploadId": {
                     "type": "integer",
@@ -2435,7 +2483,11 @@
                   "legalDongName": "오산동"
                 },
                 "music": {
-                  "externalTrackId": "..."
+                  "externalTrackId": "...",
+                  "title": "...",
+                  "artistName": "...",
+                  "albumImageUrl": "...",
+                  "externalUrl": "..."
                 },
                 "moodScore": 4,
                 "comment": "좋았다",
@@ -2486,7 +2538,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -2535,6 +2589,9 @@
                               "artistName": {
                                 "type": "string"
                               },
+                              "albumImageUrl": {
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -2562,6 +2619,7 @@
                         "musicTrackId": 583,
                         "title": "밤편지",
                         "artistName": "아이유",
+                        "albumImageUrl": "https://i.scdn.co/image/example",
                         "createdAt": "2026-09-19T18:30:00+09:00"
                       }
                     ],
@@ -2591,10 +2649,10 @@
         ],
         "summary": "자물쇠 상세 조회",
         "operationId": "getApiRecordsRecordId",
-        "description": "필수\nrecordId: Long\n\n선택\n없음\n\n정책 및 설명\n- 특정 자물쇠의 상세 정보를 조회한다.\n- 인증된 활성 사용자만 조회할 수 있다.\n- 자물쇠 소유자 본인은 조회할 수 있다.\n- 현재 친구 관계인 사용자의 자물쇠도 조회할 수 있다.\n- 삭제된 자물쇠는 조회할 수 없다.\n- 존재하지 않는 기록, 삭제된 기록, 조회 권한이 없는 기록은 외부에서 구분되지 않도록 동일하게 404 처리한다.\n- 친구 관계는 요청 시점의 현재 관계를 다시 확인한다.\n- place.legalDongName은 places.legal_dong_name을 반환한다.\n- legalDongName은 nullable이다. null이면 프론트 UI에서 \"확인할 수 없음\"으로 표시하며 API는 null을 그대로 반환한다.",
+        "description": "필수\nrecordId: Long\n\n선택\n없음\n\n정책 및 설명\n- 특정 자물쇠의 상세 정보를 조회한다.\n- 인증된 활성 사용자는 본인이 생성한 자물쇠만 조회할 수 있다.\n- 친구의 자물쇠 상세 조회는 v1에서 지원하지 않는다.\n- 삭제된 자물쇠는 조회할 수 없다.\n- 존재하지 않는 기록, 삭제된 기록, 다른 사용자 소유 기록은 외부에서 구분되지 않도록 동일하게 RECORD_NOT_FOUND(404) 처리한다.\n- place.legalDongName은 places.legal_dong_name을 반환한다.\n- legalDongName은 nullable이다. null이면 프론트 UI에서 \"확인할 수 없음\"으로 표시하며 API는 null을 그대로 반환한다.",
         "responses": {
           "200": {
-            "description": "조회 권한이 있는 존재하는 기록을 정상 반환했으므로 200.",
+            "description": "로그인 사용자가 소유한 삭제되지 않은 기록을 정상 반환했으므로 200.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2662,21 +2720,26 @@
                           }
                         },
                         "weatherCondition": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         },
                         "temperature": {
                           "type": "number",
-                          "format": "double"
+                          "format": "double",
+                          "nullable": true
                         },
                         "moodScore": {
                           "type": "integer",
                           "format": "int64"
                         },
                         "comment": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         },
                         "photoUrl": {
-                          "type": "string"
+                          "type": "string",
+                          "format": "uri",
+                          "description": "private GCS 객체에 대한 read Signed URL이며, 발급 후 10분간 유효하다."
                         },
                         "createdAt": {
                           "type": "string",
@@ -2717,7 +2780,7 @@
             }
           },
           "400": {
-            "description": "recordId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.",
+            "description": "recordId가 0 이하이므로 INVALID_INPUT_VALUE와 INVALID_RECORD_ID field error를 반환한다.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2785,7 +2848,7 @@
             }
           },
           "404": {
-            "description": "미존재/삭제/비인가 여부를 외부에서 구분하지 않도록 404로 통일.",
+            "description": "미존재/삭제/다른 사용자 소유 여부를 외부에서 구분하지 않도록 RECORD_NOT_FOUND(404)로 통일.",
             "content": {
               "application/json": {
                 "schema": {
@@ -2842,10 +2905,12 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       },
       "delete": {
         "tags": [
@@ -2997,7 +3062,12 @@
             }
           }
         ],
-        "x-implementation-status": "contract-only",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -3008,7 +3078,7 @@
         ],
         "summary": "자물쇠 코멘트 수정",
         "operationId": "patchApiRecordsRecordIdComment",
-        "description": "필수\nrecordId: Long\ncomment: String | null (최대 80자)\n\n선택\n없음\n\n생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다.",
+        "description": "필수\npath recordId: Long\nbody comment: String | null (키 필수, 최대 80자)\n\n선택\n없음\n\n생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다. 빈 문자열은 변환하지 않고 그대로 저장한다.",
         "responses": {
           "200": {
             "description": "기존 자원의 부분 수정이 정상 완료되었으므로 200.",
@@ -3028,7 +3098,8 @@
                           "format": "int64"
                         },
                         "comment": {
-                          "type": "string"
+                          "type": "string",
+                          "nullable": true
                         }
                       }
                     }
@@ -3176,12 +3247,12 @@
                 "type": "object",
                 "properties": {
                   "comment": {
-                    "type": "string"
-                  },
-                  "recordId": {}
+                    "type": "string",
+                    "nullable": true,
+                    "maxLength": 80
+                  }
                 },
                 "required": [
-                  "recordId",
                   "comment"
                 ]
               },
@@ -3191,7 +3262,12 @@
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -4443,15 +4519,28 @@
                         "stats": {
                           "type": "object",
                           "properties": {
-                            "...": {
-                              "type": "string"
-                            }
+                            "recordCount": { "type": "integer" },
+                            "topPlace": {
+                              "nullable": true,
+                              "type": "object",
+                              "properties": {
+                                "placeId": { "type": "integer", "format": "int64" },
+                                "legalDongName": { "type": "string" }
+                              }
+                            },
+                            "topArtistName": { "nullable": true, "type": "string" },
+                            "averageMoodScore": { "nullable": true, "type": "number" }
                           }
                         },
                         "photoScenes": {
                           "type": "array",
                           "items": {
-                            "type": "string"
+                            "type": "object",
+                            "properties": {
+                              "sceneTag": { "type": "string" },
+                              "count": { "type": "integer" },
+                              "ratio": { "type": "integer" }
+                            }
                           }
                         },
                         "aiRecap": {
@@ -4476,11 +4565,13 @@
                     "year": 2026,
                     "month": 8,
                     "stats": {
-                      "...": "..."
+                      "recordCount": 15,
+                      "topPlace": { "placeId": 10, "legalDongName": "역삼동" },
+                      "topArtistName": "아이유",
+                      "averageMoodScore": 24.3
                     },
                     "photoScenes": [
-                      "야경",
-                      "공원"
+                      { "sceneTag": "야경", "count": 3, "ratio": 60 }
                     ],
                     "aiRecap": {
                       "status": "COMPLETED",
@@ -4615,7 +4706,7 @@
             }
           }
         ],
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       }
     },
     "/api/recommendations/playlists": {
@@ -4701,7 +4792,7 @@
             }
           }
         },
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       },
       "post": {
         "tags": [
@@ -4710,6 +4801,40 @@
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
         "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. 사용자의 기록 + 현재 위치 주변 장소의 자물쇠 + 현재 위치/장소 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "latitude",
+                  "longitude"
+                ],
+                "properties": {
+                  "latitude": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -90,
+                    "maximum": 90,
+                    "description": "현재 위치의 위도"
+                  },
+                  "longitude": {
+                    "type": "number",
+                    "format": "double",
+                    "minimum": -180,
+                    "maximum": 180,
+                    "description": "현재 위치의 경도"
+                  }
+                }
+              },
+              "example": {
+                "latitude": 37.5665,
+                "longitude": 126.978
+              }
+            }
+          }
+        },
         "responses": {
           "201": {
             "description": "새 추천 플레이리스트 리소스가 생성되므로 201.",
@@ -4850,6 +4975,28 @@
               }
             }
           },
+          "502": {
+            "description": "현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "WEATHER_API_ERROR",
+                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          },
           "500": {
             "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
             "content": {
@@ -4871,59 +5018,9 @@
                 }
               }
             }
-          },
-          "502": {
-            "description": "추천 생성에 필수적인 날씨·기온을 최신 발표본 조회와 허용된 바로 직전 발표본 fallback 모두에서 확보하지 못한 경우 502.\n\n추가 케이스: MULO 백엔드가 의존하는 AI 추천 서버 처리 실패이므로 502. AI 연동 오류 코드는 AI_SERVICE_ERROR로 통일한다.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "WEATHER_API_ERROR",
-                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
           }
         },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "latitude": {
-                    "type": "number",
-                    "format": "double"
-                  },
-                  "longitude": {
-                    "type": "number",
-                    "format": "double"
-                  }
-                },
-                "required": [
-                  "latitude",
-                  "longitude"
-                ]
-              },
-              "example": {
-                "latitude": 37.54,
-                "longitude": 127.03
-              }
-            }
-          }
-        },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -4937,7 +5034,9 @@
         "description": "필수\nlatitude: Double\nlongitude: Double\nat: ISO-8601 DateTime\n\n정책 및 설명\n- 요청 at은 받은 offset과 무관하게 KST로 정규화한다. 서버 KST의 현재 시간대 시작보다 이른 요청은 과거로 보고 400 INVALID_WEATHER_REQUEST_TIME으로 처리한다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한다.\n- 같은 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회한다.\n- 해당 날짜·격자의 캐시가 전혀 없을 때만 기상청 단기예보 getVilageFcst를 조회해 저장한다.\n- 응답은 forecastAt, temperature, weatherCondition만 제공한다.\n- weatherCondition은 CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER 중 하나다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각을 forecast_at으로 사용한다.\n- 예: 15:10 요청은 15:00 예보를 사용하고, 15:50 요청은 16:00 예보를 사용한다.\n\n- 기상청 getVilageFcst를 1회 호출하면 목표 예보시각 이후 항목을 시간대별로 파싱해 weather_grid_forecasts에 일괄 저장한다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n- 최초 호출은 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패 또는 미포함이면 바로 이전 후보 회차를 한 번만 시도한다.\n- 당일 캐시는 있으나 요청 시간대 예보가 없으면 WEATHER_API_ERROR로 처리한다.\n\n### 미정 정책\n- 국내 기상청 격자 범위 밖 좌표: 상태=미정, `WTH-002: HTTP 상태와 Error Code 미정` — 격자 범위 밖 좌표의 구체 상태와 오류 코드는 임의 확정하지 않는다.",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -5459,7 +5558,8 @@
                   "selectedOption": {
                     "type": "string"
                   },
-                  "voteQuestionId": {}
+                  "voteQuestionId": {
+                  }
                 },
                 "required": [
                   "selectedOption",
@@ -5474,7 +5574,9 @@
         },
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "contract-only",
@@ -5812,7 +5914,9 @@
         ],
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "x-implementation-status": "contract-only"
@@ -7361,7 +7465,9 @@
         "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 법정동 미확인 자물쇠는 `legalDongCode=null`, `legalDongName=null`인 하나의 그룹으로 반환한다.\n- 프론트는 NULL 그룹을 `확인할 수 없음` 폴더로 표시한다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "responses": {
@@ -7458,7 +7564,9 @@
         "summary": "클러스터/장소 인기 음악 조회",
         "description": "필수\nplaceIds: List<Long> (1개 이상)\n\n선택\n없음\n\n정책\n- 비로그인 사용자도 조회할 수 있다.\n- 전달받은 모든 placeIds를 하나의 조회 범위로 합산한다.\n- Record의 placeId가 placeIds에 포함되는 기록만 집계한다.\n- 삭제된 Record는 제외한다.\n- API 조회 시점을 기준으로\n직전 7일 동안 생성된 Record만 집계한다.\n- recordCount는 선택된 placeIds 전체의\n최근 7일 활성 Record 총개수이다.\n- music[].count는 최근 7일 활성 Record 중\n해당 음악이 등록된 횟수이다.\n- 음악별 count DESC로 정렬한다.\n- count가 같으면 해당 음악의\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 클러스터링은 프론트의\nKakao MarkerClusterer가 담당한다.\n- 백엔드는 클러스터를 관리하지 않고\n전달받은 placeIds만 처리한다.\n- 개별 마커 클릭은 placeIds에\n1개의 ID를 전달해 동일하게 처리한다.\n- Cursor pagination과 클라이언트 size 입력은\n사용하지 않는다.\n\n정책 및 설명\n- 선택된 placeIds 전체의 삭제되지 않은 Record를 합산한다.\n- 조회 시점 기준 직전 7일의 Record만 집계한다.\n- recordCount와 music[].count 모두 최근 7일 기준이다.\n- 음악별 count DESC로 정렬하고 동률이면\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 개별 마커와 클러스터 클릭을 같은 API로 처리한다.\n- 클러스터 ID나 행정구역 정보는 전달하지 않는다.\n- Cursor pagination, size, TOP N 제한은 현재 명세에 적용하지 않는다.",
         "operationId": "post_api_places_popular_tracks_search",
-        "security": [],
+        "security": [
+
+        ],
         "requestBody": {
           "required": true,
           "content": {
@@ -7470,7 +7578,8 @@
                     "type": "array",
                     "items": {
                       "type": "integer",
-                      "format": "int64"
+                      "format": "int64",
+                      "minimum": 1
                     }
                   }
                 },
@@ -7563,7 +7672,9 @@
                       "message": "인기 음악 조회 성공",
                       "data": {
                         "recordCount": 0,
-                        "music": []
+                        "music": [
+
+                        ]
                       }
                     }
                   }
@@ -7675,7 +7786,9 @@
         "operationId": "post_api_users_me_records_search",
         "security": [
           {
-            "bearerAuth": []
+            "bearerAuth": [
+
+            ]
           }
         ],
         "requestBody": {
@@ -7751,6 +7864,9 @@
                               "artistName": {
                                 "type": "string"
                               },
+                              "albumImageUrl": {
+                                "type": "string"
+                              },
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -7777,6 +7893,7 @@
                             "musicTrackId": 583,
                             "title": "밤편지",
                             "artistName": "아이유",
+                            "albumImageUrl": "https://i.scdn.co/image/example",
                             "createdAt": "2026-09-19T15:30:00"
                           }
                         ],
@@ -7788,7 +7905,9 @@
                     "value": {
                       "message": "내 자물쇠 목록 조회 성공",
                       "data": {
-                        "records": [],
+                        "records": [
+
+                        ],
                         "nextCursor": null
                       }
                     }

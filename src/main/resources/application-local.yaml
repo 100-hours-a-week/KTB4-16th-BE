@@ -3,3 +3,6 @@ mulo:
     allowed-origins:
       - ${FRONTEND_ORIGIN:http://localhost:3000}
     cookie-secure: false
+
+ai:
+  mock-enabled: ${AI_MOCK_ENABLED:false}

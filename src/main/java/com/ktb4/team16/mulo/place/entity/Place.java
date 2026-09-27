@@ -35,4 +35,17 @@ public class Place {
     private LocalDateTime createdAt;
 
     private LocalDateTime updatedAt;
+
+    public Place(
+            String legalDongCode,
+            String legalDongName,
+            BigDecimal latitude,
+            BigDecimal longitude
+    ){
+        this.legalDongCode = legalDongCode;
+        this.legalDongName = legalDongName;
+        this.latitude = latitude;
+        this.longitude = longitude;
+        this.createdAt = LocalDateTime.now();
+    }
 }

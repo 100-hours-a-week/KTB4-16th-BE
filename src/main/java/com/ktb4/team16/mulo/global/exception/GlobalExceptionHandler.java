@@ -7,8 +7,21 @@ import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
+import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
+import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
+import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
+import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
+import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
+import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportAiCallbackException;
+import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
+import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
+import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
+import com.ktb4.team16.mulo.upload.exception.InvalidImageFormatException;
+import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
@@ -20,6 +33,8 @@ import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MissingServletRequestParameterException;
+import org.springframework.web.multipart.MaxUploadSizeExceededException;
+import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
@@ -95,6 +110,56 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.INVALID_CURSOR));
     }
 
+    @ExceptionHandler(InvalidRecordIdException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidRecordId(
+            InvalidRecordIdException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        "recordId", ErrorCode.INVALID_RECORD_ID)));
+    }
+
+    @ExceptionHandler(MissingCommentFieldException.class)
+    public ResponseEntity<ErrorResponse> handleMissingCommentField(
+            MissingCommentFieldException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        "comment", ErrorCode.INVALID_INPUT_VALUE)));
+    }
+
+    @ExceptionHandler(RecordNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleRecordNotFound(
+            RecordNotFoundException exception) {
+        return ResponseEntity.status(ErrorCode.RECORD_NOT_FOUND.status())
+                .body(ErrorResponse.of(ErrorCode.RECORD_NOT_FOUND));
+    }
+
+    @ExceptionHandler(MonthlyReportNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMonthlyReportNotFound(
+            MonthlyReportNotFoundException exception) {
+        return ResponseEntity.status(ErrorCode.MONTHLY_REPORT_NOT_FOUND.status())
+                .body(ErrorResponse.of(ErrorCode.MONTHLY_REPORT_NOT_FOUND));
+    }
+
+    @ExceptionHandler(InvalidMonthlyReportGenerationRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMonthlyReportGenerationRequest(
+            InvalidMonthlyReportGenerationRequestException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(InvalidMonthlyReportAiCallbackException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMonthlyReportAiCallback(
+            InvalidMonthlyReportAiCallbackException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(MonthlyReportAiException.class)
+    public ResponseEntity<ErrorResponse> handleMonthlyReportAi(MonthlyReportAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
+    }
+
     @ExceptionHandler(MusicSearchRateLimitedException.class)
     // 음악 검색 제한을 429와 Retry-After 헤더로 변환한다.
     public ResponseEntity<ErrorResponse> handleMusicSearchRateLimited(
@@ -123,6 +188,20 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
     }
 
+    @ExceptionHandler(PhotoRecommendationAiException.class)
+    public ResponseEntity<ErrorResponse> handlePhotoRecommendationAi(
+            PhotoRecommendationAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
+    }
+
+    // 상황 맞춤 추천 AI의 통신·응답 계약 실패를 외부 상세 없이 502로 변환한다.
+    @ExceptionHandler(RecommendationAiException.class)
+    public ResponseEntity<ErrorResponse> handleRecommendationAi(RecommendationAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
+    }
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     public ResponseEntity<ErrorResponse> handleInvalidRequest(MethodArgumentNotValidException exception) {
         List<com.ktb4.team16.mulo.global.error.FieldError> errors = exception.getBindingResult()
@@ -140,6 +219,48 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(MissingServletRequestPartException.class)
+    public ResponseEntity<ErrorResponse> handleMissingPart(
+            MissingServletRequestPartException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        exception.getRequestPartName(), ErrorCode.PHOTO_REQUIRED)));
+    }
+
+    @ExceptionHandler(MaxUploadSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleMaxUploadSize(
+            MaxUploadSizeExceededException exception) {
+        return ResponseEntity.status(ErrorCode.IMAGE_SIZE_EXCEEDED.status())
+                .body(ErrorResponse.of(ErrorCode.IMAGE_SIZE_EXCEEDED));
+    }
+
+    @ExceptionHandler(EmptyImageException.class)
+    public ResponseEntity<ErrorResponse> handleEmptyImage(EmptyImageException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        "photo", ErrorCode.PHOTO_REQUIRED)));
+    }
+
+    @ExceptionHandler(ImageSizeExceededException.class)
+    public ResponseEntity<ErrorResponse> handleImageSizeExceeded(
+            ImageSizeExceededException exception) {
+        return ResponseEntity.status(ErrorCode.IMAGE_SIZE_EXCEEDED.status())
+                .body(ErrorResponse.of(ErrorCode.IMAGE_SIZE_EXCEEDED));
+    }
+
+    @ExceptionHandler(InvalidImageFormatException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidImageFormat(
+            InvalidImageFormatException exception) {
+        return ResponseEntity.status(ErrorCode.UNSUPPORTED_IMAGE_FORMAT.status())
+                .body(ErrorResponse.of(ErrorCode.UNSUPPORTED_IMAGE_FORMAT));
+    }
+
+    @ExceptionHandler(UploadNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleUploadNotFound(UploadNotFoundException exception) {
+        return ResponseEntity.status(ErrorCode.UPLOAD_NOT_FOUND.status())
+                .body(ErrorResponse.of(ErrorCode.UPLOAD_NOT_FOUND));
     }
 
     @ExceptionHandler(Exception.class)

@@ -22,6 +22,16 @@ spring:
     locations: classpath:db/migration
     validate-on-migrate: true
 
+  servlet:
+    multipart:
+      max-file-size: 10MB
+      # photo 한 장과 multipart boundary/header overhead를 허용한다.
+      max-request-size: 11MB
+
+gcs:
+  project-id: ${GCP_PROJECT_ID}
+  bucket-name: ${GCS_BUCKET_NAME}
+
 logging:
   level:
     org.flywaydb: info
@@ -53,3 +63,10 @@ spotify:
   user-limit-30-seconds: 8
   user-limit-60-seconds: 15
   global-limit-30-seconds: 80
+
+ai:
+  base-url: ${AI_BASE_URL:http://localhost:8000}
+  internal-token: ${AI_INTERNAL_TOKEN}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+  mock-enabled: ${AI_MOCK_ENABLED:false}

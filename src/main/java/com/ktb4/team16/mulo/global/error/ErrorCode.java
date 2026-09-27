@@ -10,6 +10,11 @@ public enum ErrorCode {
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효한 Refresh Token이 없습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
+    LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
+    PHOTO_REQUIRED(HttpStatus.BAD_REQUEST, "사진 파일이 필요합니다."),
+    IMAGE_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "사진 최대 용량은 10MB입니다."),
+    UNSUPPORTED_IMAGE_FORMAT(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 이미지 파일 형식입니다."),
     SW_LAT_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 위도 값이 필요합니다."),
     SW_LNG_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 경도 값이 필요합니다."),
     NE_LAT_REQUIRED(HttpStatus.BAD_REQUEST, "북동쪽 위도 값이 필요합니다."),
@@ -18,6 +23,8 @@ public enum ErrorCode {
     INVALID_LONGITUDE(HttpStatus.BAD_REQUEST, "경도 값이 올바르지 않습니다."),
     INVALID_MAP_BOUNDS(HttpStatus.BAD_REQUEST, "지도 범위 정보가 올바르지 않습니다."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 커서입니다."),
+    INVALID_RECORD_ID(HttpStatus.BAD_REQUEST, "올바른 자물쇠 ID를 입력해주세요."),
+    COMMENT_TOO_LONG(HttpStatus.BAD_REQUEST, "코멘트는 80자 이하로 입력해주세요."),
     PLACE_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "장소 ID 목록이 필요합니다."),
     INVALID_PLACE_ID(HttpStatus.BAD_REQUEST, "장소 ID는 1 이상의 값이어야 합니다."),
     INVALID_WEATHER_REQUEST_TIME(HttpStatus.BAD_REQUEST, "지난 시간대의 날씨는 조회할 수 없습니다."),
@@ -38,12 +45,18 @@ public enum ErrorCode {
     SAME_NICKNAME(HttpStatus.CONFLICT, "현재 닉네임과 동일합니다."),
     SAME_PASSWORD(HttpStatus.CONFLICT, "새 비밀번호는 현재 비밀번호와 달라야 합니다."),
 
+    UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "업로드를 찾을 수 없습니다."),
+    RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "자물쇠를 찾을 수 없습니다."),
+    MONTHLY_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "월간 리포트를 찾을 수 없습니다."),
+
     WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
             "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
     MUSIC_SEARCH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS,
             "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."),
     MUSIC_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,
             "음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요."),
+    AI_SERVICE_ERROR(HttpStatus.BAD_GATEWAY,
+            "AI 추천 서비스를 처리하지 못했습니다."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");

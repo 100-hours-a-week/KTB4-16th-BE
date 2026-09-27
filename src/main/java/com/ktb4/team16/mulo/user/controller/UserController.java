@@ -102,7 +102,7 @@ public class UserController {
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody MyPlaceRecordsSearchRequest request
     ) {
-        MyPlaceRecordsResponseDto data =
+        MyPlaceRecordsResponseDto myPlaceRecords =
                 recordService.getMyPlaceRecords(
                         userId,
                         request.placeIds(),
@@ -111,7 +111,7 @@ public class UserController {
 
         return new MyPlaceRecordsSearchResponse(
                 RecordMessage.MY_PLACE_RECORDS_RETRIEVED.message(),
-                data
+                myPlaceRecords
         );
     }
 }

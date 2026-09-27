@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.global.config;
 
 import com.ktb4.team16.mulo.global.security.ApiAccessDeniedHandler;
 import com.ktb4.team16.mulo.global.security.ApiAuthenticationEntryPoint;
+import com.ktb4.team16.mulo.global.security.AiInternalTokenFilter;
 import com.ktb4.team16.mulo.global.security.JwtAuthenticationFilter;
 import jakarta.servlet.DispatcherType;
 import java.util.List;
@@ -21,6 +22,7 @@ import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
+import org.springframework.beans.factory.ObjectProvider;
 
 @Configuration(proxyBeanMethods = false)
 @EnableConfigurationProperties({SecurityProperties.class, JwtProperties.class})
@@ -29,7 +31,9 @@ public class SecurityConfig {
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties properties,
             ApiAuthenticationEntryPoint entryPoint, ApiAccessDeniedHandler deniedHandler,
             CorsConfigurationSource corsConfigurationSource,
-            JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception {
+            JwtAuthenticationFilter jwtAuthenticationFilter,
+            ObjectProvider<AiInternalTokenFilter> aiInternalTokenFilter)
+            throws Exception {
         // CSRF Cookie만 JS로 읽는다. 로그인 단계의 Refresh Cookie는 반드시 HttpOnly다.
         var csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
         csrfRepository.setCookieCustomizer(cookie -> cookie.path("/")
@@ -43,7 +47,9 @@ public class SecurityConfig {
                 .csrf(csrf -> csrf.spa().csrfTokenRepository(csrfRepository)
                         // 회원가입은 비인증 공개 요청이므로 CSRF 토큰을 요구하지 않는다.
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.POST, "/api/users/signup")))
+                                HttpMethod.POST, "/api/users/signup"))
+                        .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
+                                HttpMethod.POST, "/internal/ai/report-ready")))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // /logout 기본 엔드포인트 대신 이후 auth 도메인의 명시적 로그아웃을 사용한다.
@@ -53,10 +59,14 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 내부 오류 디스패치가 기존 404/500을 401로 바꾸지 않도록 한다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/ai/report-ready").permitAll()
+                        // Docker가 인증 없이 애플리케이션 준비 상태만 확인하도록 healthcheck GET만 허용한다.
+                        .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
                         // 날씨 조회는 사용자별 데이터가 아닌 공용 예보 데이터만 반환한다.
                         .requestMatchers(HttpMethod.GET, "/api/weather").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/places/popular").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/api/places/popular-tracks/search").permitAll()
                         // Swagger UI와 OpenAPI 문서의 공개 조회만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/swagger-ui.html", "/swagger-ui/**",
                                 "/v3/api-docs", "/v3/api-docs/**", "/v3/api-docs.yaml").permitAll()
@@ -70,6 +80,10 @@ public class SecurityConfig {
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
+        AiInternalTokenFilter filter = aiInternalTokenFilter.getIfAvailable();
+        if (filter != null) {
+            http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class);
+        }
         return http.build();
     }
 

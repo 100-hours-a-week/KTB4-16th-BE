@@ -1089,7 +1089,7 @@ paths:
         - 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.
         - 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.
         - 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.
-        - 실제 자물쇠 생성 시 externalTrackId를 기준으로 Spotify 정보를 재검증하고 필요한 경우 music 데이터를 저장한다.
+        - 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.
         - V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.
         - 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.
       responses:
@@ -1225,7 +1225,7 @@ paths:
       description: |-
         사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다.
 
-        허용 형식: JPG, JPEG, PNG, HEIC
+        허용 형식: JPG, JPEG, PNG, HEIC, WebP
         최대 용량: 10MB
       responses:
         '201':
@@ -1305,7 +1305,7 @@ paths:
                 code: IMAGE_SIZE_EXCEEDED
                 message: 사진 최대 용량은 10MB입니다.
         '415':
-          description: 전달된 파일의 형식이 MULO에서 허용하는 JPG, JPEG, PNG, HEIC 이미지 형식에 해당하지 않으므로 415.
+          description: 전달된 파일의 형식이 MULO에서 허용하는 JPG, JPEG, PNG, HEIC, WebP 이미지 형식에 해당하지 않으므로 415.
           content:
             application/json:
               schema:
@@ -1344,7 +1344,7 @@ paths:
                   format: binary
               required:
               - photo
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/recommendations/photo":
     post:
@@ -1352,6 +1352,8 @@ paths:
       - RECOMMEND / 추천
       summary: 사진 기반 음악 추천
       operationId: postApiRecommendationsPhoto
+      security:
+      - bearerAuth: []
       description: 임시 업로드된 사진을 AI가 분석해 음악을 최대 3곡 추천한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.
       responses:
         '200':
@@ -1374,15 +1376,29 @@ paths:
                           type: string
                         artistName:
                           type: string
+                        albumImageUrl:
+                          type: string
+                        externalUrl:
+                          type: string
+                      required:
+                      - externalTrackId
+                      - title
+                      - artistName
+                      - albumImageUrl
+                      - externalUrl
               example:
                 message: 사진 기반 음악 추천 성공
                 data:
                 - externalTrackId: 6rqhFgbbKwnb9MLmUQDhG6
                   title: 밤편지
                   artistName: 아이유
+                  albumImageUrl: https://i.scdn.co/image/example
+                  externalUrl: https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6
                 - externalTrackId: 4exampleTrackId000001
                   title: 추천곡 2
                   artistName: 아티스트 2
+                  albumImageUrl: https://i.scdn.co/image/example-2
+                  externalUrl: https://open.spotify.com/track/4exampleTrackId000001
         '400':
           description: 필수 Request Body 값인 uploadId가 누락되어 요청 유효성 검증에 실패했으므로 400.
           content:
@@ -1410,8 +1426,8 @@ paths:
                 message: 입력값을 확인해주세요.
                 errors:
                 - field: uploadId
-                  code: UPLOAD_ID_REQUIRED
-                  message: 업로드 이미지 식별자가 필요합니다.
+                  code: INVALID_INPUT_VALUE
+                  message: 입력값을 확인해주세요.
         '401':
           description: 사진 기반 음악 추천은 사용자가 소유한 임시 업로드 이미지를 사용하므로, 유효한 Access Token이 없거나 인증에 실패한 경우 401.
           content:
@@ -1478,9 +1494,11 @@ paths:
                 uploadId:
                   type: integer
                   format: int64
+              required:
+              - uploadId
             example:
               uploadId: 123
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/records":
     post:
@@ -1493,7 +1511,11 @@ paths:
         location.latitude: Double
         location.longitude: Double
         music.externalTrackId: String
-        moodScore: Integer
+        music.title: String
+        music.artistName: String
+        music.albumImageUrl: String
+        music.externalUrl: String
+        moodScore: Integer (-50 이상 50 이하)
         uploadId: Long
 
         선택
@@ -1515,10 +1537,10 @@ paths:
         - legalDongCode와 legalDongName은 둘 다 값이 있거나 둘 다 null이어야 한다.
         - Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 null/null로 대체하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다.
         - 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다.
-        - 동일·근접 좌표에서 기존 place를 재사용할지 신규 place를 생성할지는 아직 미정이며 구현자가 임의로 확정하지 않는다.
+        - latitude와 longitude가 모두 정확히 동일한 기존 place가 있는 경우에만 재사용한다. 근접 좌표는 기존 place로 판단하지 않으며, 동일 좌표가 없으면 새로운 place를 생성한다.
         - 대시보드는 places.legal_dong_code를 기준으로 그룹화한다. legal_dong_code가 null인 데이터는 하나의 미확인 그룹으로 집계하고 UI에서 "확인할 수 없음"으로 표시한다.
         - legalDongName은 nullable이며 DB의 places.legal_dong_name을 그대로 반환한다. "확인할 수 없음" 문자열은 DB/API 값으로 저장하지 않는다.
-        - 신규 externalTrackId는 Spotify API를 통해 재검증한다.
+        - 요청으로 전달된 음악 메타데이터를 사용하며, 기존 externalTrackId는 재사용하고 신규 externalTrackId는 요청값으로 music_tracks에 저장한다. 자물쇠 생성 과정에서는 Spotify API를 재호출하지 않는다.
         - 날씨/기온은 백엔드에서 자동 조회하며 클라이언트가 전달하지 않는다.
         - 위·경도를 기상청 격자(nx, ny)로 변환한 뒤 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고, 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회·저장한다.
         - 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각의 forecast_at을 사용한다. 예: 15:10 → 15:00, 15:50 → 16:00.
@@ -1677,13 +1699,28 @@ paths:
                   properties:
                     externalTrackId:
                       type: string
+                    title:
+                      type: string
+                    artistName:
+                      type: string
+                    albumImageUrl:
+                      type: string
+                    externalUrl:
+                      type: string
                   required:
                   - externalTrackId
+                  - title
+                  - artistName
+                  - albumImageUrl
+                  - externalUrl
                 moodScore:
                   type: integer
                   format: int64
+                  minimum: -50
+                  maximum: 50
                 comment:
                   type: string
+                  maxLength: 80
                 uploadId:
                   type: integer
                   format: int64
@@ -1700,6 +1737,10 @@ paths:
                 legalDongName: 오산동
               music:
                 externalTrackId: "..."
+                title: "..."
+                artistName: "..."
+                albumImageUrl: "..."
+                externalUrl: "..."
               moodScore: 4
               comment: 좋았다
               uploadId: 123
@@ -1778,6 +1819,8 @@ paths:
                               type: string
                             artistName:
                               type: string
+                            albumImageUrl:
+                              type: string
                             createdAt:
                               type: string
                               format: date-time
@@ -1795,6 +1838,7 @@ paths:
                     musicTrackId: 583
                     title: 밤편지
                     artistName: 아이유
+                    albumImageUrl: https://i.scdn.co/image/example
                     createdAt: '2026-09-19T18:30:00+09:00'
                   nextCursor: 
         '400':
@@ -1819,17 +1863,15 @@ paths:
 
         정책 및 설명
         - 특정 자물쇠의 상세 정보를 조회한다.
-        - 인증된 활성 사용자만 조회할 수 있다.
-        - 자물쇠 소유자 본인은 조회할 수 있다.
-        - 현재 친구 관계인 사용자의 자물쇠도 조회할 수 있다.
+        - 인증된 활성 사용자는 본인이 생성한 자물쇠만 조회할 수 있다.
+        - 친구의 자물쇠 상세 조회는 v1에서 지원하지 않는다.
         - 삭제된 자물쇠는 조회할 수 없다.
-        - 존재하지 않는 기록, 삭제된 기록, 조회 권한이 없는 기록은 외부에서 구분되지 않도록 동일하게 404 처리한다.
-        - 친구 관계는 요청 시점의 현재 관계를 다시 확인한다.
+        - 존재하지 않는 기록, 삭제된 기록, 다른 사용자 소유 기록은 외부에서 구분되지 않도록 동일하게 RECORD_NOT_FOUND(404) 처리한다.
         - place.legalDongName은 places.legal_dong_name을 반환한다.
         - legalDongName은 nullable이다. null이면 프론트 UI에서 "확인할 수 없음"으로 표시하며 API는 null을 그대로 반환한다.
       responses:
         '200':
-          description: 조회 권한이 있는 존재하는 기록을 정상 반환했으므로 200.
+          description: 로그인 사용자가 소유한 삭제되지 않은 기록을 정상 반환했으므로 200.
           content:
             application/json:
               schema:
@@ -1881,16 +1923,21 @@ paths:
                             type: string
                       weatherCondition:
                         type: string
+                        nullable: true
                       temperature:
                         type: number
                         format: double
+                        nullable: true
                       moodScore:
                         type: integer
                         format: int64
                       comment:
                         type: string
+                        nullable: true
                       photoUrl:
                         type: string
+                        format: uri
+                        description: private GCS 객체에 대한 read Signed URL이며, 발급 후 10분간 유효하다.
                       createdAt:
                         type: string
                         format: date-time
@@ -1918,7 +1965,7 @@ paths:
                   photoUrl: "..."
                   createdAt: '2026-08-24T18:30:00'
         '400':
-          description: recordId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.
+          description: recordId가 0 이하이므로 INVALID_INPUT_VALUE와 INVALID_RECORD_ID field error를 반환한다.
           content:
             application/json:
               schema:
@@ -1961,7 +2008,7 @@ paths:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
         '404':
-          description: 미존재/삭제/비인가 여부를 외부에서 구분하지 않도록 404로 통일.
+          description: 미존재/삭제/다른 사용자 소유 여부를 외부에서 구분하지 않도록 RECORD_NOT_FOUND(404)로 통일.
           content:
             application/json:
               schema:
@@ -1997,7 +2044,7 @@ paths:
           format: int64
       security:
       - bearerAuth: []
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
     delete:
       tags:
       - RECORD / 자물쇠
@@ -2101,7 +2148,9 @@ paths:
         schema:
           type: integer
           format: int64
-      x-implementation-status: contract-only
+      security:
+      - bearerAuth: []
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/records/{recordId}/comment":
     patch:
@@ -2111,13 +2160,13 @@ paths:
       operationId: patchApiRecordsRecordIdComment
       description: |-
         필수
-        recordId: Long
-        comment: String | null (최대 80자)
+        path recordId: Long
+        body comment: String | null (키 필수, 최대 80자)
 
         선택
         없음
 
-        생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다.
+        생성 후 수정 가능한 필드는 comment만이다. comment=null이면 코멘트를 삭제한다. 빈 문자열은 변환하지 않고 그대로 저장한다.
       responses:
         '200':
           description: 기존 자원의 부분 수정이 정상 완료되었으므로 200.
@@ -2136,6 +2185,7 @@ paths:
                         format: int64
                       comment:
                         type: string
+                        nullable: true
               example:
                 message: 코멘트 수정 성공
                 data:
@@ -2233,13 +2283,15 @@ paths:
               properties:
                 comment:
                   type: string
-                recordId: {}
+                  nullable: true
+                  maxLength: 80
               required:
-              - recordId
               - comment
             example:
               comment: 수정된 코멘트
-      x-implementation-status: contract-only
+      security:
+      - bearerAuth: []
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/users/me/friends":
     get:
@@ -3147,12 +3199,34 @@ paths:
                       stats:
                         type: object
                         properties:
-                          "...":
+                          recordCount:
+                            type: integer
+                          topPlace:
+                            nullable: true
+                            type: object
+                            properties:
+                              placeId:
+                                type: integer
+                                format: int64
+                              legalDongName:
+                                type: string
+                          topArtistName:
+                            nullable: true
                             type: string
+                          averageMoodScore:
+                            nullable: true
+                            type: number
                       photoScenes:
                         type: array
                         items:
-                          type: string
+                          type: object
+                          properties:
+                            sceneTag:
+                              type: string
+                            count:
+                              type: integer
+                            ratio:
+                              type: integer
                       aiRecap:
                         type: object
                         properties:
@@ -3167,10 +3241,16 @@ paths:
                   year: 2026
                   month: 8
                   stats:
-                    "...": "..."
+                    recordCount: 15
+                    topPlace:
+                      placeId: 10
+                      legalDongName: 역삼동
+                    topArtistName: 아이유
+                    averageMoodScore: 24.3
                   photoScenes:
-                  - 야경
-                  - 공원
+                  - sceneTag: 야경
+                    count: 3
+                    ratio: 60
                   aiRecap:
                     status: COMPLETED
                     text: "..."
@@ -3252,7 +3332,7 @@ paths:
         schema:
           type: integer
           format: int64
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/recommendations/playlists":
     get:
       tags:
@@ -3327,7 +3407,7 @@ paths:
               example:
                 code: INTERNAL_SERVER_ERROR
                 message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
     post:
       tags:
       - RECOMMEND / 추천
@@ -3348,6 +3428,31 @@ paths:
         - 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.
         - 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.
         - 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - latitude
+              - longitude
+              properties:
+                latitude:
+                  type: number
+                  format: double
+                  minimum: -90
+                  maximum: 90
+                  description: 현재 위치의 위도
+                longitude:
+                  type: number
+                  format: double
+                  minimum: -180
+                  maximum: 180
+                  description: 현재 위치의 경도
+            example:
+              latitude: 37.5665
+              longitude: 126.9780
       responses:
         '201':
           description: 새 추천 플레이리스트 리소스가 생성되므로 201.
@@ -3440,6 +3545,20 @@ paths:
               example:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
+        '502':
+          description: 현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: WEATHER_API_ERROR
+                message: 날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
         '500':
           description: MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.
           content:
@@ -3454,43 +3573,7 @@ paths:
               example:
                 code: INTERNAL_SERVER_ERROR
                 message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-        '502':
-          description: |-
-            추천 생성에 필수적인 날씨·기온을 최신 발표본 조회와 허용된 바로 직전 발표본 fallback 모두에서 확보하지 못한 경우 502.
-
-            추가 케이스: MULO 백엔드가 의존하는 AI 추천 서버 처리 실패이므로 502. AI 연동 오류 코드는 AI_SERVICE_ERROR로 통일한다.
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  code:
-                    type: string
-                  message:
-                    type: string
-              example:
-                code: WEATHER_API_ERROR
-                message: 날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              type: object
-              properties:
-                latitude:
-                  type: number
-                  format: double
-                longitude:
-                  type: number
-                  format: double
-              required:
-              - latitude
-              - longitude
-            example:
-              latitude: 37.54
-              longitude: 127.03
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/weather":
     get:
@@ -5331,6 +5414,7 @@ paths:
                   items:
                     type: integer
                     format: int64
+                    minimum: 1
               required:
               - placeIds
             example:
@@ -5550,6 +5634,8 @@ paths:
                               type: string
                             artistName:
                               type: string
+                            albumImageUrl:
+                              type: string
                             createdAt:
                               type: string
                               format: date-time
@@ -5566,6 +5652,7 @@ paths:
                         musicTrackId: 583
                         title: 밤편지
                         artistName: 아이유
+                        albumImageUrl: https://i.scdn.co/image/example
                         createdAt: '2026-09-19T15:30:00'
                       nextCursor: exampleCursor
                 example2:

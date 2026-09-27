@@ -16,8 +16,10 @@ import org.springframework.security.config.annotation.web.configuration.EnableWe
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.test.context.web.WebAppConfiguration;
+import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
@@ -27,7 +29,10 @@ import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
+import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -142,6 +147,13 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void actuatorHealthGetIsPublicForDockerHealthcheck() throws Exception {
+        mvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("health"));
+    }
+
+    @Test
     void profileWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized())
@@ -164,6 +176,19 @@ class SecurityIntegrationTests {
                         .cookie(cookie)
                         .header("X-XSRF-TOKEN", cookie.getValue()))
                 .andExpect(status().isUnauthorized());
+    }
+
+    @Test
+    void popularTracksPostIsPublicButStillRequiresCsrf() throws Exception {
+        mvc.perform(post("/api/places/popular-tracks/search"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/places/popular-tracks/search")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
     }
 
     @Test
@@ -193,6 +218,27 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void uploadWithoutCsrfReturnsForbidden() throws Exception {
+        mvc.perform(multipart("/api/uploads")
+                        .file(new MockMultipartFile("photo", "photo.jpg", "image/jpeg",
+                                new byte[]{1})))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+    }
+
+    @Test
+    void uploadWithCsrfWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        Cookie cookie = csrfCookie();
+        mvc.perform(multipart("/api/uploads")
+                        .file(new MockMultipartFile("photo", "photo.jpg", "image/jpeg",
+                                new byte[]{1}))
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
         mvc.perform(patch("/api/users/me/nickname"))
                 .andExpect(status().isForbidden())
@@ -218,6 +264,45 @@ class SecurityIntegrationTests {
                         .header("X-XSRF-TOKEN", cookie.getValue()))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void recordCommentUpdateRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(patch("/api/records/1/comment")
+                        .contentType("application/json")
+                        .content("{\"comment\":\"comment\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(patch("/api/records/1/comment")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"comment\":\"comment\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void recordDeleteRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(delete("/api/records/1"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(delete("/api/records/1")
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(delete("/api/records/1")
+                        .with(user("record-owner"))
+                        .cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk())
+                .andExpect(content().string("record deleted"));
     }
 
     @Test
@@ -273,6 +358,10 @@ class SecurityIntegrationTests {
         @ResponseStatus(HttpStatus.CREATED)
         void signup() { }
 
+        @PostMapping("/api/uploads")
+        @ResponseStatus(HttpStatus.CREATED)
+        void upload() { }
+
         @GetMapping("/api/private")
         String privateResource() { return "protected"; }
 
@@ -283,7 +372,20 @@ class SecurityIntegrationTests {
         @GetMapping("/api/weather")
         String weather() { return "weather"; }
 
+        // Docker healthcheck가 인증 없이 상태만 확인할 수 있는 Actuator 경로를 모사한다.
+        @GetMapping("/actuator/health")
+        String health() { return "health"; }
+
         @GetMapping("/api/places/popular")
         String allRecordMarkers() { return "markers"; }
+
+        @PostMapping("/api/places/popular-tracks/search")
+        String popularTracks() { return "popular tracks"; }
+
+        @org.springframework.web.bind.annotation.PatchMapping("/api/records/{recordId}/comment")
+        String updateRecordComment() { return "comment updated"; }
+
+        @DeleteMapping("/api/records/{recordId}")
+        String deleteRecord() { return "record deleted"; }
     }
 }

@@ -100,7 +100,8 @@ class UserControllerTest {
         when(recordService.getMyPlaceRecords(1L, List.of(10L), null))
                 .thenReturn(new MyPlaceRecordsResponseDto(
                         List.of(new MyPlaceRecordResponseDto(101L, 10L, 583L,
-                                "밤편지", "아이유", LocalDateTime.of(2026, 9, 19, 15, 30))),
+                                "밤편지", "아이유", "album-image",
+                                LocalDateTime.of(2026, 9, 19, 15, 30))),
                         null));
 
         authenticatedUserRequest("{\"placeIds\":[10],\"cursor\":null}")
@@ -108,6 +109,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("내 자물쇠 목록 조회 성공"))
                 .andExpect(jsonPath("$.data.records.length()").value(1))
                 .andExpect(jsonPath("$.data.records[0].placeId").value(10))
+                .andExpect(jsonPath("$.data.records[0].albumImageUrl").value("album-image"))
                 .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
     }
 
@@ -190,7 +192,7 @@ class UserControllerTest {
     private List<MyPlaceRecordResponseDto> twentyRecords() {
         return IntStream.rangeClosed(1, 20)
                 .mapToObj(id -> new MyPlaceRecordResponseDto(
-                        (long) id, 10L, 583L, "밤편지", "아이유",
+                        (long) id, 10L, 583L, "밤편지", "아이유", "album-image",
                         LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id)))
                 .toList();
     }
