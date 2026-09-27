@@ -6,11 +6,12 @@ import java.time.OffsetDateTime;
 import java.util.List;
 
 public interface RecommendationAiClient {
-    // 추천 문맥에 맞는 내부 추천 곡 목록을 반환한다.
-    List<RecommendedTrack> recommend(RecommendationContext context);
+    // AI Gateway에 추천 문맥을 전달하고 저장 여부를 판단할 수 있는 추천 결과를 반환한다.
+    RecommendationResult recommend(RecommendationContext context);
 
-    record RecommendationContext(WeatherCondition weatherCondition, BigDecimal temperature,
+    record RecommendationContext(Long userId, WeatherCondition weatherCondition, BigDecimal temperature,
             OffsetDateTime requestedAt) { }
+    record RecommendationResult(List<RecommendedTrack> tracks, boolean degraded) { }
     record RecommendedTrack(String externalTrackId, String title, String artistName,
             String albumImageUrl, String externalUrl) { }
 }

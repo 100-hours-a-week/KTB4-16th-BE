@@ -147,6 +147,13 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void actuatorHealthGetIsPublicForDockerHealthcheck() throws Exception {
+        mvc.perform(get("/actuator/health"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("health"));
+    }
+
+    @Test
     void profileWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me"))
                 .andExpect(status().isUnauthorized())
@@ -364,6 +371,10 @@ class SecurityIntegrationTests {
         // 날씨 조회는 공용 예보 데이터만 반환하므로 비인증 GET을 허용한다.
         @GetMapping("/api/weather")
         String weather() { return "weather"; }
+
+        // Docker healthcheck가 인증 없이 상태만 확인할 수 있는 Actuator 경로를 모사한다.
+        @GetMapping("/actuator/health")
+        String health() { return "health"; }
 
         @GetMapping("/api/places/popular")
         String allRecordMarkers() { return "markers"; }

@@ -9,12 +9,12 @@ import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQuerySe
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
+import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -34,12 +34,14 @@ public class RecommendationPlaylistController {
 
     // 좌표를 검증하고 현재 날씨 기반 추천 플레이리스트 생성을 서비스 계층에 위임한다.
     @PostMapping
-    @ResponseStatus(HttpStatus.CREATED)
-    public RecommendationPlaylistResponse createPlaylist(
+    public ResponseEntity<RecommendationPlaylistResponse> createPlaylist(
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody CreateRecommendationPlaylistRequest request) {
-        var playlist = commandService.create(userId, request);
-        return new RecommendationPlaylistResponse(RecommendationMessage.PLAYLIST_CREATED.message(),
-                new RecommendationPlaylistData(playlist));
+        var result = commandService.create(userId, request);
+        RecommendationMessage message = result.replaced()
+                ? RecommendationMessage.PLAYLIST_CREATED : RecommendationMessage.PLAYLIST_RETAINED;
+        HttpStatus status = result.replaced() ? HttpStatus.CREATED : HttpStatus.OK;
+        return ResponseEntity.status(status).body(new RecommendationPlaylistResponse(message.message(),
+                new RecommendationPlaylistData(result.playlist())));
     }
 }

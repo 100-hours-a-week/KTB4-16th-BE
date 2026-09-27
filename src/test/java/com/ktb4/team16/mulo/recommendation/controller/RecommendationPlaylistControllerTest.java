@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
+import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
@@ -66,7 +67,8 @@ class RecommendationPlaylistControllerTest {
         authenticate(7L);
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(4L,
                 List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "url")));
-        when(commandService.create(eq(7L), any())).thenReturn(playlist);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(playlist, true));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -74,6 +76,35 @@ class RecommendationPlaylistControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("추천 플레이리스트 생성 성공"))
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4));
+    }
+
+    @Test
+    void retainsExistingPlaylistWhenAiReturnsNoRecommendation() throws Exception {
+        authenticate(7L);
+        RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(3L,
+                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "url")));
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(playlist, false));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("추천 결과가 없어 기존 플레이리스트 유지"))
+                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3));
+    }
+
+    @Test
+    void returnsNullPlaylistWhenNoRecommendationAndNoExistingPlaylist() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, false));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.playlist").doesNotExist());
     }
 
     @Test
@@ -98,6 +129,18 @@ class RecommendationPlaylistControllerTest {
                         .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("WEATHER_API_ERROR"));
+    }
+
+    @Test
+    void convertsAiFailureToBadGateway() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenThrow(new RecommendationAiException());
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                .andExpect(status().isBadGateway())
+                .andExpect(jsonPath("$.code").value("AI_SERVICE_ERROR"));
     }
 
     // 인증 필터가 저장한 사용자 식별자를 컨트롤러 테스트에 설정한다.
