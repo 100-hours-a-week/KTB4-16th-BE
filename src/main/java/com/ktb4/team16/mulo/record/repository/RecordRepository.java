@@ -6,6 +6,9 @@ import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.report.dto.MonthlyRecordSummary;
+import com.ktb4.team16.mulo.report.dto.MonthlyTopArtist;
+import com.ktb4.team16.mulo.report.dto.MonthlyTopPlace;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -16,6 +19,74 @@ import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RecordRepository extends JpaRepository<Record, Long> {
+
+    // 기간 내 활성 기록이 있는 사용자만 월간 리포트 생성 대상으로 조회한다.
+    @Query("""
+        SELECT DISTINCT r.user.userId
+        FROM Record r
+        WHERE r.deletedAt IS NULL
+            AND r.createdAt >= :startInclusive
+            AND r.createdAt < :endExclusive
+        ORDER BY r.user.userId ASC
+        """)
+    List<Long> findUsersWithActiveRecordsInPeriod(
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
+
+    // 사용자·기간의 활성 기록 수와 평균 기분을 월간 스냅샷용으로 집계한다.
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyRecordSummary(
+            COUNT(r), AVG(r.moodScore)
+        )
+        FROM Record r
+        WHERE r.user.userId = :userId
+            AND r.deletedAt IS NULL
+            AND r.createdAt >= :startInclusive
+            AND r.createdAt < :endExclusive
+        """)
+    Optional<MonthlyRecordSummary> findMonthlyRecordSummary(
+            @Param("userId") Long userId,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive
+    );
+
+    // 기록 수 동률이면 가장 최근 기록이 있는 장소를 월간 대표 장소로 우선한다.
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyTopPlace(r.place.placeId)
+        FROM Record r
+        WHERE r.user.userId = :userId
+            AND r.deletedAt IS NULL
+            AND r.createdAt >= :startInclusive
+            AND r.createdAt < :endExclusive
+        GROUP BY r.place.placeId
+        ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, r.place.placeId ASC
+        """)
+    List<MonthlyTopPlace> findMonthlyTopPlaces(
+            @Param("userId") Long userId,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive,
+            Pageable pageable
+    );
+
+    // 기록 수 동률이면 가장 최근 기록이 있는 아티스트를 월간 대표 아티스트로 우선한다.
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyTopArtist(m.artistName)
+        FROM Record r
+        JOIN r.musicTrack m
+        WHERE r.user.userId = :userId
+            AND r.deletedAt IS NULL
+            AND r.createdAt >= :startInclusive
+            AND r.createdAt < :endExclusive
+        GROUP BY m.artistName
+        ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, m.artistName ASC
+        """)
+    List<MonthlyTopArtist> findMonthlyTopArtists(
+            @Param("userId") Long userId,
+            @Param("startInclusive") LocalDateTime startInclusive,
+            @Param("endExclusive") LocalDateTime endExclusive,
+            Pageable pageable
+    );
 
     Optional<Record> findByRecordIdAndUser_UserIdAndDeletedAtIsNull(
             Long recordId,
