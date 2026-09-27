@@ -70,6 +70,7 @@ jobs:
           SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
           AI_BASE_URL=${{ secrets.AI_BASE_URL }}
           AI_INTERNAL_TOKEN=${{ secrets.AI_INTERNAL_TOKEN }}
+          MULO_SECURITY_ALLOWED_ORIGINS=${{ secrets.MULO_SECURITY_ALLOWED_ORIGINS }}
           ENVEOF
 
       # 4. env 파일을 Standby VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
