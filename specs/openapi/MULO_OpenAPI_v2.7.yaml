@@ -1801,6 +1801,8 @@ paths:
                               type: string
                             artistName:
                               type: string
+                            albumImageUrl:
+                              type: string
                             createdAt:
                               type: string
                               format: date-time
@@ -1818,6 +1820,7 @@ paths:
                     musicTrackId: 583
                     title: 밤편지
                     artistName: 아이유
+                    albumImageUrl: https://i.scdn.co/image/example
                     createdAt: '2026-09-19T18:30:00+09:00'
                   nextCursor: 
         '400':
@@ -5585,6 +5588,8 @@ paths:
                               type: string
                             artistName:
                               type: string
+                            albumImageUrl:
+                              type: string
                             createdAt:
                               type: string
                               format: date-time
@@ -5601,6 +5606,7 @@ paths:
                         musicTrackId: 583
                         title: 밤편지
                         artistName: 아이유
+                        albumImageUrl: https://i.scdn.co/image/example
                         createdAt: '2026-09-19T15:30:00'
                       nextCursor: exampleCursor
                 example2:

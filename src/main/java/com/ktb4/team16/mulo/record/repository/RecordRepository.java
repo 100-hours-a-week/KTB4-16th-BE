@@ -179,7 +179,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -196,7 +196,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -217,7 +217,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -234,7 +234,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -250,7 +250,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -271,7 +271,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
         )
         FROM Record r
         JOIN r.musicTrack m
