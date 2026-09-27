@@ -10,4 +10,9 @@ public interface MonthlyReportRepository extends JpaRepository<MonthlyReport, Lo
     List<MonthlyReport> findByUser_UserIdOrderByReportYearDescReportMonthDesc(Long userId);
 
     Optional<MonthlyReport> findByMonthlyReportIdAndUser_UserId(Long monthlyReportId, Long userId);
+
+    Optional<MonthlyReport> findByUser_UserIdAndReportYearAndReportMonth(Long userId, short year,
+            short month);
+
+    List<MonthlyReport> findByReportYearAndReportMonth(short year, short month);
 }
