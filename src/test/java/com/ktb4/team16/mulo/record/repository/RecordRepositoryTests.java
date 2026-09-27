@@ -8,6 +8,9 @@ import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.report.dto.MonthlyRecordSummary;
+import com.ktb4.team16.mulo.report.dto.MonthlyTopArtist;
+import com.ktb4.team16.mulo.report.dto.MonthlyTopPlace;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -146,6 +149,41 @@ class RecordRepositoryTests {
     }
 
     @Test
+    void monthlyAggregationUsesOnlyActiveRecordsInPeriodAndResolvesTiesByLatestRecord() {
+        long userId = insertUser();
+        long anotherUserId = insertUser();
+        long firstPlace = insertPlace(LEGAL_DONG_CODE, "첫장소", "-33.0000000", "-150.0000000");
+        long secondPlace = insertPlace(LEGAL_DONG_CODE, "둘장소", "-33.1000000", "-150.1000000");
+        long firstTrack = insertTrack("first", "첫아티스트");
+        long secondTrack = insertTrack("second", "둘아티스트");
+        LocalDateTime start = LocalDateTime.of(2026, 8, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 1, 0, 0);
+
+        insertRecord(userId, firstPlace, firstTrack, (byte) 10, start.plusDays(2), null);
+        insertRecord(userId, firstPlace, firstTrack, (byte) 30, start.plusDays(10), null);
+        insertRecord(userId, secondPlace, secondTrack, (byte) 20, start.plusDays(3), null);
+        insertRecord(userId, secondPlace, secondTrack, (byte) 40, start.plusDays(20), null);
+        insertRecord(userId, secondPlace, secondTrack, (byte) 50, start.plusDays(21), start.plusDays(22));
+        insertRecord(userId, firstPlace, firstTrack, (byte) -10, start.minusSeconds(1), null);
+        insertRecord(userId, firstPlace, firstTrack, (byte) -10, end, null);
+        insertRecord(anotherUserId, firstPlace, firstTrack, (byte) -10, start.plusDays(5), null);
+
+        assertThat(recordRepository.findUsersWithActiveRecordsInPeriod(start, end))
+                .containsExactly(userId, anotherUserId);
+        MonthlyRecordSummary summary = recordRepository.findMonthlyRecordSummary(userId, start, end)
+                .orElseThrow();
+        MonthlyTopPlace topPlace = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+        MonthlyTopArtist topArtist = recordRepository.findMonthlyTopArtists(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+
+        assertThat(summary.recordCount()).isEqualTo(4L);
+        assertThat(summary.averageMoodScore()).isEqualTo(25.0);
+        assertThat(topPlace.placeId()).isEqualTo(secondPlace);
+        assertThat(topArtist.artistName()).isEqualTo("둘아티스트");
+    }
+
+    @Test
     void myPlaceMarkersCountOnlyMyActiveInBoundsRecordsOncePerPlace() {
         long me = insertUser();
         long other = insertUser();
@@ -237,11 +275,15 @@ class RecordRepositoryTests {
     }
 
     private long insertTrack(String title) {
+        return insertTrack(title, "artist");
+    }
+
+    private long insertTrack(String title, String artistName) {
         String externalId = UUID.randomUUID().toString().substring(0, 20);
         return insert("""
                 INSERT INTO music_tracks (external_track_id, title, artist_name, album_image_url, external_url)
                 VALUES (?, ?, ?, ?, ?)
-                """, externalId, title, "artist", "album", "external");
+                """, externalId, title, artistName, "album", "external");
     }
 
     private long insertRecord(
@@ -251,10 +293,21 @@ class RecordRepositoryTests {
             LocalDateTime createdAt,
             LocalDateTime deletedAt
     ) {
+        return insertRecord(userId, placeId, musicTrackId, (byte) 0, createdAt, deletedAt);
+    }
+
+    private long insertRecord(
+            long userId,
+            long placeId,
+            long musicTrackId,
+            byte moodScore,
+            LocalDateTime createdAt,
+            LocalDateTime deletedAt
+    ) {
         return insert("""
                 INSERT INTO records (user_id, place_id, music_track_id, mood_score, created_at, deleted_at)
                 VALUES (?, ?, ?, ?, ?, ?)
-                """, userId, placeId, musicTrackId, 0, createdAt, deletedAt);
+                """, userId, placeId, musicTrackId, moodScore, createdAt, deletedAt);
     }
 
     private long insert(String sql, Object... values) {

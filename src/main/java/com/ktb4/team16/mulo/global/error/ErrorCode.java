@@ -47,6 +47,7 @@ public enum ErrorCode {
 
     UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "업로드를 찾을 수 없습니다."),
     RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "자물쇠를 찾을 수 없습니다."),
+    MONTHLY_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "월간 리포트를 찾을 수 없습니다."),
 
     WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
             "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),

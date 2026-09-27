@@ -13,6 +13,8 @@ import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
+import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
+import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
 import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
 import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
 import com.ktb4.team16.mulo.upload.exception.InvalidImageFormatException;
@@ -126,6 +128,20 @@ public class GlobalExceptionHandler {
             RecordNotFoundException exception) {
         return ResponseEntity.status(ErrorCode.RECORD_NOT_FOUND.status())
                 .body(ErrorResponse.of(ErrorCode.RECORD_NOT_FOUND));
+    }
+
+    @ExceptionHandler(MonthlyReportNotFoundException.class)
+    public ResponseEntity<ErrorResponse> handleMonthlyReportNotFound(
+            MonthlyReportNotFoundException exception) {
+        return ResponseEntity.status(ErrorCode.MONTHLY_REPORT_NOT_FOUND.status())
+                .body(ErrorResponse.of(ErrorCode.MONTHLY_REPORT_NOT_FOUND));
+    }
+
+    @ExceptionHandler(InvalidMonthlyReportGenerationRequestException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMonthlyReportGenerationRequest(
+            InvalidMonthlyReportGenerationRequestException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
     }
 
     @ExceptionHandler(MusicSearchRateLimitedException.class)
