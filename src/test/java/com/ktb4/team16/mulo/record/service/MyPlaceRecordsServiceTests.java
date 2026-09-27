@@ -88,7 +88,7 @@ class MyPlaceRecordsServiceTests {
     private List<MyPlaceRecordResponseDto> records(int count) {
         return java.util.stream.IntStream.rangeClosed(1, count)
                 .mapToObj(id -> new MyPlaceRecordResponseDto(
-                        (long) id, 10L, 583L, "밤편지", "아이유",
+                        (long) id, 10L, 583L, "밤편지", "아이유", "album-image",
                         LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id)))
                 .toList();
     }

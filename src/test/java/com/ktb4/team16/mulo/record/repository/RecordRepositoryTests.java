@@ -212,7 +212,9 @@ class RecordRepositoryTests {
         assertThat(new HashSet<>(ids)).hasSize(5);
         assertThat(first.getFirst().musicTrackId()).isEqualTo(trackId);
         assertThat(first.getFirst().placeId()).isEqualTo(secondPlace);
+        assertThat(first.getFirst().albumImageUrl()).isEqualTo("album");
         assertThat(second.getFirst().placeId()).isEqualTo(secondPlace);
+        assertThat(second.getFirst().albumImageUrl()).isEqualTo("album");
     }
 
     private long insertUser() {

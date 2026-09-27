@@ -51,7 +51,7 @@ class RecordRegionRecordsServiceTests {
     void returnsOnlySelectedRegionRecords() {
         LocalDateTime createdAt = LocalDateTime.of(2026, 9, 25, 12, 0);
         MyPlaceRecordResponseDto record = new MyPlaceRecordResponseDto(
-                1L, 10L, 20L, "곡", "가수", createdAt);
+                1L, 10L, 20L, "곡", "가수", "album-image", createdAt);
         when(recordRepository.findMyRecordsByLegalDongCode(eq(1L), eq("4111710100"), any(Pageable.class)))
                 .thenReturn(List.of(record));
         when(recordRepository.findMyRecordRegion(eq(1L), eq("4111710100")))

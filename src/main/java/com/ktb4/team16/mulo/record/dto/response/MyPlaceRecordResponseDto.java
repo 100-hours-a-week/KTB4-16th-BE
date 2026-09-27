@@ -8,6 +8,7 @@ public record MyPlaceRecordResponseDto(
             Long musicTrackId,
             String title,
             String artistName,
+            String albumImageUrl,
             LocalDateTime createdAt
     ) {
 }
