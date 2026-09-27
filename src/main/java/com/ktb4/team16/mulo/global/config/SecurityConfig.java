@@ -96,7 +96,7 @@ public class SecurityConfig {
     @Bean
     CorsConfigurationSource corsConfigurationSource(SecurityProperties properties) {
         var source = new UrlBasedCorsConfigurationSource();
-        // 운영 기본값은 빈 목록: same-origin만 사용하며 외부 Origin을 허용하지 않는다.
+        // 운영·로컬 프로필이 설정한 명시적 Origin만 인증 Cookie와 함께 허용한다.
         var cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.allowedOrigins());
         cors.setAllowCredentials(true);

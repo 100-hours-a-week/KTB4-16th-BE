@@ -24,6 +24,7 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 @SpringJUnitConfig(SecurityIntegrationTests.TestConfig.class)
 @WebAppConfiguration
 @TestPropertySource(properties = {
+        "mulo.security.allowed-origins=https://mulostudio.com",
         "mulo.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "mulo.jwt.access-token-ttl=PT1H",
         "mulo.jwt.refresh-token-ttl=P7D"
@@ -56,6 +57,16 @@ class ProductionSecurityTests {
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    // 운영 프론트 도메인의 사전 요청에는 인증 Cookie 사용을 위한 CORS 헤더를 반환한다.
+    @Test
+    void productionAllowsMulostudioCrossOriginRequests() throws Exception {
+        mvc.perform(options("/api/users/signup").header("Origin", "https://mulostudio.com")
+                        .header("Access-Control-Request-Method", "POST"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "https://mulostudio.com"))
+                .andExpect(header().string("Access-Control-Allow-Credentials", "true"));
     }
 
     @Test
