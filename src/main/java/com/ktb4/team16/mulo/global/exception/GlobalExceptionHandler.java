@@ -15,6 +15,8 @@ import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
+import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportAiCallbackException;
+import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
 import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
 import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
 import com.ktb4.team16.mulo.upload.exception.InvalidImageFormatException;
@@ -142,6 +144,19 @@ public class GlobalExceptionHandler {
             InvalidMonthlyReportGenerationRequestException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(InvalidMonthlyReportAiCallbackException.class)
+    public ResponseEntity<ErrorResponse> handleInvalidMonthlyReportAiCallback(
+            InvalidMonthlyReportAiCallbackException exception) {
+        return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
+                .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(MonthlyReportAiException.class)
+    public ResponseEntity<ErrorResponse> handleMonthlyReportAi(MonthlyReportAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
     }
 
     @ExceptionHandler(MusicSearchRateLimitedException.class)
