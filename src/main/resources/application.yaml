@@ -63,3 +63,10 @@ spotify:
   user-limit-30-seconds: 8
   user-limit-60-seconds: 15
   global-limit-30-seconds: 80
+
+ai:
+  base-url: ${AI_BASE_URL:http://localhost:8000}
+  internal-token: ${AI_INTERNAL_TOKEN}
+  connect-timeout: PT5S
+  read-timeout: PT30S
+  mock-enabled: ${AI_MOCK_ENABLED:false}

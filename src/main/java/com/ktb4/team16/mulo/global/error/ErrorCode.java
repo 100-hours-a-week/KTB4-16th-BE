@@ -54,6 +54,8 @@ public enum ErrorCode {
             "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."),
     MUSIC_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,
             "음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요."),
+    AI_SERVICE_ERROR(HttpStatus.BAD_GATEWAY,
+            "AI 추천 서비스를 처리하지 못했습니다."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
