@@ -43,7 +43,8 @@ mulo:
     access-token-ttl: PT1H
     refresh-token-ttl: P7D
   security:
-    allowed-origins: []
+    allowed-origins:
+      - https://mulostudio.com
     cookie-secure: true
 
 kakao:
