@@ -3181,12 +3181,34 @@ paths:
                       stats:
                         type: object
                         properties:
-                          "...":
+                          recordCount:
+                            type: integer
+                          topPlace:
+                            nullable: true
+                            type: object
+                            properties:
+                              placeId:
+                                type: integer
+                                format: int64
+                              legalDongName:
+                                type: string
+                          topArtistName:
+                            nullable: true
                             type: string
+                          averageMoodScore:
+                            nullable: true
+                            type: number
                       photoScenes:
                         type: array
                         items:
-                          type: string
+                          type: object
+                          properties:
+                            sceneTag:
+                              type: string
+                            count:
+                              type: integer
+                            ratio:
+                              type: integer
                       aiRecap:
                         type: object
                         properties:
@@ -3201,10 +3223,16 @@ paths:
                   year: 2026
                   month: 8
                   stats:
-                    "...": "..."
+                    recordCount: 15
+                    topPlace:
+                      placeId: 10
+                      legalDongName: 역삼동
+                    topArtistName: 아이유
+                    averageMoodScore: 24.3
                   photoScenes:
-                  - 야경
-                  - 공원
+                  - sceneTag: 야경
+                    count: 3
+                    ratio: 60
                   aiRecap:
                     status: COMPLETED
                     text: "..."
@@ -3286,7 +3314,7 @@ paths:
         schema:
           type: integer
           format: int64
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/recommendations/playlists":
     get:
       tags:
