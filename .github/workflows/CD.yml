@@ -59,15 +59,17 @@ jobs:
       #    이 파일은 여기서만 잠깐 만들어지고, 실제 값은 워크플로 로그에 자동으로 마스킹된다.
       - run: |
           cat > backend.env <<ENVEOF
+          DB_URL=${{ secrets.DB_URL }}
+          DB_USERNAME=${{ secrets.DB_USERNAME }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
-          MYSQL_ROOT_PASSWORD=${{ secrets.MYSQL_ROOT_PASSWORD }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
+          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
           KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
           KMA_SERVICE_KEY=${{ secrets.KMA_SERVICE_KEY }}
           SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
           SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
-          GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
-          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
+          AI_INTERNAL_TOKEN=${{ secrets.AI_INTERNAL_TOKEN }}
           ENVEOF
 
       # 4. env 파일을 Standby VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
