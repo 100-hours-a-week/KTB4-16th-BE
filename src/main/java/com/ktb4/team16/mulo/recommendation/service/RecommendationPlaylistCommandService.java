@@ -15,15 +15,22 @@ public class RecommendationPlaylistCommandService {
     private final WeatherService weatherService;
     private final RecommendationAiClient recommendationAiClient;
     private final RecommendationPlaylistWriter writer;
+    private final RecommendationPlaylistQueryService queryService;
     private final Clock clock;
 
-    // 현재 KST 날씨 문맥으로 Mock AI 추천을 생성하고 저장한다.
-    public RecommendationPlaylistData.Playlist create(Long userId,
+    // 현재 KST 문맥의 AI 추천을 저장하거나, 장애·빈 결과에서는 기존 플레이리스트를 유지한다.
+    public CreateResult create(Long userId,
             CreateRecommendationPlaylistRequest request) {
         OffsetDateTime requestedAt = OffsetDateTime.ofInstant(clock.instant(), clock.getZone());
         var weather = weatherService.getWeather(request.latitude(), request.longitude(), requestedAt);
-        var tracks = recommendationAiClient.recommend(new RecommendationAiClient.RecommendationContext(
-                weather.data().weatherCondition(), weather.data().temperature(), requestedAt));
-        return writer.replace(userId, tracks);
+        var recommendation = recommendationAiClient.recommend(new RecommendationAiClient.RecommendationContext(
+                userId, weather.data().weatherCondition(), weather.data().temperature(), requestedAt));
+        if (recommendation.degraded() || recommendation.tracks().isEmpty()) {
+            return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false);
+        }
+        return new CreateResult(writer.replace(userId, recommendation.tracks()), true);
     }
+
+    // Controller가 실제 저장 여부에 맞는 HTTP 상태와 응답 메시지를 선택하도록 생성 결과를 전달한다.
+    public record CreateResult(RecommendationPlaylistData.Playlist playlist, boolean replaced) { }
 }
