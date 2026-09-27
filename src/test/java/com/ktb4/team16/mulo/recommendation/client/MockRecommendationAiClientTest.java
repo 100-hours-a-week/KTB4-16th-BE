@@ -13,9 +13,10 @@ class MockRecommendationAiClientTest {
         MockRecommendationAiClient client = new MockRecommendationAiClient();
 
         var result = client.recommend(new RecommendationAiClient.RecommendationContext(
-                WeatherCondition.CLEAR, BigDecimal.valueOf(20), OffsetDateTime.now()));
+                7L, WeatherCondition.CLEAR, BigDecimal.valueOf(20), OffsetDateTime.now()));
 
-        assertThat(result).hasSize(3);
-        assertThat(result).allSatisfy(track -> assertThat(track.externalTrackId()).hasSize(22));
+        assertThat(result.degraded()).isFalse();
+        assertThat(result.tracks()).hasSize(3);
+        assertThat(result.tracks()).allSatisfy(track -> assertThat(track.externalTrackId()).hasSize(22));
     }
 }

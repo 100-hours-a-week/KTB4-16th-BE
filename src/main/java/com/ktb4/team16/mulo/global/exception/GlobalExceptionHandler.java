@@ -8,6 +8,7 @@ import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
@@ -175,6 +176,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PhotoRecommendationAiException.class)
     public ResponseEntity<ErrorResponse> handlePhotoRecommendationAi(
             PhotoRecommendationAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
+    }
+
+    // 상황 맞춤 추천 AI의 통신·응답 계약 실패를 외부 상세 없이 502로 변환한다.
+    @ExceptionHandler(RecommendationAiException.class)
+    public ResponseEntity<ErrorResponse> handleRecommendationAi(RecommendationAiException exception) {
         return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
     }
