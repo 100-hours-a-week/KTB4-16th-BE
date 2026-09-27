@@ -36,11 +36,17 @@ public class LocalMonthlyReportGenerationController {
 
     // 현재·미래 월 스냅샷 생성을 막고 연·월 파라미터의 쌍을 검증한다.
     private YearMonth resolveTargetMonth(Integer year, Integer month) {
-        if (year == null && month == null) return YearMonth.now(clock).minusMonths(1);
-        if (year == null || month == null) throw new InvalidMonthlyReportGenerationRequestException();
+        if (year == null && month == null) {
+            return YearMonth.now(clock).minusMonths(1);
+        }
+        if (year == null || month == null) {
+            throw new InvalidMonthlyReportGenerationRequestException();
+        }
         try {
             YearMonth target = YearMonth.of(year, month);
-            if (!target.isBefore(YearMonth.now(clock))) throw new InvalidMonthlyReportGenerationRequestException();
+            if (!target.isBefore(YearMonth.now(clock))) {
+                throw new InvalidMonthlyReportGenerationRequestException();
+            }
             return target;
         } catch (DateTimeException exception) {
             throw new InvalidMonthlyReportGenerationRequestException();

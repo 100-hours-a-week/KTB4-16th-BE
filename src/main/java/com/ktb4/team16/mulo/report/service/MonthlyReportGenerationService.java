@@ -30,13 +30,18 @@ public class MonthlyReportGenerationService {
         LocalDateTime start=month.atDay(1).atStartOfDay(), end=month.plusMonths(1).atDay(1).atStartOfDay(); int created=0, skipped=0;
         for(Long userId:records.findUsersWithActiveRecordsInPeriod(start,end)){
             short year = (short) month.getYear(); short monthValue = (short) month.getMonthValue();
-            if(reports.existsByUser_UserIdAndReportYearAndReportMonth(userId,year,monthValue)){skipped++;continue;}
+            if (reports.existsByUser_UserIdAndReportYearAndReportMonth(userId, year, monthValue)) {
+                skipped++;
+                continue;
+            }
             var summary=records.findMonthlyRecordSummary(userId,start,end).orElseThrow();
             var topPlace=records.findMonthlyTopPlaces(userId,start,end,PageRequest.of(0,1));
             var topArtist=records.findMonthlyTopArtists(userId,start,end,PageRequest.of(0,1)); String artist=topArtist.isEmpty()?null:topArtist.getFirst().artistName();
             var result=ai.generate(month.getYear(),month.getMonthValue(),artist,false);
             var report=MonthlyReport.create(users.getReferenceById(userId),year,monthValue,summary.recordCount().intValue(),artist,result.recapText());
-            if (!topPlace.isEmpty()) report.assignTopPlace(places.getReferenceById(topPlace.getFirst().placeId()));
+            if (!topPlace.isEmpty()) {
+                report.assignTopPlace(places.getReferenceById(topPlace.getFirst().placeId()));
+            }
             var savedReport = reports.save(report);
             moods.save(MonthlyMoodStat.create(savedReport,BigDecimal.valueOf(summary.averageMoodScore()).setScale(1)));
             result.scenes().forEach(scene -> scenes.save(MonthlyPhotoSceneStat.create(
