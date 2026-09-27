@@ -1352,6 +1352,8 @@ paths:
       - RECOMMEND / 추천
       summary: 사진 기반 음악 추천
       operationId: postApiRecommendationsPhoto
+      security:
+      - bearerAuth: []
       description: 임시 업로드된 사진을 AI가 분석해 음악을 최대 3곡 추천한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.
       responses:
         '200':
@@ -1374,15 +1376,29 @@ paths:
                           type: string
                         artistName:
                           type: string
+                        albumImageUrl:
+                          type: string
+                        externalUrl:
+                          type: string
+                      required:
+                      - externalTrackId
+                      - title
+                      - artistName
+                      - albumImageUrl
+                      - externalUrl
               example:
                 message: 사진 기반 음악 추천 성공
                 data:
                 - externalTrackId: 6rqhFgbbKwnb9MLmUQDhG6
                   title: 밤편지
                   artistName: 아이유
+                  albumImageUrl: https://i.scdn.co/image/example
+                  externalUrl: https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6
                 - externalTrackId: 4exampleTrackId000001
                   title: 추천곡 2
                   artistName: 아티스트 2
+                  albumImageUrl: https://i.scdn.co/image/example-2
+                  externalUrl: https://open.spotify.com/track/4exampleTrackId000001
         '400':
           description: 필수 Request Body 값인 uploadId가 누락되어 요청 유효성 검증에 실패했으므로 400.
           content:
@@ -1410,8 +1426,8 @@ paths:
                 message: 입력값을 확인해주세요.
                 errors:
                 - field: uploadId
-                  code: UPLOAD_ID_REQUIRED
-                  message: 업로드 이미지 식별자가 필요합니다.
+                  code: INVALID_INPUT_VALUE
+                  message: 입력값을 확인해주세요.
         '401':
           description: 사진 기반 음악 추천은 사용자가 소유한 임시 업로드 이미지를 사용하므로, 유효한 Access Token이 없거나 인증에 실패한 경우 401.
           content:
@@ -1478,9 +1494,11 @@ paths:
                 uploadId:
                   type: integer
                   format: int64
+              required:
+              - uploadId
             example:
               uploadId: 123
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/records":
     post:

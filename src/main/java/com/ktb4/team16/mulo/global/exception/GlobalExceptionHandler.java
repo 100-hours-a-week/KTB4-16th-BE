@@ -7,6 +7,7 @@ import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
+import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
@@ -153,6 +154,13 @@ public class GlobalExceptionHandler {
             MusicSearchInputException exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(PhotoRecommendationAiException.class)
+    public ResponseEntity<ErrorResponse> handlePhotoRecommendationAi(
+            PhotoRecommendationAiException exception) {
+        return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
+                .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)
