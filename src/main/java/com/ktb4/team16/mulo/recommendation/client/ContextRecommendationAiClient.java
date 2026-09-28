@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.recommendation.client;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
+import com.fasterxml.jackson.annotation.JsonInclude;
 import com.ktb4.team16.mulo.recommendation.config.AiProperties;
 import java.net.http.HttpClient;
 import java.util.List;
@@ -40,7 +41,8 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
                     .header("X-Internal-Token", properties.internalToken())
                     .body(new ContextRecommendationAiRequest(context.userId(),
                             new Weather(context.weatherCondition().name(), context.temperature()),
-                            context.requestedAt(), RECOMMENDATION_LIMIT))
+                            context.requestedAt(), context.nearbyTracks(), RECOMMENDATION_LIMIT,
+                            context.placeName() == null ? null : new Place(context.placeName())))
                     .retrieve()
                     .body(ContextRecommendationAiResponse.class);
             if (response == null || response.tracks() == null) {
@@ -78,10 +80,16 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
 
     // AI Gateway 요청 JSON 구조를 명세의 camelCase 필드명으로 고정한다.
     private record ContextRecommendationAiRequest(Long userId, Weather weather,
-            java.time.OffsetDateTime localTime, int limit) { }
+            java.time.OffsetDateTime localTime,
+            @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NearbyTrack> nearbyTracks,
+            int limit,
+            @JsonInclude(JsonInclude.Include.NON_NULL) Place place) { }
 
     // 요청의 날씨 enum 이름과 섭씨 온도를 중첩 JSON 객체로 전달한다.
     private record Weather(String condition, java.math.BigDecimal temperature) { }
+
+    // placeId 없이 법정동 이름만 AI 선택 문맥으로 전달한다.
+    private record Place(String name) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record ContextRecommendationAiResponse(List<Track> tracks, boolean degraded) {
