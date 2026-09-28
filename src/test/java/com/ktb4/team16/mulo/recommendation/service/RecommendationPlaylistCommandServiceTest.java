@@ -33,6 +33,8 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class RecommendationPlaylistCommandServiceTest {
     @Mock private WeatherService weatherService;
     @Mock private RecommendationAiClient recommendationAiClient;
+    @Mock private RecommendationNearbyTracksService nearbyTracksService;
+    @Mock private RecommendationPlaceContextService placeContextService;
     @Mock private RecommendationPlaylistWriter writer;
     @Mock private RecommendationPlaylistQueryService queryService;
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-26T12:00:00Z"),
@@ -45,6 +47,10 @@ class RecommendationPlaylistCommandServiceTest {
         var created = playlist(4L);
         when(weatherService.getWeather(eq(37.5665), eq(126.9780), any(OffsetDateTime.class)))
                 .thenReturn(weather());
+        when(nearbyTracksService.findTopTracks(BigDecimal.valueOf(37.5665), BigDecimal.valueOf(126.9780)))
+                .thenReturn(List.of(new RecommendationNearbyTracksService.NearbyTrack("비도 오고 그래서", "헤이즈", 9)));
+        when(placeContextService.findLegalDongName(BigDecimal.valueOf(37.5665), BigDecimal.valueOf(126.9780)))
+                .thenReturn(java.util.Optional.of("태평로1가"));
         when(recommendationAiClient.recommend(any())).thenReturn(new RecommendationAiClient.RecommendationResult(
                 List.of(new RecommendationAiClient.RecommendedTrack("6mzF8HvHdVrzJNd8M1uFCS",
                         "Beautiful", "Crush", "https://image.example/album.jpg",
@@ -58,7 +64,8 @@ class RecommendationPlaylistCommandServiceTest {
         verify(recommendationAiClient).recommend(captor.capture());
         assertThat(captor.getValue()).isEqualTo(new RecommendationAiClient.RecommendationContext(7L,
                 WeatherCondition.CLEAR, BigDecimal.valueOf(20),
-                OffsetDateTime.ofInstant(clock.instant(), clock.getZone())));
+                OffsetDateTime.ofInstant(clock.instant(), clock.getZone()),
+                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가"));
         verify(writer).replace(eq(7L), any());
         assertThat(result.replaced()).isTrue();
         assertThat(result.playlist()).isEqualTo(created);
@@ -117,12 +124,14 @@ class RecommendationPlaylistCommandServiceTest {
                 .isInstanceOf(WeatherApiException.class);
 
         verify(writer, never()).replace(any(), any());
+        verify(nearbyTracksService, never()).findTopTracks(any(), any());
+        verify(placeContextService, never()).findLegalDongName(any(), any());
     }
 
     // 테스트 대상 서비스의 외부 의존성을 명시적으로 조립한다.
     private RecommendationPlaylistCommandService service() {
         return new RecommendationPlaylistCommandService(weatherService, recommendationAiClient, writer,
-                queryService, clock);
+                queryService, nearbyTracksService, placeContextService, clock);
     }
 
     // 날씨 API가 반환하는 현재 KST 날씨 데이터를 생성한다.

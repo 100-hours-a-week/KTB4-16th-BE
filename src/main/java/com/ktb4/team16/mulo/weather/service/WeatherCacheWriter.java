@@ -32,4 +32,13 @@ public class WeatherCacheWriter {
         forecastRepository.saveAll(forecasts);
         forecastRepository.flush();
     }
+
+    // 부분 캐시에 없는 목표 예보 한 건만 추가하고 기존 예보값은 변경하지 않는다.
+    @Transactional
+    public void saveMissingForecast(WeatherGrid grid, LocalDate cacheDate,
+            ZonedDateTime baseAt, ZonedDateTime fetchedAt, ForecastSlot slot) {
+        WeatherGridForecast forecast = WeatherGridForecast.create(grid, cacheDate, slot,
+                baseAt.toLocalDateTime(), fetchedAt.toLocalDateTime());
+        forecastRepository.saveAndFlush(forecast);
+    }
 }

@@ -5,6 +5,7 @@ import com.ktb4.team16.mulo.place.dto.response.AllRecordMarkerResponse;
 import com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
+import com.ktb4.team16.mulo.record.dto.NearbyTrackCandidateDto;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.report.dto.MonthlyRecordSummary;
 import com.ktb4.team16.mulo.report.dto.MonthlyTopArtist;
@@ -142,6 +143,27 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
         """)
     List<PopularTrackAggregateDto> findPopularTrackAggregates(
             @Param("placeIds") List<Long> placeIds,
+            @Param("createdAtFrom") LocalDateTime createdAtFrom
+    );
+
+    // 현재 좌표의 bounding box 안에서 최근 활성 자물쇠 후보를 반경 판정 전 단계로 조회한다.
+    @Query("""
+        SELECT new com.ktb4.team16.mulo.record.dto.NearbyTrackCandidateDto(
+            m.musicTrackId, m.title, m.artistName, p.latitude, p.longitude, r.createdAt
+        )
+        FROM Record r
+        JOIN r.place p
+        JOIN r.musicTrack m
+        WHERE r.deletedAt IS NULL
+            AND r.createdAt >= :createdAtFrom
+            AND p.latitude BETWEEN :swLat AND :neLat
+            AND p.longitude BETWEEN :swLng AND :neLng
+        """)
+    List<NearbyTrackCandidateDto> findNearbyTrackCandidates(
+            @Param("swLat") BigDecimal swLat,
+            @Param("neLat") BigDecimal neLat,
+            @Param("swLng") BigDecimal swLng,
+            @Param("neLng") BigDecimal neLng,
             @Param("createdAtFrom") LocalDateTime createdAtFrom
     );
 
