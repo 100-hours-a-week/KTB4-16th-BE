@@ -68,6 +68,7 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
     // AI 통신의 연결·읽기 제한 시간을 RestClient 요청 팩토리에 적용한다.
     private static RestClient.Builder configuredBuilder(RestClient.Builder builder, AiProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(properties.connectTimeout())
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
