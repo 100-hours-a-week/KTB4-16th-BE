@@ -64,6 +64,7 @@ jobs:
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
+          GCS_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
           KMA_SERVICE_KEY=${{ secrets.KMA_SERVICE_KEY }}
           SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
