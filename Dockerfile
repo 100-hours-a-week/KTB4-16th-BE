@@ -27,14 +27,18 @@ RUN ./gradlew clean bootJar -x test --no-daemon
 # 2: 실행 스테이지 - 최종 이미지 용량 최소화
 # =========================================
 
-# 실행에는 JDK가 아닌 JRE만 필요하므로 더 가벼운 이미지 사용
-FROM eclipse-temurin:21-jre-alpine AS runner
+# 실행에는 JDK가 아닌 JRE만 필요하므로 더 가벼운 이미지 사용.
+# Alpine(musl libc)은 GCS 클라이언트가 쓰는 Conscrypt 네이티브 라이브러리가
+# glibc 기반이라 로드에 실패한다(UnsatisfiedLinkError). 빌드 스테이지와
+# 동일 계열(Ubuntu Noble, glibc)의 JRE 이미지를 사용해 이 문제를 피한다.
+FROM eclipse-temurin:21-jre-noble AS runner
 
 # 작업 디렉토리 설정
 WORKDIR /app
 
 # 보안을 위해 root가 아닌 일반 실행 사용자 생성 및 전환
-RUN adduser -D springuser
+# (Alpine의 BusyBox adduser 전용 옵션(-D) 대신 Debian/Ubuntu adduser 문법 사용)
+RUN adduser --disabled-password --gecos "" springuser
 USER springuser
 
 # 빌드 스테이지에서 생성된 jar 파일만 추출하여 복사
