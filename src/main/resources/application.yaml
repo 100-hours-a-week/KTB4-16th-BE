@@ -16,6 +16,11 @@ spring:
     properties:
       hibernate:
         format_sql: true
+        # 컨테이너 JVM 기본 시간대가 UTC라 Clock(Asia/Seoul) 빈으로 만든 LocalDateTime을
+        # JDBC 파라미터로 바인딩할 때 9시간 밀리는 문제가 있었다. Hibernate가 JDBC와
+        # 주고받는 시각을 명시적으로 DB와 동일한 시간대로 고정해 이 불일치를 없앤다.
+        jdbc:
+          time_zone: Asia/Seoul
 
   flyway:
     enabled: true
