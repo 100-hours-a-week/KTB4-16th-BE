@@ -50,6 +50,7 @@ class WeatherServiceTest {
     @Mock private WeatherGridForecastRepository forecastRepository;
     @Mock private KmaWeatherClient client;
     @Mock private WeatherCacheWriter cacheWriter;
+    @Mock private WeatherCacheLoadLock cacheLoadLock;
 
     private WeatherService service;
     private WeatherGrid grid;
@@ -57,8 +58,12 @@ class WeatherServiceTest {
     @BeforeEach
     void setUp() {
         service = new WeatherService(coordinateConverter, timePolicy,
-                gridRepository, forecastRepository, client, cacheWriter,
+                gridRepository, forecastRepository, client, cacheWriter, cacheLoadLock,
                 Clock.fixed(Instant.parse("2026-09-20T02:10:00Z"), ZoneId.of("Asia/Seoul")));
+        org.mockito.Mockito.lenient().when(cacheLoadLock.withLock(
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any())).thenAnswer(invocation ->
+                ((java.util.function.Supplier<?>) invocation.getArgument(2)).get());
         grid = WeatherGrid.create(COORDINATE);
     }
 
@@ -74,20 +79,6 @@ class WeatherServiceTest {
 
         assertThat(response.data().forecastAt())
                 .isEqualTo(OffsetDateTime.parse("2026-09-20T11:00:00+09:00"));
-        verify(client, never()).fetch(org.mockito.ArgumentMatchers.any(),
-                org.mockito.ArgumentMatchers.any());
-    }
-
-    @Test
-    void doesNotCallKmaWhenDailyBatchExistsWithoutTargetSlot() {
-        givenDefaultCacheLookup();
-        LocalDate cacheDate = LocalDate.of(2026, 9, 20);
-        when(forecastRepository.findByGridAndCacheDateAndForecastAt(
-                grid, cacheDate, TARGET.toLocalDateTime())).thenReturn(Optional.empty());
-        when(forecastRepository.existsByGridAndCacheDate(grid, cacheDate)).thenReturn(true);
-
-        assertThatThrownBy(() -> service.getWeather(37.5665, 126.9780, REQUESTED_AT))
-                .isInstanceOf(WeatherApiException.class);
         verify(client, never()).fetch(org.mockito.ArgumentMatchers.any(),
                 org.mockito.ArgumentMatchers.any());
     }
@@ -121,7 +112,7 @@ class WeatherServiceTest {
         when(client.fetch(COORDINATE, second)).thenReturn(List.of(targetSlot));
         when(forecastRepository.findByGridAndCacheDateAndForecastAt(
                 grid, LocalDate.of(2026, 9, 20), TARGET.toLocalDateTime()))
-                .thenReturn(Optional.of(stored));
+                .thenReturn(Optional.empty(), Optional.of(stored));
 
         WeatherResponse response = service.getWeather(37.5665, 126.9780, REQUESTED_AT);
 
@@ -154,13 +145,53 @@ class WeatherServiceTest {
                         org.mockito.ArgumentMatchers.<ForecastSlot>anyList());
         when(forecastRepository.findByGridAndCacheDateAndForecastAt(
                 grid, LocalDate.of(2026, 9, 20), TARGET.toLocalDateTime()))
-                .thenReturn(Optional.of(stored));
+                .thenReturn(Optional.empty(), Optional.of(stored));
 
         WeatherResponse response = service.getWeather(37.5665, 126.9780, REQUESTED_AT);
 
         assertThat(response.data().forecastAt())
                 .isEqualTo(OffsetDateTime.parse("2026-09-20T11:00:00+09:00"));
         verify(client).fetch(COORDINATE, baseAt);
+    }
+
+    @Test
+    void normalizesFutureRequestTimeToServerTime() {
+        OffsetDateTime futureRequestedAt = OffsetDateTime.parse("2026-09-20T11:31:00+09:00");
+        ZonedDateTime serverNow = ZonedDateTime.parse("2026-09-20T11:10:00+09:00[Asia/Seoul]");
+        givenDefaultCacheLookup();
+        WeatherGridForecast cached = forecastAt(TARGET.toLocalDateTime());
+        when(timePolicy.nearestForecastAt(serverNow.toOffsetDateTime())).thenReturn(TARGET);
+        when(forecastRepository.findByGridAndCacheDateAndForecastAt(
+                grid, LocalDate.of(2026, 9, 20), TARGET.toLocalDateTime()))
+                .thenReturn(Optional.of(cached));
+
+        service.getWeather(37.5665, 126.9780, futureRequestedAt);
+
+        verify(timePolicy).nearestForecastAt(serverNow.toOffsetDateTime());
+        verify(timePolicy, never()).nearestForecastAt(futureRequestedAt);
+    }
+
+    @Test
+    void fillsMissingTargetSlotWhenDailyCacheAlreadyExists() {
+        givenDefaultCacheLookup();
+        when(forecastRepository.findByGridAndCacheDateAndForecastAt(
+                grid, LocalDate.of(2026, 9, 20), TARGET.toLocalDateTime()))
+                .thenReturn(Optional.empty(), Optional.empty(),
+                        Optional.of(forecastAt(TARGET.toLocalDateTime())));
+        when(forecastRepository.existsByGridAndCacheDate(grid, LocalDate.of(2026, 9, 20)))
+                .thenReturn(true);
+        ZonedDateTime baseAt = ZonedDateTime.parse("2026-09-20T08:00:00+09:00[Asia/Seoul]");
+        ForecastSlot targetSlot = new ForecastSlot(TARGET.toLocalDateTime(),
+                new BigDecimal("25.0"), WeatherCondition.CLEAR);
+        when(timePolicy.candidateBaseTimes(REQUESTED_AT.atZoneSameInstant(ZoneId.of("Asia/Seoul")), TARGET))
+                .thenReturn(List.of(baseAt));
+        when(client.fetch(COORDINATE, baseAt)).thenReturn(List.of(targetSlot));
+
+        WeatherResponse response = service.getWeather(37.5665, 126.9780, REQUESTED_AT);
+
+        assertThat(response.data().forecastAt()).isEqualTo(TARGET.toOffsetDateTime());
+        verify(cacheWriter).saveMissingForecast(grid, LocalDate.of(2026, 9, 20),
+                baseAt, REQUESTED_AT.atZoneSameInstant(ZoneId.of("Asia/Seoul")), targetSlot);
     }
 
     private WeatherGridForecast forecastAt(LocalDateTime forecastAt) {
