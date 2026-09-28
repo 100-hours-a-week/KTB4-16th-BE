@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withSuccess;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -36,6 +38,7 @@ class ContextRecommendationAiClientTest {
                         {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
                         "localTime":"2026-09-27T19:30:00+09:00","limit":10}
                         """))
+                .andExpect(jsonPath("$.nearbyTracks").doesNotExist())
                 .andRespond(withSuccess("""
                         {"tracks":[{"title":"Beautiful","artistName":"Crush",
                         "externalTrackId":"6mzF8HvHdVrzJNd8M1uFCS","spotifyUri":"spotify:track:6mzF8HvHdVrzJNd8M1uFCS",
@@ -49,6 +52,26 @@ class ContextRecommendationAiClientTest {
             assertThat(track.title()).isEqualTo("Beautiful");
             assertThat(track.externalTrackId()).isEqualTo("6mzF8HvHdVrzJNd8M1uFCS");
         });
+        server.verify();
+    }
+
+    // 선택한 지도 장소의 인기곡은 AI 명세의 nearbyTracks 배열로 전달한다.
+    @Test
+    void sendsNearbyTracksWhenSelectedPlaceTracksExist() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
+        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
+                .andExpect(content().json("""
+                        {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
+                        "localTime":"2026-09-27T19:30:00+09:00","limit":10,
+                        "nearbyTracks":[{"title":"비도 오고 그래서","artistName":"헤이즈","count":9},
+                        {"title":"우산","artistName":"에픽하이","count":5}]}
+                        """))
+                .andRespond(withSuccess("{\"tracks\":[],\"degraded\":false}", MediaType.APPLICATION_JSON));
+
+        client.recommend(contextWithNearbyTracks());
+
         server.verify();
     }
 
@@ -140,6 +163,14 @@ class ContextRecommendationAiClientTest {
     // KST 오프셋을 포함한 AI 추천 요청 문맥을 생성한다.
     private RecommendationAiClient.RecommendationContext context() {
         return new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
-                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"));
+                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of());
+    }
+
+    // 선택 장소의 인기곡이 있는 AI 추천 문맥을 생성한다.
+    private RecommendationAiClient.RecommendationContext contextWithNearbyTracks() {
+        return new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
+                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of(
+                new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9L),
+                new RecommendationAiClient.NearbyTrack("우산", "에픽하이", 5L)));
     }
 }

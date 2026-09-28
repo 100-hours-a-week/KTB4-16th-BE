@@ -1,7 +1,9 @@
 package com.ktb4.team16.mulo.recommendation.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.dto.request.CreateRecommendationPlaylistRequest;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -78,6 +82,24 @@ class RecommendationPlaylistControllerTest {
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4));
     }
 
+    // 사용자가 지도에서 선택한 장소 ID 목록을 추천 서비스까지 보존해 전달한다.
+    @Test
+    void passesSelectedPlaceIdsToCommandService() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, false));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"placeIds\":[10,20]}"))
+                .andExpect(status().isOk());
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> requestCaptor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService).create(eq(7L), requestCaptor.capture());
+        assertThat(requestCaptor.getValue().placeIds()).containsExactly(10L, 20L);
+    }
+
     @Test
     void retainsExistingPlaylistWhenAiReturnsNoRecommendation() throws Exception {
         authenticate(7L);
@@ -117,6 +139,19 @@ class RecommendationPlaylistControllerTest {
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
                 .andExpect(jsonPath("$.errors[0].code").value("LATITUDE_REQUIRED"));
+    }
+
+    // 선택 장소 ID가 0 이하이면 AI·DB 처리 전에 입력 오류로 거부한다.
+    @Test
+    void nonPositivePlaceIdReturnsInvalidPlaceIdError() throws Exception {
+        authenticate(7L);
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"placeIds\":[0]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors[0].code").value("INVALID_PLACE_ID"));
     }
 
     @Test

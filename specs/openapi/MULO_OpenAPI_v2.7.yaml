@@ -3418,11 +3418,16 @@ paths:
         latitude: Double
         longitude: Double
 
-        동기 처리. 사용자의 기록 + 현재 위치 주변 장소의 자물쇠 + 현재 위치/장소 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.
+        선택
+        placeIds: Long[]
+
+        동기 처리. 사용자의 기록 + 현재 위치 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.
 
         정책 및 설명
         - 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.
         - 현재 위치의 날씨와 기온은 필수 컨텍스트다.
+        - 사용자가 인기 지도 Marker 또는 Cluster를 선택한 경우에만 해당 Place ID 목록을 전달한다.
+        - placeIds가 있으면 해당 장소들의 최근 7일 인기 자물쇠 음악 상위 5곡을 AI nearbyTracks 문맥으로 사용하고, 없으면 nearbyTracks 없이 추천한다.
         - 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.
         - 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.
         - 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.
@@ -3450,9 +3455,19 @@ paths:
                   minimum: -180
                   maximum: 180
                   description: 현재 위치의 경도
+                placeIds:
+                  type: array
+                  description: 사용자가 선택한 인기 지도 Marker 또는 Cluster의 Place ID 목록. 미선택 시 생략한다.
+                  items:
+                    type: integer
+                    format: int64
+                    minimum: 1
             example:
               latitude: 37.5665
               longitude: 126.9780
+              placeIds:
+              - 10
+              - 20
       responses:
         '201':
           description: 새 추천 플레이리스트 리소스가 생성되므로 201.

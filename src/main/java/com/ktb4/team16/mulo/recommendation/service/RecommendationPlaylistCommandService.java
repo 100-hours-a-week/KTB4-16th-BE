@@ -13,6 +13,7 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class RecommendationPlaylistCommandService {
     private final WeatherService weatherService;
+    private final RecommendationNearbyTrackQueryService nearbyTrackQueryService;
     private final RecommendationAiClient recommendationAiClient;
     private final RecommendationPlaylistWriter writer;
     private final RecommendationPlaylistQueryService queryService;
@@ -23,8 +24,10 @@ public class RecommendationPlaylistCommandService {
             CreateRecommendationPlaylistRequest request) {
         OffsetDateTime requestedAt = OffsetDateTime.ofInstant(clock.instant(), clock.getZone());
         var weather = weatherService.getWeather(request.latitude(), request.longitude(), requestedAt);
+        var nearbyTracks = nearbyTrackQueryService.findTopTracks(request.placeIds());
         var recommendation = recommendationAiClient.recommend(new RecommendationAiClient.RecommendationContext(
-                userId, weather.data().weatherCondition(), weather.data().temperature(), requestedAt));
+                userId, weather.data().weatherCondition(), weather.data().temperature(), requestedAt,
+                nearbyTracks));
         if (recommendation.degraded() || recommendation.tracks().isEmpty()) {
             return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false);
         }

@@ -10,7 +10,8 @@ public interface RecommendationAiClient {
     RecommendationResult recommend(RecommendationContext context);
 
     record RecommendationContext(Long userId, WeatherCondition weatherCondition, BigDecimal temperature,
-            OffsetDateTime requestedAt) { }
+            OffsetDateTime requestedAt, List<NearbyTrack> nearbyTracks) { }
+    record NearbyTrack(String title, String artistName, Long count) { }
     record RecommendationResult(List<RecommendedTrack> tracks, boolean degraded) { }
     record RecommendedTrack(String externalTrackId, String title, String artistName,
             String albumImageUrl, String externalUrl) { }

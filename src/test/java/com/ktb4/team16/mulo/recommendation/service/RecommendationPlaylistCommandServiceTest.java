@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.anyDouble;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiClient;
@@ -32,6 +33,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 @ExtendWith(MockitoExtension.class)
 class RecommendationPlaylistCommandServiceTest {
     @Mock private WeatherService weatherService;
+    @Mock private RecommendationNearbyTrackQueryService nearbyTrackQueryService;
     @Mock private RecommendationAiClient recommendationAiClient;
     @Mock private RecommendationPlaylistWriter writer;
     @Mock private RecommendationPlaylistQueryService queryService;
@@ -45,20 +47,25 @@ class RecommendationPlaylistCommandServiceTest {
         var created = playlist(4L);
         when(weatherService.getWeather(eq(37.5665), eq(126.9780), any(OffsetDateTime.class)))
                 .thenReturn(weather());
+        when(nearbyTrackQueryService.findTopTracks(List.of(10L, 20L))).thenReturn(List.of(
+                new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9L)));
         when(recommendationAiClient.recommend(any())).thenReturn(new RecommendationAiClient.RecommendationResult(
                 List.of(new RecommendationAiClient.RecommendedTrack("6mzF8HvHdVrzJNd8M1uFCS",
                         "Beautiful", "Crush", "https://image.example/album.jpg",
                         "https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS")), false));
         when(writer.replace(eq(7L), any())).thenReturn(created);
 
-        var result = service.create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        var result = service.create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780,
+                List.of(10L, 20L)));
 
         ArgumentCaptor<RecommendationAiClient.RecommendationContext> captor =
                 ArgumentCaptor.forClass(RecommendationAiClient.RecommendationContext.class);
         verify(recommendationAiClient).recommend(captor.capture());
         assertThat(captor.getValue()).isEqualTo(new RecommendationAiClient.RecommendationContext(7L,
                 WeatherCondition.CLEAR, BigDecimal.valueOf(20),
-                OffsetDateTime.ofInstant(clock.instant(), clock.getZone())));
+                OffsetDateTime.ofInstant(clock.instant(), clock.getZone()), List.of(
+                new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9L))));
+        verify(nearbyTrackQueryService).findTopTracks(List.of(10L, 20L));
         verify(writer).replace(eq(7L), any());
         assertThat(result.replaced()).isTrue();
         assertThat(result.playlist()).isEqualTo(created);
@@ -72,7 +79,8 @@ class RecommendationPlaylistCommandServiceTest {
                 new RecommendationAiClient.RecommendationResult(List.of(), true));
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
 
-        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780,
+                null));
 
         verify(writer, never()).replace(any(), any());
         assertThat(result.replaced()).isFalse();
@@ -87,7 +95,8 @@ class RecommendationPlaylistCommandServiceTest {
                 new RecommendationAiClient.RecommendationResult(List.of(), false));
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
 
-        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780,
+                null));
 
         verify(writer, never()).replace(any(), any());
         assertThat(result.replaced()).isFalse();
@@ -101,7 +110,7 @@ class RecommendationPlaylistCommandServiceTest {
         when(recommendationAiClient.recommend(any())).thenThrow(new RecommendationAiException());
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, null)))
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), any());
@@ -113,16 +122,17 @@ class RecommendationPlaylistCommandServiceTest {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenThrow(new WeatherApiException());
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, null)))
                 .isInstanceOf(WeatherApiException.class);
 
         verify(writer, never()).replace(any(), any());
+        verifyNoInteractions(nearbyTrackQueryService, recommendationAiClient);
     }
 
     // 테스트 대상 서비스의 외부 의존성을 명시적으로 조립한다.
     private RecommendationPlaylistCommandService service() {
-        return new RecommendationPlaylistCommandService(weatherService, recommendationAiClient, writer,
-                queryService, clock);
+        return new RecommendationPlaylistCommandService(weatherService, nearbyTrackQueryService,
+                recommendationAiClient, writer, queryService, clock);
     }
 
     // 날씨 API가 반환하는 현재 KST 날씨 데이터를 생성한다.
