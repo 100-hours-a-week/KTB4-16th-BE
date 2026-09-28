@@ -13,6 +13,8 @@ import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.Optional;
+import java.util.TimeZone;
 import java.util.UUID;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
@@ -63,9 +65,33 @@ public class UploadService {
     @Transactional(readOnly = true)
     public Upload findValidUpload(Long userId, Long uploadId) {
         LocalDateTime cutoff = LocalDateTime.now(clock).minusHours(UPLOAD_VALIDITY_HOURS);
-        return uploadRepository.findByUploadIdAndUser_UserIdAndCreatedAtAfter(
-                        uploadId, userId, cutoff)
-                .orElseThrow(UploadNotFoundException::new);
+        log.info("Upload lookup diagnostic: uploadId={}, userId={}, cutoff={}, clockZone={}, jvmTimezone={}",
+                uploadId, userId, cutoff, clock.getZone(), TimeZone.getDefault().getID());
+        Optional<Upload> upload = uploadRepository.findByUploadIdAndUser_UserIdAndCreatedAtAfter(
+                uploadId, userId, cutoff);
+        log.info("Upload lookup result: uploadId={}, userId={}, result={}",
+                uploadId, userId, upload.isPresent() ? "FOUND" : "NOT_FOUND");
+        if (upload.isEmpty()) {
+            logUploadMetadataDiagnostic(uploadId);
+        }
+        return upload.orElseThrow(UploadNotFoundException::new);
+    }
+
+    // Temporary diagnostics only; raw metadata must never determine upload validity.
+    private void logUploadMetadataDiagnostic(Long uploadId) {
+        try {
+            Optional<Upload> storedUpload = uploadRepository.findById(uploadId);
+            if (storedUpload.isPresent()) {
+                Upload upload = storedUpload.get();
+                log.info("Upload metadata diagnostic: uploadId={}, storedUserId={}, storedCreatedAt={}",
+                        uploadId, upload.getUser().getUserId(), upload.getCreatedAt());
+            } else {
+                log.info("Upload metadata diagnostic: uploadId={}, result=NOT_FOUND", uploadId);
+            }
+        } catch (RuntimeException exception) {
+            // Do not log exception details that could contain sensitive data.
+            log.info("Upload metadata diagnostic: uploadId={}, result=UNAVAILABLE", uploadId);
+        }
     }
 
     @Transactional
