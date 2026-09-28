@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.global.security.ApiAccessDeniedHandler;
 import com.ktb4.team16.mulo.global.security.ApiAuthenticationEntryPoint;
 import com.ktb4.team16.mulo.global.security.AiInternalTokenFilter;
 import com.ktb4.team16.mulo.global.security.JwtAuthenticationFilter;
+import com.ktb4.team16.mulo.global.security.ReportOperationTokenFilter;
 import jakarta.servlet.DispatcherType;
 import java.util.List;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
@@ -32,7 +33,8 @@ public class SecurityConfig {
             ApiAuthenticationEntryPoint entryPoint, ApiAccessDeniedHandler deniedHandler,
             CorsConfigurationSource corsConfigurationSource,
             JwtAuthenticationFilter jwtAuthenticationFilter,
-            ObjectProvider<AiInternalTokenFilter> aiInternalTokenFilter)
+            ObjectProvider<AiInternalTokenFilter> aiInternalTokenFilter,
+            ObjectProvider<ReportOperationTokenFilter> reportOperationTokenFilter)
             throws Exception {
         // CSRF Cookie만 JS로 읽는다. 로그인 단계의 Refresh Cookie는 반드시 HttpOnly다.
         var csrfRepository = CookieCsrfTokenRepository.withHttpOnlyFalse();
@@ -49,7 +51,9 @@ public class SecurityConfig {
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
                                 HttpMethod.POST, "/api/users/signup"))
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.POST, "/internal/ai/report-ready")))
+                                HttpMethod.POST, "/internal/ai/report-ready"))
+                        .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
+                                HttpMethod.POST, "/internal/ops/monthly-reports/generate")))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // /logout 기본 엔드포인트 대신 이후 auth 도메인의 명시적 로그아웃을 사용한다.
@@ -60,6 +64,8 @@ public class SecurityConfig {
                         // 내부 오류 디스패치가 기존 404/500을 401로 바꾸지 않도록 한다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/ai/report-ready").permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/ops/monthly-reports/generate")
+                        .permitAll()
                         // Docker가 인증 없이 애플리케이션 준비 상태만 확인하도록 healthcheck GET만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
@@ -83,6 +89,10 @@ public class SecurityConfig {
         AiInternalTokenFilter filter = aiInternalTokenFilter.getIfAvailable();
         if (filter != null) {
             http.addFilterBefore(filter, UsernamePasswordAuthenticationFilter.class);
+        }
+        ReportOperationTokenFilter operationFilter = reportOperationTokenFilter.getIfAvailable();
+        if (operationFilter != null) {
+            http.addFilterBefore(operationFilter, UsernamePasswordAuthenticationFilter.class);
         }
         return http.build();
     }
