@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
+import static org.springframework.test.web.client.match.MockRestRequestMatchers.jsonPath;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.method;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.requestTo;
 import static org.springframework.test.web.client.response.MockRestResponseCreators.withStatus;
@@ -15,6 +16,7 @@ import java.math.BigDecimal;
 import java.net.URI;
 import java.time.Duration;
 import java.time.OffsetDateTime;
+import java.util.List;
 import org.junit.jupiter.api.Test;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -23,7 +25,7 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class ContextRecommendationAiClientTest {
-    // AI 명세의 필수 요청 필드와 정상 추천 응답 매핑을 검증한다.
+    // AI 명세의 필수값과 선택 문맥(주변 곡·법정동 이름)을 함께 전송한다.
     @Test
     void sendsRequiredContextAndMapsValidRecommendation() {
         RestClient.Builder builder = RestClient.builder();
@@ -34,7 +36,9 @@ class ContextRecommendationAiClientTest {
                 .andExpect(header("X-Internal-Token", "test-token"))
                 .andExpect(content().json("""
                         {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
-                        "localTime":"2026-09-27T19:30:00+09:00","limit":10}
+                        "localTime":"2026-09-27T19:30:00+09:00","nearbyTracks":[
+                        {"title":"비도 오고 그래서","artistName":"헤이즈","count":9}],
+                        "limit":10,"place":{"name":"태평로1가"}}
                         """))
                 .andRespond(withSuccess("""
                         {"tracks":[{"title":"Beautiful","artistName":"Crush",
@@ -49,6 +53,28 @@ class ContextRecommendationAiClientTest {
             assertThat(track.title()).isEqualTo("Beautiful");
             assertThat(track.externalTrackId()).isEqualTo("6mzF8HvHdVrzJNd8M1uFCS");
         });
+        server.verify();
+    }
+
+    // 선택 문맥이 비어 있으면 빈 배열·빈 객체 대신 JSON 필드 자체를 생략한다.
+    @Test
+    void omitsOptionalContextWhenNearbyTracksAndPlaceAreUnavailable() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
+        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
+                .andExpect(content().json("""
+                        {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
+                        "localTime":"2026-09-27T19:30:00+09:00","limit":10}
+                        """))
+                .andExpect(jsonPath("$.nearbyTracks").doesNotExist())
+                .andExpect(jsonPath("$.place").doesNotExist())
+                .andExpect(jsonPath("$.requestId").doesNotExist())
+                .andRespond(withSuccess("{\"tracks\":[],\"degraded\":false}", MediaType.APPLICATION_JSON));
+
+        client.recommend(new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
+                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of(), null));
+
         server.verify();
     }
 
@@ -140,6 +166,7 @@ class ContextRecommendationAiClientTest {
     // KST 오프셋을 포함한 AI 추천 요청 문맥을 생성한다.
     private RecommendationAiClient.RecommendationContext context() {
         return new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
-                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"));
+                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"),
+                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가");
     }
 }
