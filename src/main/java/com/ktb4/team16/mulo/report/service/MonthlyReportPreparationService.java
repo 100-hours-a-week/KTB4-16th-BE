@@ -8,6 +8,7 @@ import com.ktb4.team16.mulo.report.repository.MonthlyMoodStatRepository;
 import com.ktb4.team16.mulo.report.repository.MonthlyReportRepository;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
@@ -57,8 +58,9 @@ public class MonthlyReportPreparationService {
                 report.assignTopPlace(places.getReferenceById(topPlace.getFirst().placeId()));
             }
             MonthlyReport saved = reports.save(report);
+            // DB의 소수 첫째 자리 평균에 맞춰 중간값 이상은 올림으로 반올림한다.
             moods.save(MonthlyMoodStat.create(saved,
-                    BigDecimal.valueOf(summary.averageMoodScore()).setScale(1)));
+                    BigDecimal.valueOf(summary.averageMoodScore()).setScale(1, RoundingMode.HALF_UP)));
             userIds.add(userId);
         }
         return new PreparedBatch(month, List.copyOf(userIds), userIds.size(), skipped);
