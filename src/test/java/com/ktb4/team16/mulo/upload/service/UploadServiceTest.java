@@ -181,6 +181,19 @@ class UploadServiceTest {
     }
 
     @Test
+    void rejectsSignedUrlForMissingUpload() {
+        when(uploadRepository.findByUploadIdAndUser_UserIdAndCreatedAtAfter(
+                org.mockito.ArgumentMatchers.eq(999L),
+                org.mockito.ArgumentMatchers.eq(35L), any()))
+                .thenReturn(Optional.empty());
+        when(uploadRepository.findById(999L)).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> uploadService.createReadSignedUrl(35L, 999L))
+                .isInstanceOf(UploadNotFoundException.class);
+        verify(gcsStorageService, never()).createReadSignedUrl(any());
+    }
+
+    @Test
     void rejectsSignedUrlForExpiredUpload() {
         when(uploadRepository.findByUploadIdAndUser_UserIdAndCreatedAtAfter(
                 org.mockito.ArgumentMatchers.eq(123L),

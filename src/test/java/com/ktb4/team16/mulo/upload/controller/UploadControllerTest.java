@@ -1,7 +1,9 @@
 package com.ktb4.team16.mulo.upload.controller;
 
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
@@ -10,6 +12,7 @@ import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.upload.dto.response.UploadResponse;
 import com.ktb4.team16.mulo.upload.exception.HeicConversionException;
 import com.ktb4.team16.mulo.upload.exception.HeicConversionException.Reason;
+import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -59,6 +62,30 @@ class UploadControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("사진 업로드 성공"))
                 .andExpect(jsonPath("$.data.uploadId").value(123));
+    }
+
+    @Test
+    void returnsSignedUrlForAuthenticatedOwner() throws Exception {
+        when(uploadService.createReadSignedUrl(35L, 123L))
+                .thenReturn("https://signed.example/photo");
+
+        mvc.perform(get("/api/uploads/123/signed-url"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("사진 조회 URL 발급 성공"))
+                .andExpect(jsonPath("$.data.signedUrl")
+                        .value("https://signed.example/photo"));
+
+        verify(uploadService).createReadSignedUrl(35L, 123L);
+    }
+
+    @Test
+    void returnsNotFoundWhenUploadIsNotValidForOwner() throws Exception {
+        when(uploadService.createReadSignedUrl(35L, 123L))
+                .thenThrow(new UploadNotFoundException());
+
+        mvc.perform(get("/api/uploads/123/signed-url"))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("UPLOAD_NOT_FOUND"));
     }
 
     @Test
