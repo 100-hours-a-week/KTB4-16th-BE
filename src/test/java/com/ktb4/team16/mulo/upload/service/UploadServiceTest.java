@@ -9,6 +9,8 @@ import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.upload.dto.response.UploadResponse;
+import com.ktb4.team16.mulo.upload.conversion.HeicImageConverter;
+import com.ktb4.team16.mulo.upload.conversion.HeicImageConverter.ConvertedImage;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
@@ -32,10 +34,11 @@ class UploadServiceTest {
     private final UploadRepository uploadRepository = mock(UploadRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final HeicImageConverter heicImageConverter = mock(HeicImageConverter.class);
     private final Clock clock = Clock.fixed(
             Instant.parse("2026-09-24T00:00:00Z"), ZoneId.of("Asia/Seoul"));
     private final UploadService uploadService = new UploadService(
-            uploadRepository, userRepository, gcsStorageService, clock);
+            uploadRepository, userRepository, gcsStorageService, clock, heicImageConverter);
     private User user;
 
     @BeforeEach
@@ -58,6 +61,52 @@ class UploadServiceTest {
                 any(byte[].class), org.mockito.ArgumentMatchers.eq("image/jpeg"));
         verify(uploadRepository).saveAndFlush(any(Upload.class));
         verify(gcsStorageService, never()).delete(any());
+        verify(heicImageConverter, never()).convert(any());
+    }
+
+    @Test
+    void uploadsPngAndWebpWithoutConversion() throws Exception {
+        Upload savedUpload = mock(Upload.class);
+        when(savedUpload.getUploadId()).thenReturn(123L);
+        when(uploadRepository.saveAndFlush(any(Upload.class))).thenReturn(savedUpload);
+
+        uploadService.upload(35L, png());
+        uploadService.upload(35L, webp());
+
+        verify(gcsStorageService).upload(
+                org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.png"),
+                org.mockito.ArgumentMatchers.eq(png().getBytes()),
+                org.mockito.ArgumentMatchers.eq("image/png"));
+        verify(gcsStorageService).upload(
+                org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.webp"),
+                org.mockito.ArgumentMatchers.eq(webp().getBytes()),
+                org.mockito.ArgumentMatchers.eq("image/webp"));
+        verify(heicImageConverter, never()).convert(any());
+    }
+
+    @Test
+    void convertsHeicBeforeUploadingAndStoresFinalJpegMetadata() {
+        byte[] heic = heic();
+        byte[] jpeg = new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 1, 2};
+        Upload savedUpload = mock(Upload.class);
+        when(savedUpload.getUploadId()).thenReturn(123L);
+        when(uploadRepository.saveAndFlush(any(Upload.class))).thenReturn(savedUpload);
+        when(heicImageConverter.convert(heic))
+                .thenReturn(new ConvertedImage(jpeg, "image/jpeg", "jpg"));
+
+        uploadService.upload(35L, new MockMultipartFile(
+                "photo", "photo.heic", "image/heic", heic));
+
+        verify(heicImageConverter).convert(heic);
+        verify(gcsStorageService).upload(
+                org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.jpg"),
+                org.mockito.ArgumentMatchers.same(jpeg),
+                org.mockito.ArgumentMatchers.eq("image/jpeg"));
+        ArgumentCaptor<Upload> upload = ArgumentCaptor.forClass(Upload.class);
+        verify(uploadRepository).saveAndFlush(upload.capture());
+        assertThat(upload.getValue().getImageUrl()).endsWith(".jpg");
+        assertThat(upload.getValue().getMimeType()).isEqualTo("image/jpeg");
+        assertThat(upload.getValue().getFileSize()).isEqualTo((long) jpeg.length);
     }
 
     @Test
@@ -190,5 +239,29 @@ class UploadServiceTest {
     private MockMultipartFile jpeg() {
         return new MockMultipartFile("photo", "photo.jpg", "image/jpeg",
                 new byte[]{(byte) 0xff, (byte) 0xd8, (byte) 0xff, 0x00});
+    }
+
+    private MockMultipartFile png() {
+        return new MockMultipartFile("photo", "photo.png", "image/png",
+                new byte[]{(byte) 0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a});
+    }
+
+    private MockMultipartFile webp() {
+        return new MockMultipartFile("photo", "photo.webp", "image/webp",
+                new byte[]{'R', 'I', 'F', 'F', 0, 0, 0, 0, 'W', 'E', 'B', 'P'});
+    }
+
+    private byte[] heic() {
+        byte[] bytes = new byte[24];
+        bytes[3] = 24;
+        bytes[4] = 'f';
+        bytes[5] = 't';
+        bytes[6] = 'y';
+        bytes[7] = 'p';
+        bytes[8] = 'h';
+        bytes[9] = 'e';
+        bytes[10] = 'i';
+        bytes[11] = 'c';
+        return bytes;
     }
 }
