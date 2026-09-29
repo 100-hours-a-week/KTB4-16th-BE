@@ -903,7 +903,7 @@ paths:
         schema:
           type: number
           format: double
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/users/me/places":
     get:
       tags:
@@ -1850,7 +1850,7 @@ paths:
               moodScore: 4
               comment: 좋았다
               uploadId: 123
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
     get:
       tags:
@@ -1953,7 +1953,7 @@ paths:
           description: 인증 필요
         '500':
           description: 서버 내부 오류
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/records/{recordId}":
     get:
       tags:
@@ -3460,7 +3460,7 @@ paths:
         - 인증된 활성 사용자만 사용할 수 있다.
         - 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.
         - 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.
-        - 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다.
+        - 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.
         - 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.
         - 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다
       responses:
@@ -3481,6 +3481,28 @@ paths:
                     properties:
                       playlist:
                         nullable: true
+                        allOf:
+                        - type: object
+                          properties:
+                            recommendationPlaylistId:
+                              type: integer
+                              format: int64
+                            tracks:
+                              type: array
+                              items:
+                                type: object
+                                properties:
+                                  musicTrackId:
+                                    type: integer
+                                    format: int64
+                                  title:
+                                    type: string
+                                  artistName:
+                                    type: string
+                                  albumImageUrl:
+                                    type: string
+                                  externalUrl:
+                                    type: string
               example:
                 message: 현재 추천 플레이리스트 조회 성공
                 data:
@@ -3524,7 +3546,7 @@ paths:
         latitude: Double
         longitude: Double
 
-        동기 처리. 사용자의 기록 + 현재 위치 주변 장소의 자물쇠 + 현재 위치/장소 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.
+        동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다.
 
         정책 및 설명
         - 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.
@@ -3532,6 +3554,7 @@ paths:
         - 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.
         - 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.
         - 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.
+        - AI가 저하 상태를 알리거나 추천 곡이 비어 있으면 기존 현재 플레이리스트를 유지하고 200을 반환한다.
         - 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.
         - 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.
       requestBody:
@@ -3590,6 +3613,8 @@ paths:
                                   type: string
                                 artistName:
                                   type: string
+                                albumImageUrl:
+                                  type: string
                                 externalUrl:
                                   type: string
               example:
@@ -3601,7 +3626,23 @@ paths:
                     - musicTrackId: 3
                       title: 비 오는 날엔
                       artistName: 헤이즈
+                      albumImageUrl: https://i.scdn.co/image/example
                       externalUrl: "..."
+        '200':
+          description: AI가 저하 상태를 알리거나 추천 곡이 없어 기존 현재 플레이리스트를 유지했으므로 200.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+              example:
+                message: 추천 결과가 없어 기존 플레이리스트 유지
+                data:
+                  playlist: null
         '400':
           description: |-
             추천 컨텍스트 생성을 위한 현재 위치 좌표가 누락되어 요청 검증에 실패했으므로 400.
@@ -3652,7 +3693,7 @@ paths:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
         '502':
-          description: 현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.
+          description: 현재 위치의 날씨·기온을 확보하지 못했거나 AI 서비스 통신·응답 계약이 실패해 추천을 생성할 수 없으므로 502.
           content:
             application/json:
               schema:
@@ -5445,7 +5486,7 @@ paths:
           description: 인증 필요
         '500':
           description: 서버 내부 오류
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/csrf":
     get:
       tags:
@@ -5643,7 +5684,7 @@ paths:
                   value:
                     code: INTERNAL_SERVER_ERROR
                     message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/users/me/records/search":
     post:
@@ -5847,7 +5888,7 @@ paths:
                   value:
                     code: INTERNAL_SERVER_ERROR
                     message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
 components:
   securitySchemes:

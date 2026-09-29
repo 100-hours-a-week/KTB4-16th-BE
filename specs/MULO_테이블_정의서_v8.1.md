@@ -1,7 +1,7 @@
 # MULO 테이블 정의서 v8.1
 
 > 작성일: 2026-09-21 (KST)  
-> 실제 스키마 기준: `app/mulo-be` 현재 `feature` 작업 트리의 Flyway V1~V4  
+> 실제 스키마 기준: `app/mulo-be` 현재 `develop` 작업 트리의 Flyway V1~V4
 > 설계·정책 기준: 테이블 정의서 v7.6, 서비스 정책 정의서 v1.9, OpenAPI v2.6, 현재 구현 문서  
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
@@ -636,7 +636,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자에게 생성된 현재 추천 플레이리스트 정보를 저장하는 테이블이다. 사용자가 서비스를 나갔다가 다시 접속해도 마지막으로 생성된 추천 플레이리스트를 유지하며, 새 추천 요청이 발생하면 기존 추천 플레이리스트를 삭제하고 새로운 추천 플레이리스트를 생성한다.
+사용자에게 생성된 현재 추천 플레이리스트 정보를 저장하는 테이블이다. 사용자가 서비스를 나갔다가 다시 접속해도 마지막으로 생성된 추천 플레이리스트를 유지한다. AI가 정상 추천 곡을 반환한 새 추천 요청에만 기존 플레이리스트를 교체하며, AI 저하 상태 또는 빈 추천 결과에서는 기존 플레이리스트를 유지한다.
 
 #### 2. 컬럼 정의
 
@@ -644,7 +644,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `recommendation_playlist_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 추천 플레이리스트 고유 ID | 각 추천 플레이리스트를 고유하게 식별하고 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 추천 플레이리스트와 해당 플레이리스트의 음악 목록을 식별하는 기준이 된다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 추천 플레이리스트 소유 사용자 ID | `users.user_id`를 참조한다. 현재 정책상 사용자별 현재 추천 플레이리스트 하나만 유지하므로 UNIQUE를 적용한다. | 어떤 사용자의 추천 플레이리스트인지 식별한다. |
-| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 추천 플레이리스트가 최초 생성된 시각 | 최초 추천 플레이리스트가 만들어진 시점을 기록한다. | 사용자의 추천 플레이리스트 최초 생성 시점을 관리한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 현재 추천 플레이리스트 생성 시각 | 현재 저장된 플레이리스트가 생성된 시점을 기록한다. 교체 시 새 행이 생성되므로 새 시각이 저장된다. | 현재 추천 결과의 생성 시점을 관리한다. |
 
 #### 3. 제약조건
 
@@ -663,7 +663,8 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 5. 비즈니스 규칙
 
-- 추천 생성 시 날씨·기온·시간 등의 Context를 사용할 수 있으나, 현재 추천 플레이리스트 리소스에는 해당 값을 저장하지 않는다.
+- 추천 생성 시 요청 사용자 ID, 현재 위치의 날씨·기온, KST 요청 시각을 AI 컨텍스트로 사용하나, 해당 값은 이 테이블에 저장하지 않는다.
+- 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계해 상위 5곡만 AI에 전달한다. 법정동 역지오코딩이 성공한 경우에만 선택값 `place.name`을 전달하며, `placeId`와 `requestId`는 전달하지 않는다.
 - 현재 추천 플레이리스트 조회 응답에도 생성 당시의 `weatherCondition`, `temperature`, `time` 값을 포함하지 않는다.
 
 ---
@@ -699,6 +700,11 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- |
 | `recommendation_playlists` | `recommendation_playlist_items.recommendation_playlist_id` ↔ `recommendation_playlists.recommendation_playlist_id` | N:1 | 하나의 음악 항목은 하나의 추천 플레이리스트에 속하며, 하나의 추천 플레이리스트에는 여러 음악 항목이 존재한다. |
 | `music_tracks` | `recommendation_playlist_items.music_track_id` ↔ `music_tracks.music_track_id` | N:1 | 하나의 추천 항목은 하나의 음악을 참조하며, 동일한 음악이 여러 사용자의 추천 플레이리스트에 포함될 수 있다. |
+
+#### 5. 조회 응답 규칙
+
+- 추천 곡의 제목·아티스트·외부 재생 링크와 앨범 이미지는 연결된 `music_tracks` 행에서 조회한다.
+- API의 `albumImageUrl`은 `music_tracks.album_image_url` 값이며, 추천 항목 테이블에 별도로 중복 저장하지 않는다.
 
 ---
 
@@ -1017,14 +1023,13 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `record_drafts` | 브라우저 로컬 임시저장을 사용하여 V1 기능에서 제외 | Flyway V1에 테이블과 FK가 실제 존재 | `V1 제외·실제 테이블 존재`; 삭제 여부는 새 migration 승인 필요 |
 | `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
 | `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
-| `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | Flyway V1과 현재 작업 트리에 엔티티·생성·목록 조회 구현, 상세 API는 미구현 | DB는 구현됨, API 구현 상태는 정책·OpenAPI에서 구분 |
+| `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | Flyway V1과 현재 작업 트리에 엔티티·생성·목록·상세 조회 구현 | DB와 공개 조회 API는 구현됨, 내부 생성·AI 콜백은 정책서에서 분리 기록 |
 
 ## Open Questions
 
 | ID | 내용 |
 | --- | --- |
 | `OQ-001` | 음악 장르의 정식 목록 |
-| `OQ-021` | 일반 AI 플레이리스트 곡 수 |
 | `OQ-022` | 알림 보관 기간 |
 | `OQ-023` | 월간 리포트 배치 실행 시각 |
 | `WTH-002` | 국내 기상청 격자 범위 밖 좌표의 HTTP 상태와 오류 코드 |
@@ -1118,6 +1123,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `pk_weather_grid_forecasts` | PRIMARY KEY | `weather_grid_forecast_id` | 예보 캐시 식별 |
 | `fk_weather_grid_forecasts_grid` | FOREIGN KEY | `weather_grid_id` | `weather_grids.weather_grid_id` |
 | `uk_weather_grid_forecasts_daily_slot` | UNIQUE | `weather_grid_id`, `cache_date`, `forecast_at` | 동일 날짜·격자·예보시각 중복 방지 |
+| `idx_weather_grid_forecasts_lookup` | INDEX | `weather_grid_id`, `cache_date`, `forecast_at` | 날짜·격자·예보시각 조회 성능 지원 |
 
 #### 3-1. 예보시각 정규화 및 캐시 갱신 규칙
 
