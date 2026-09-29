@@ -49,6 +49,7 @@ class SpotifyMusicCatalogClientTest {
                         org.hamcrest.Matchers.containsString("market=KR"),
                         org.hamcrest.Matchers.containsString("limit=10"))))
                 .andExpect(header(HttpHeaders.AUTHORIZATION, "Bearer token"))
+                .andExpect(header(HttpHeaders.ACCEPT_LANGUAGE, "ko"))
                 .andRespond(withSuccess(successBody(), MediaType.APPLICATION_JSON));
 
         var results = client.searchTracks("밤편지");

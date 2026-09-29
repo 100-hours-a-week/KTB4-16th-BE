@@ -1984,6 +1984,131 @@ const spec = {
         "x-csrf-required": true
       }
     },
+    "/api/uploads/{uploadId}/signed-url": {
+      "get": {
+        "tags": [
+          "UPLOAD / 업로드"
+        ],
+        "summary": "임시 업로드 사진 조회 URL 발급",
+        "operationId": "getApiUploadsSignedUrl",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "description": "현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 임시 업로드에 대해 private GCS 객체의 읽기용 Signed URL을 발급한다. Signed URL은 발급 시점부터 10분 동안 유효하다. HEIC 업로드는 서버에서 변환된 JPEG 객체의 Signed URL을 반환한다.",
+        "parameters": [
+          {
+            "name": "uploadId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "유효한 임시 업로드의 읽기용 Signed URL 발급 성공.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "signedUrl": {
+                          "type": "string",
+                          "format": "uri"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "사진 조회 URL 발급 성공",
+                  "data": {
+                    "signedUrl": "https://storage.googleapis.com/example-bucket/uploads/35/example.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&..."
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "유효한 Access Token이 없거나 인증에 실패한 경우 401.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "UNAUTHORIZED",
+                  "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "uploadId가 존재하지 않거나, 현재 사용자 소유가 아니거나, 생성 후 1시간이 지나 유효하지 않은 경우 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "UPLOAD_NOT_FOUND",
+                  "message": "업로드를 찾을 수 없습니다."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Signed URL 발급 중 예상하지 못한 서버 내부 오류가 발생한 경우 500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INTERNAL_SERVER_ERROR",
+                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented"
+      }
+    },
     "/api/recommendations/photo": {
       "post": {
         "tags": [

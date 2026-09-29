@@ -239,6 +239,17 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void uploadSignedUrlRequiresAuthenticationButNotCsrf() throws Exception {
+        mvc.perform(get("/api/uploads/123/signed-url"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(get("/api/uploads/123/signed-url").with(user("upload-owner")))
+                .andExpect(status().isOk())
+                .andExpect(content().string("signed url"));
+    }
+
+    @Test
     void nicknameUpdateRequiresCsrfAndAuthentication() throws Exception {
         mvc.perform(patch("/api/users/me/nickname"))
                 .andExpect(status().isForbidden())
@@ -361,6 +372,9 @@ class SecurityIntegrationTests {
         @PostMapping("/api/uploads")
         @ResponseStatus(HttpStatus.CREATED)
         void upload() { }
+
+        @GetMapping("/api/uploads/{uploadId}/signed-url")
+        String uploadSignedUrl() { return "signed url"; }
 
         @GetMapping("/api/private")
         String privateResource() { return "protected"; }

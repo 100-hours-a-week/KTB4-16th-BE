@@ -1,11 +1,15 @@
 package com.ktb4.team16.mulo.upload.controller;
 
+import com.ktb4.team16.mulo.upload.dto.response.UploadSignedUrlResponse;
 import com.ktb4.team16.mulo.upload.dto.response.UploadResponse;
+import com.ktb4.team16.mulo.upload.message.UploadMessage;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
+import org.springframework.web.bind.annotation.GetMapping;
+import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestPart;
@@ -25,5 +29,15 @@ public class UploadController {
             @AuthenticationPrincipal Long userId,
             @RequestPart("photo") MultipartFile photo) {
         return uploadService.upload(userId, photo);
+    }
+
+    @GetMapping("/{uploadId}/signed-url")
+    public UploadSignedUrlResponse getSignedUrl(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long uploadId) {
+        String signedUrl = uploadService.createReadSignedUrl(userId, uploadId);
+        return new UploadSignedUrlResponse(
+                UploadMessage.SIGNED_URL_ISSUED.message(),
+                new UploadSignedUrlResponse.Data(signedUrl));
     }
 }
