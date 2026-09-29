@@ -54,6 +54,7 @@ public class MonthlyReportBatchAiClient {
     private static RestClient.Builder configuredBuilder(RestClient.Builder builder,
             AiProperties properties) {
         HttpClient httpClient = HttpClient.newBuilder()
+                .version(HttpClient.Version.HTTP_1_1)
                 .connectTimeout(properties.connectTimeout())
                 .build();
         JdkClientHttpRequestFactory factory = new JdkClientHttpRequestFactory(httpClient);
