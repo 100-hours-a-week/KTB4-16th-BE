@@ -36,6 +36,17 @@ FROM eclipse-temurin:21-jre-noble AS runner
 # 작업 디렉토리 설정
 WORKDIR /app
 
+# HEIC(아이폰 사진) → JPEG 변환용 네이티브 의존성.
+# heif-convert(HEIC 디코딩+변환) → jpegtran(EXIF/GPS 메타데이터 제거, ICC 컬러 프로파일 유지)
+# 순서로 사용한다. root 권한이 필요해 USER 전환 전에 설치해야 한다.
+# 버전은 eclipse-temurin:21-jre-noble 기준 실제 설치되는 값으로 고정해서, 재배포 시
+# 다른 마이너 버전이 섞여 들어가지 않게 한다.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libheif-examples=1.17.6-1ubuntu4.8 \
+    libheif-plugin-libde265=1.17.6-1ubuntu4.8 \
+    libjpeg-turbo-progs=2.1.5-2ubuntu2 \
+    && rm -rf /var/lib/apt/lists/*
+
 # 보안을 위해 root가 아닌 일반 실행 사용자 생성 및 전환
 # (Alpine의 BusyBox adduser 전용 옵션(-D) 대신 Debian/Ubuntu adduser 문법 사용)
 RUN adduser --disabled-password --gecos "" springuser
