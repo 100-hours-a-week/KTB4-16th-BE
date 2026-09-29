@@ -78,6 +78,8 @@ public class SpotifyMusicCatalogClient implements MusicCatalogClient {
                 .uri(properties.apiBaseUrl() + "/v1/search?q={q}&type=track&market=KR&limit=10",
                         query)
                 .header(HttpHeaders.AUTHORIZATION, "Bearer " + token)
+                // 중요: Spotify에 한국어 메타데이터 표기를 우선 요청한다.
+                .header(HttpHeaders.ACCEPT_LANGUAGE, "ko")
                 .retrieve()
                 .body(SpotifySearchResponse.class);
         if (response == null || response.tracks() == null
