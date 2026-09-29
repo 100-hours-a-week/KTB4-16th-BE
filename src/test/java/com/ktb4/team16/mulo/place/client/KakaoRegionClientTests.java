@@ -13,6 +13,8 @@ import com.ktb4.team16.mulo.place.client.KakaoRegionLookupException.Reason;
 import java.math.BigDecimal;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -130,6 +132,93 @@ class KakaoRegionClientTests {
                 () -> fixture.client.findLegalRegionName(LATITUDE, LONGITUDE));
 
         assertEquals(Reason.LEGAL_REGION_NOT_FOUND, exception.getReason());
+        fixture.server.verify();
+    }
+
+    @Test
+    void returnsCodeAndNameOfLegalRegionNotAdministrativeRegion() {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo(REQUEST_URL))
+                .andRespond(withSuccess("""
+                        {"documents":[
+                          {"region_type":"H","code":"H-CODE","region_3depth_name":"행정동"},
+                          {"region_type":"B","code":"1168010100","region_3depth_name":"역삼동"}
+                        ]}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertEquals(new KakaoRegionClient.LegalRegion("1168010100", "역삼동"),
+                fixture.client.findLegalRegion(LATITUDE, LONGITUDE));
+        fixture.server.verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {
+            "{}",
+            "{\"code\":null,\"region_3depth_name\":\"역삼동\"}",
+            "{\"code\":\" \",\"region_3depth_name\":\"역삼동\"}",
+            "{\"code\":\"1168010100\",\"region_3depth_name\":null}",
+            "{\"code\":\"1168010100\",\"region_3depth_name\":\" \"}"
+    })
+    void rejectsLegalRegionWithMissingOrBlankCodeOrName(String fields) {
+        Fixture fixture = fixture();
+        String document = fields.equals("{}") ? "{\"region_type\":\"B\"}"
+                : "{\"region_type\":\"B\"," + fields.substring(1);
+        fixture.server.expect(requestTo(REQUEST_URL))
+                .andRespond(withSuccess("{\"documents\":[" + document + "]}", MediaType.APPLICATION_JSON));
+
+        var exception = assertThrows(KakaoRegionLookupException.class,
+                () -> fixture.client.findLegalRegion(LATITUDE, LONGITUDE));
+
+        assertEquals(Reason.LEGAL_REGION_NOT_FOUND, exception.getReason());
+        fixture.server.verify();
+    }
+
+    @Test
+    void preservesNameOnlyLookupCompatibilityWithoutCode() {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo(REQUEST_URL))
+                .andRespond(withSuccess("""
+                        {"documents":[{"region_type":"B","region_3depth_name":"역삼동"}]}
+                        """, MediaType.APPLICATION_JSON));
+
+        assertEquals("역삼동", fixture.client.findLegalRegionName(LATITUDE, LONGITUDE));
+        fixture.server.verify();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"{", "{}", "{\"documents\":[null]}"})
+    void rejectsInvalidResponsesForCodeAndNameLookup(String body) {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo(REQUEST_URL))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        var exception = assertThrows(KakaoRegionLookupException.class,
+                () -> fixture.client.findLegalRegion(LATITUDE, LONGITUDE));
+
+        assertEquals(Reason.INVALID_RESPONSE, exception.getReason());
+        fixture.server.verify();
+    }
+
+    @Test
+    void rejectsEmptyDocumentsForOverseasOrSeaCoordinates() {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo(REQUEST_URL))
+                .andRespond(withSuccess("{\"documents\":[]}", MediaType.APPLICATION_JSON));
+        var exception = assertThrows(KakaoRegionLookupException.class,
+                () -> fixture.client.findLegalRegion(LATITUDE, LONGITUDE));
+        assertEquals(Reason.LEGAL_REGION_NOT_FOUND, exception.getReason());
+        fixture.server.verify();
+    }
+
+    @Test
+    void distinguishesConnectionFailureForCodeAndNameLookup() {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo(REQUEST_URL)).andRespond(request -> {
+            throw new java.io.IOException("Connection failed");
+        });
+        var exception = assertThrows(KakaoRegionLookupException.class,
+                () -> fixture.client.findLegalRegion(LATITUDE, LONGITUDE));
+        assertEquals(Reason.API_ERROR, exception.getReason());
         fixture.server.verify();
     }
 

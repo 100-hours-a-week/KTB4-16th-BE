@@ -25,10 +25,10 @@
 
 ### v7.6에서 승계한 핵심 변경 사항
 
-- `places.legal_dong_code`, `places.legal_dong_name`은 NULL 허용: Kakao Maps SDK의 법정동(`region_type=B`) 결과가 있으면 각각 `code`, `region_3depth_name`을 저장하고, 정상 조회 결과 법정동이 없으면 둘 다 NULL로 저장
+- `places.legal_dong_code`, `places.legal_dong_name`은 기존/예외 데이터 조회를 위해 DB에서 NULL을 허용한다. 신규 Place는 서버 Kakao의 유효한 `region_type=B` code/name 확인이 필수이며 각각 `code`, `region_3depth_name`을 저장한다.
 - `legal_dong_code`와 `legal_dong_name`은 둘 다 존재하거나 둘 다 NULL이어야 하도록 CHECK 제약을 둔다
 - 자물쇠 생성 위치는 프론트가 브라우저 Geolocation API로 최초 좌표를 얻고 Kakao Maps SDK에서 사용자가 수정한 최종 좌표를 확정한다
-- 프론트는 최종 좌표에 대해 Kakao Maps SDK `services.Geocoder.coord2RegionCode()`를 호출해 법정동 코드/명을 얻고 `latitude`, `longitude`, `legalDongCode`, `legalDongName`을 백엔드에 전달한다
+- 프론트의 `legalDongCode`, `legalDongName`은 호환성용 선택 입력이다. 백엔드는 정확히 동일한 좌표의 기존 Place를 먼저 재사용하고, 신규 Place에만 서버 Kakao 역지오코딩 결과의 법정동 code/name을 사용한다.
 - 대시보드 지역 그룹 키는 `legal_dong_code`이며 `legal_dong_name`은 표시용이다. `legal_dong_code IS NULL`인 데이터는 하나의 미확인 그룹으로 집계하고 화면에는 `확인할 수 없음`으로 표시한다
 - 홈의 인기 자물쇠 지도는 조회 시점 기준 최근 7일 이내 생성된 삭제되지 않은 자물쇠만 대상으로 한다
 - 인기 자물쇠 마커 클릭 후 음악 랭킹도 동일한 최근 7일 자물쇠만 집계하며 음악별 `count DESC`, 동률은 해당 음악의 가장 최근 Record 생성 시각 내림차순으로 정렬한다
@@ -150,7 +150,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-자물쇠가 기록된 좌표와 법정동 정보를 저장한다. 자물쇠 생성 시 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 좌표를 확정한다. 이후 Kakao Maps SDK `services.Geocoder.coord2RegionCode()`로 법정동(`region_type=B`)을 조회해 `code`와 `region_3depth_name`을 각각 `legalDongCode`, `legalDongName`으로 백엔드에 전달한다. 정상 조회 결과 법정동이 없는 좌표(예: 일부 해상 좌표)는 두 값을 모두 NULL로 전달·저장할 수 있다. 개별 지도 마커와 상세 화면은 `place_id` 및 좌표를 기준으로 유지하고, 대시보드 지역 집계는 `legal_dong_code`를 기준으로 수행한다. `legal_dong_name`은 사용자 화면 표시용이며 NULL이면 화면에서 `확인할 수 없음`으로 표현한다.
+자물쇠가 기록된 좌표와 법정동 정보를 저장한다. 프론트는 Geolocation 및 Kakao 지도에서 최종 좌표를 확정해 전달한다. 백엔드는 정확히 동일한 좌표의 기존 Place를 Kakao 재검증·법정동 갱신 없이 재사용한다. 동일 좌표 Place가 없으면 서버 Kakao 좌표 → 행정구역정보 API의 유효한 법정동(B) code/name으로만 신규 Place를 생성한다. 요청의 법정동 값은 저장 신뢰값이 아니다. 법정동 미확인 위치에서는 신규 Place/Record 생성이 실패한다. 기존/예외 데이터의 NULL 법정동 조회 fallback과 대시보드 `legal_dong_code` 그룹화는 유지한다.
 
 #### 2. 컬럼 정의
 
@@ -178,11 +178,11 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 규칙명 | 설명 |
 | --- | --- |
 | `rule_place_location_frontend` | 프론트는 브라우저 Geolocation API로 최초 좌표를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 `latitude`/`longitude`를 확정한다. |
-| `rule_place_legal_dong_frontend` | 프론트는 최종 좌표에 대해 Kakao Maps SDK `services.Geocoder.coord2RegionCode()`를 호출하고 `region_type=B` 결과의 `code`와 `region_3depth_name`을 각각 `legalDongCode`, `legalDongName`으로 백엔드에 전달한다. |
-| `rule_place_legal_dong_nullable_pair` | Kakao SDK 호출은 정상 성공했으나 `region_type=B` 결과가 없는 경우 `legal_dong_code`, `legal_dong_name`을 모두 NULL로 저장할 수 있다. 둘 중 하나만 NULL인 상태는 허용하지 않는다. |
+| `rule_place_legal_dong_frontend` | 프론트의 `legalDongCode`, `legalDongName`은 호환성용 선택 입력이며 신규 Place 저장에는 사용하지 않는다. 서버가 좌표로 확인한 Kakao B code/name을 사용한다. |
+| `rule_place_legal_dong_nullable_pair` | 기존/예외 데이터를 위해 두 법정동 컬럼의 NULL 허용 및 쌍 CHECK를 유지한다. 신규 Place는 서버 Kakao에서 null/blank가 아닌 B code/name을 확인한 경우에만 생성한다. |
 | `rule_place_kakao_sdk_failure` | Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 이를 법정동 없음으로 간주하지 않는다. 프론트는 자물쇠 생성 요청을 중단하거나 재시도한다. |
 | `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 화면에는 `확인할 수 없음`으로 표시한다. |
-| `rule_place_reuse_exact_coordinates` | latitude와 longitude가 모두 정확히 동일한 기존 `place`가 있는 경우에만 재사용한다. 근접 좌표는 기존 `place`로 판단하지 않으며, 동일 좌표가 없으면 새로운 `place`를 생성한다. |
+| `rule_place_reuse_exact_coordinates` | latitude와 longitude가 모두 정확히 동일한 기존 Place를 먼저 조회해 Kakao 재호출·법정동 재검증·갱신 없이 그대로 재사용한다. 근접 좌표는 재사용하지 않으며, 신규 Place에는 서버 Kakao 법정동 검증이 필요하다. |
 
 #### 4. 관계
 

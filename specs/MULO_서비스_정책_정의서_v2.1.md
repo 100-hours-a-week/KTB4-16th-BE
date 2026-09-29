@@ -105,9 +105,9 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `PLACE-003` | **확정** | 법정동 저장 | `places.legal_dong_code`, `places.legal_dong_name`을 한 쌍으로 저장한다. Kakao Maps SDK `coord2RegionCode()`의 `region_type=B` 결과에서 `code → legal_dong_code`, `region_3depth_name → legal_dong_name`으로 매핑한다. | 사용자 확정 / Kakao 법정동 응답 매핑 |
+| `PLACE-003` | **확정** | 법정동 저장 | 신규 Place에는 백엔드 Kakao 좌표 → 행정구역정보 API의 유효한 `region_type=B` 응답에서 `code → legal_dong_code`, `region_3depth_name → legal_dong_name`을 한 쌍으로 저장한다. 요청의 법정동 값은 저장 신뢰값으로 사용하지 않는다. | 사용자 확정 / 서버 Kakao 법정동 응답 매핑 |
 | `PLACE-004` | **확정** | 위치 선택 책임 | 프론트는 브라우저 Geolocation API로 최초 위치를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 `latitude`/`longitude`를 확정한다. | 사용자 확정 |
-| `PLACE-005` | **확정** | 법정동 미확인 허용 | Kakao Maps SDK 호출이 정상 성공했지만 `region_type=B` 결과가 없는 경우 `legal_dong_code`, `legal_dong_name`을 둘 다 NULL로 전달·저장하고 자물쇠 생성을 허용한다. 둘 중 하나만 NULL인 상태는 허용하지 않는다. | 사용자 확정 |
+| `PLACE-005` | **확정** | 신규 Place 법정동 필수 | 동일 좌표 Place가 없을 때 서버 Kakao 응답의 법정동(B) code/name이 모두 null/blank가 아니어야 신규 Place와 Record를 생성한다. 법정동 미확인은 400 UNSUPPORTED_RECORD_LOCATION, 통신·응답 오류는 502 LOCATION_SERVICE_ERROR이며 생성하지 않는다. 기존 데이터의 NULL 법정동 조회 fallback은 유지한다. | 사용자 확정 |
 | `PLACE-006` | **확정** | 대시보드 그룹 기준 | `legal_dong_code`가 있으면 해당 코드로 그룹화하고 `legal_dong_name`을 표시한다. `legal_dong_code IS NULL`인 데이터는 하나의 미확인 그룹으로 묶고 UI에 `확인할 수 없음`으로 표시한다. | 사용자 확정 |
 | `PLACE-008` | **현재 설계** | 지도 조회 영역 | viewport는 SW/NE bounding box(`swLat/swLng/neLat/neLng`)로 전달한다. | API 명세 상세2차 |
 | `PLACE-009` | **확정** | 인기 자물쇠 조회 기간 | 홈의 인기 자물쇠 지도/목록은 조회 시점 기준 최근 7일 이내 생성된 삭제되지 않은 자물쇠만 대상으로 한다. 최근 7일 내 자물쇠가 없는 장소는 인기 자물쇠 마커 대상에서 제외한다. | 사용자 확정 |
@@ -117,10 +117,10 @@
 | `PLACE-013` | **확정** | 내 자물쇠 전체 조회 | 내 자물쇠 지도/목록에는 7일 제한을 적용하지 않는다. 현재 사용자의 삭제되지 않은 모든 자물쇠가 조회 대상이다. | 사용자 확정 |
 | `PLACE-014` | **현재 설계** | 특정 장소 내 내 기록 | 삭제되지 않은 기록만 최신순으로 조회하고 같은 장소·음악 반복 기록을 허용한다. | API 명세 상세2차 |
 | `PLACE-015` | **확정** | 장소 표시 명칭 | 장소 관련 화면에는 `legal_dong_name`을 표시한다. `legal_dong_name=NULL`이면 UI에서 `확인할 수 없음`으로 표시하며 API/DB에는 해당 문구를 저장하지 않는다. | 사용자 확정 |
-| `PLACE-016` | **확정** | place 재사용 기준 | latitude와 longitude가 모두 정확히 동일한 기존 `place`가 있는 경우에만 재사용한다. 근접 좌표는 기존 `place`로 판단하지 않으며, 동일 좌표가 없으면 새로운 `place`를 생성한다. | 사용자 확정 |
-| `PLACE-017` | **확정** | 자물쇠 생성 위치 요청값 | 프론트는 최종 `latitude`, `longitude`, `legalDongCode`, `legalDongName`을 `POST /api/records`에 전달한다. 백엔드는 자물쇠 생성 과정에서 동일 좌표로 Kakao 법정동 API를 재호출하지 않는다. | 사용자 확정 |
+| `PLACE-016` | **확정** | place 재사용 기준 | latitude와 longitude가 모두 정확히 동일한 기존 `place`를 먼저 조회해 그대로 재사용한다. 기존 Place에는 Kakao 재호출·법정동 재검증·갱신을 하지 않는다. 근접 좌표는 재사용하지 않으며, 동일 좌표가 없으면 서버 Kakao 법정동 검증 후 신규 생성한다. | 사용자 확정 |
+| `PLACE-017` | **확정** | 자물쇠 생성 위치 요청값 | 프론트는 최종 `latitude`, `longitude`를 `POST /api/records`에 전달한다. `legalDongCode`, `legalDongName`은 기존 FE 호환성을 위한 선택 입력으로 유지하지만 신규 Place 생성에는 사용하지 않는다. 위도 -90~90, 경도 -180~180 범위는 좌표 유효성만 검증하며 국내 판별용 bounding box를 사용하지 않는다. | 사용자 확정 |
 | `PLACE-018` | **확정** | 프론트 Kakao 조회 실패 | Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 `null/null` 법정동으로 대체하지 않는다. 프론트에서 생성 요청을 중단하거나 재시도한다. | 사용자 확정 |
-| `PLACE-019` | **확정** | 백엔드 법정동 입력 검증 | 백엔드는 `legalDongCode`/`legalDongName`이 둘 다 값이 있거나 둘 다 NULL인지 검증한다. 값이 있는 `legalDongCode`는 카카오 법정동 코드 형식에 맞는 문자열인지 검증한다. | 사용자 확정 |
+| `PLACE-019` | **확정** | 백엔드 법정동 입력 검증 | 기존 요청의 `legalDongCode`/`legalDongName` 쌍 검증은 유지한다. 신규 Place의 법정동은 서버가 요청 좌표로 Kakao를 조회해 얻은 B code/name으로 검증·저장하며 클라이언트 입력을 신뢰하지 않는다. | 사용자 확정 |
 | `PLACE-020` | **확정** | 클러스터·장소 인기 음악 조회 | `POST /api/places/popular-tracks/search` Body에 `placeIds`를 전달한다. ID 1개는 개별 마커, 여러 개는 클러스터를 의미하며 최근 7일 이내 삭제되지 않은 자물쇠를 합산한다. Cursor, `size`, TOP N 제한은 적용하지 않는다. | 사용자 확정 2026-09-21 / 팀원 OpenAPI v2.4 |
 | `PLACE-021` | **확정** | 클러스터·장소 내 자물쇠 조회 | `POST /api/users/me/records/search` Body에 `placeIds`와 선택적 `cursor`를 전달한다. ID 1개와 여러 개를 동일 API로 처리하며 현재 사용자의 삭제되지 않은 모든 자물쇠를 최신순으로 조회한다. 7일 제한은 없다. | 사용자 확정 2026-09-21 / 팀원 OpenAPI v2.4 |
 | `PLACE-022` | **확정** | 인기 마커 개수 | 인기 자물쇠 지도 마커의 `recordsCount`는 해당 장소의 최근 7일 이내 삭제되지 않은 자물쇠 수다. | 사용자 확정 |
@@ -335,7 +335,7 @@
 
 ## 이번 버전에서 해소된 사항
 
-- 기존 `OQ-025`는 해소되었다. Kakao Maps SDK 호출이 정상 성공했으나 법정동(`region_type=B`) 결과가 없는 경우 오류로 처리하지 않고 `legal_dong_code=NULL`, `legal_dong_name=NULL`로 자물쇠 생성을 허용한다.
+- 기존 법정동 미확인 신규 생성 허용 정책은 변경되었다. 동일 좌표 Place를 먼저 재사용하고, 신규 Place는 서버 Kakao의 유효한 B code/name을 확인한 경우에만 생성한다. 미확인 위치에서는 Place/Record를 생성하지 않으며 기존 NULL 법정동 데이터 조회 fallback은 유지한다.
 - Kakao Maps SDK 호출 자체 실패는 법정동 없음과 구분하며, 프론트에서 요청 전 재시도 또는 생성 중단 처리한다.
 
 ## 미확정 / 추가 결정 필요
@@ -356,7 +356,7 @@
 
 | ID | 대상 | 수정 필요 내용 |
 |---|---|---|
-| `SYNC-001` | `places.legal_dong_code/name` | `legal_dong_code`, `legal_dong_name`을 NULL 허용으로 변경하고 두 값이 함께 존재하거나 함께 NULL이 되도록 한다. 법정동 미확인 시 자물쇠 생성은 허용한다. |
+| `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
 | `SYNC-002` | `chat_rooms.selected_option` | A2+B2 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
 | `SYNC-003` | `record_drafts` | 정책상 V1 제외지만 Flyway V1에 실제 테이블이 존재한다. 기능에서 사용하지 않으며 삭제 여부는 별도 migration 결정으로 남긴다. |
 | `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
