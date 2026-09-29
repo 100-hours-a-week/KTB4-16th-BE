@@ -42,9 +42,18 @@ public class MonthlyReportPreparationService {
         short year = (short) month.getYear();
         short monthValue = (short) month.getMonthValue();
         List<Long> userIds = new ArrayList<>();
+        int created = 0;
         int skipped = 0;
         for (Long userId : records.findUsersWithActiveRecordsInPeriod(start, end)) {
-            if (reports.existsByUser_UserIdAndReportYearAndReportMonth(userId, year, monthValue)) {
+            var existing = reports.findByUser_UserIdAndReportYearAndReportMonth(userId, year, monthValue);
+            if (existing.isPresent()) {
+                MonthlyReport report = existing.get();
+                if (report.getAiRecapStatus() == MonthlyReport.AiRecapStatus.FAILED) {
+                    // 기존 월간 집계를 보존하고 실패한 AI 회고만 다시 요청한다.
+                    report.retryFailedRecap();
+                    userIds.add(userId);
+                    continue;
+                }
                 skipped++;
                 continue;
             }
@@ -62,8 +71,9 @@ public class MonthlyReportPreparationService {
             moods.save(MonthlyMoodStat.create(saved,
                     BigDecimal.valueOf(summary.averageMoodScore()).setScale(1, RoundingMode.HALF_UP)));
             userIds.add(userId);
+            created++;
         }
-        return new PreparedBatch(month, List.copyOf(userIds), userIds.size(), skipped);
+        return new PreparedBatch(month, List.copyOf(userIds), created, skipped);
     }
 
     // AI가 배치 생성을 접수한 뒤 준비된 리포트만 PROCESSING으로 전환한다.
