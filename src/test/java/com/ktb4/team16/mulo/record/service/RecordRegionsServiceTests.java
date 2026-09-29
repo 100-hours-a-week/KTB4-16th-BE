@@ -36,7 +36,8 @@ class RecordRegionsServiceTests {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            gcsStorageService);
+            gcsStorageService,
+            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class));
 
     @Test
     void convertsNullRegionToUnknownApiGroup() {

@@ -37,7 +37,8 @@ class RecordCommentUpdateServiceTest {
             mock(UploadService.class),
             mock(MusicTrackService.class),
             mock(RecordPhotoRepository.class),
-            mock(GcsStorageService.class)
+            mock(GcsStorageService.class),
+            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class)
     );
 
     @Test

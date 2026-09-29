@@ -22,6 +22,7 @@ public enum ErrorCode {
     INVALID_LATITUDE(HttpStatus.BAD_REQUEST, "위도 값이 올바르지 않습니다."),
     INVALID_LONGITUDE(HttpStatus.BAD_REQUEST, "경도 값이 올바르지 않습니다."),
     INVALID_MAP_BOUNDS(HttpStatus.BAD_REQUEST, "지도 범위 정보가 올바르지 않습니다."),
+    UNSUPPORTED_RECORD_LOCATION(HttpStatus.BAD_REQUEST, "현재 위치에서는 자물쇠를 생성할 수 없습니다."),
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 커서입니다."),
     INVALID_RECORD_ID(HttpStatus.BAD_REQUEST, "올바른 자물쇠 ID를 입력해주세요."),
     COMMENT_TOO_LONG(HttpStatus.BAD_REQUEST, "코멘트는 80자 이하로 입력해주세요."),
@@ -51,6 +52,8 @@ public enum ErrorCode {
 
     WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
             "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
+    LOCATION_SERVICE_ERROR(HttpStatus.BAD_GATEWAY,
+            "위치 정보를 확인할 수 없습니다. 잠시 후 다시 시도해주세요."),
     MUSIC_SEARCH_RATE_LIMITED(HttpStatus.TOO_MANY_REQUESTS,
             "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."),
     MUSIC_PROVIDER_UNAVAILABLE(HttpStatus.SERVICE_UNAVAILABLE,

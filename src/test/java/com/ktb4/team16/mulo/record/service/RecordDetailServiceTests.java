@@ -43,7 +43,8 @@ class RecordDetailServiceTests {
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            gcsStorageService
+            gcsStorageService,
+            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class)
     );
 
     @Test

@@ -2,6 +2,8 @@ package com.ktb4.team16.mulo.record.dto.request;
 
 import jakarta.validation.Valid;
 import jakarta.validation.constraints.AssertTrue;
+import jakarta.validation.constraints.DecimalMax;
+import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
@@ -20,8 +22,12 @@ public record RecordCreateRequest(
         @NotNull(message = "INVALID_INPUT_VALUE") Long uploadId
 ) {
     public record Location(
-            @NotNull(message = "INVALID_INPUT_VALUE") BigDecimal latitude,
-            @NotNull(message = "INVALID_INPUT_VALUE") BigDecimal longitude,
+            @NotNull(message = "INVALID_INPUT_VALUE")
+            @DecimalMin(value = "-90", message = "INVALID_LATITUDE")
+            @DecimalMax(value = "90", message = "INVALID_LATITUDE") BigDecimal latitude,
+            @NotNull(message = "INVALID_INPUT_VALUE")
+            @DecimalMin(value = "-180", message = "INVALID_LONGITUDE")
+            @DecimalMax(value = "180", message = "INVALID_LONGITUDE") BigDecimal longitude,
             String legalDongCode,
             String legalDongName
     ) {
