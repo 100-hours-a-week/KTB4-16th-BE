@@ -11,6 +11,8 @@ import jakarta.validation.ConstraintViolation;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.BeforeAll;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.CsvSource;
 
 class RecordCreateRequestTest {
     private static ValidatorFactory validatorFactory;
@@ -132,6 +134,33 @@ class RecordCreateRequestTest {
 
         assertThat(validator.validate(request))
                 .anyMatch(violation -> violation.getMessage().equals("INVALID_INPUT_VALUE"));
+    }
+
+    @ParameterizedTest
+    @CsvSource({"-90, -180", "90, 180", "0, 0"})
+    void acceptsCoordinateRangeBoundaries(String latitude, String longitude) {
+        RecordCreateRequest request = coordinateRequest(latitude, longitude);
+        assertThat(validator.validate(request)).isEmpty();
+    }
+
+    @ParameterizedTest
+    @CsvSource({
+            "-90.0000001, 127, location.latitude, INVALID_LATITUDE",
+            "90.0000001, 127, location.latitude, INVALID_LATITUDE",
+            "37, -180.0000001, location.longitude, INVALID_LONGITUDE",
+            "37, 180.0000001, location.longitude, INVALID_LONGITUDE"
+    })
+    void rejectsCoordinatesOutsideRange(String latitude, String longitude, String field, String code) {
+        assertThat(validator.validate(coordinateRequest(latitude, longitude)))
+                .anyMatch(violation -> violation.getPropertyPath().toString().equals(field)
+                        && violation.getMessage().equals(code));
+    }
+
+    private RecordCreateRequest coordinateRequest(String latitude, String longitude) {
+        return new RecordCreateRequest(
+                new RecordCreateRequest.Location(
+                        new BigDecimal(latitude), new BigDecimal(longitude), null, null),
+                music(), 0, null, 1L);
     }
 
     private RecordCreateRequest.Music music() {

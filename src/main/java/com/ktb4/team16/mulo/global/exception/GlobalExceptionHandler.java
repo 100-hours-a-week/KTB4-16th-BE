@@ -10,6 +10,7 @@ import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
+import com.ktb4.team16.mulo.place.client.KakaoRegionLookupException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
@@ -44,6 +45,13 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    @ExceptionHandler(KakaoRegionLookupException.class)
+    public ResponseEntity<ErrorResponse> handleKakaoRegionLookup(KakaoRegionLookupException exception) {
+        ErrorCode errorCode = exception.getReason() == KakaoRegionLookupException.Reason.LEGAL_REGION_NOT_FOUND
+                ? ErrorCode.UNSUPPORTED_RECORD_LOCATION : ErrorCode.LOCATION_SERVICE_ERROR;
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
     @ExceptionHandler(UnauthenticatedUserException.class)
     public ResponseEntity<ErrorResponse> handleUnauthenticatedUser(
             UnauthenticatedUserException exception) {
