@@ -70,6 +70,14 @@ public class MonthlyReport {
             aiRecapStatus = AiRecapStatus.FAILED;
         }
     }
+
+    // 실패한 AI 회고만 재요청할 수 있도록 대기 상태로 되돌린다.
+    public void retryFailedRecap() {
+        if (aiRecapStatus == AiRecapStatus.FAILED) {
+            aiRecapStatus = AiRecapStatus.PENDING;
+        }
+    }
+
     // 대표 장소를 집계 결과로 연결한다.
     public void assignTopPlace(Place topPlace) { this.topPlace = topPlace; }
     public enum AiRecapStatus { PENDING, PROCESSING, COMPLETED, FAILED }

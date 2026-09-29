@@ -32,6 +32,18 @@ public class KakaoRegionClient {
     }
 
     public String findLegalRegionName(BigDecimal latitude, BigDecimal longitude) {
+        return findLegalRegionDocument(latitude, longitude).region_3depth_name();
+    }
+
+    public LegalRegion findLegalRegion(BigDecimal latitude, BigDecimal longitude) {
+        RegionDocument document = findLegalRegionDocument(latitude, longitude);
+        if (document.code() == null || document.code().isBlank()) {
+            throw new KakaoRegionLookupException(KakaoRegionLookupException.Reason.LEGAL_REGION_NOT_FOUND);
+        }
+        return new LegalRegion(document.code(), document.region_3depth_name());
+    }
+
+    private RegionDocument findLegalRegionDocument(BigDecimal latitude, BigDecimal longitude) {
         KakaoRegionResponse response;
         try {
             response = restClient.get()
@@ -61,6 +73,9 @@ public class KakaoRegionClient {
         if (legalRegion.region_3depth_name() == null || legalRegion.region_3depth_name().isBlank()) {
             throw new KakaoRegionLookupException(KakaoRegionLookupException.Reason.LEGAL_REGION_NOT_FOUND);
         }
-        return legalRegion.region_3depth_name();
+        return legalRegion;
+    }
+
+    public record LegalRegion(String code, String name) {
     }
 }

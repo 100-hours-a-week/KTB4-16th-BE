@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.record.service;
 
 import com.ktb4.team16.mulo.music.entity.MusicTrack;
 import com.ktb4.team16.mulo.music.service.MusicTrackService;
+import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.cursor.RecordCursor;
@@ -59,6 +60,7 @@ public class RecordService {
     private final MusicTrackService musicTrackService;
     private final RecordPhotoRepository recordPhotoRepository;
     private final GcsStorageService gcsStorageService;
+    private final KakaoRegionClient kakaoRegionClient;
 
 
     public Record findActiveRecordForOwner(Long userId, Long recordId) {
@@ -277,8 +279,6 @@ public class RecordService {
 
         BigDecimal longitude = request.location().longitude();
         BigDecimal latitude = request.location().latitude();
-        String legalDongCode = request.location().legalDongCode();
-        String legalDongName = request.location().legalDongName();
         Long uploadId = request.uploadId();
 
         Optional<Place> existingPlace =
@@ -292,9 +292,11 @@ public class RecordService {
         if (existingPlace.isPresent()) {
             place = existingPlace.get();
         } else {
+            KakaoRegionClient.LegalRegion legalRegion =
+                    kakaoRegionClient.findLegalRegion(latitude, longitude);
             place = new Place(
-                    legalDongCode,
-                    legalDongName,
+                    legalRegion.code(),
+                    legalRegion.name(),
                     latitude,
                     longitude
             );

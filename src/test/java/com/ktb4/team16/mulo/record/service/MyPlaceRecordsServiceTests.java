@@ -36,7 +36,8 @@ class MyPlaceRecordsServiceTests {
     private final RecordService recordService = new RecordService(
             recordRepository, cursorCodec, userRepository, placeRepository,
             weatherService, uploadService, musicTrackService, recordPhotoRepository,
-            gcsStorageService);
+            gcsStorageService,
+            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class));
 
     @Test
     void returnsTwentyRecordsAndCursorWhenRepositoryReturnsMoreThanTwenty() {
