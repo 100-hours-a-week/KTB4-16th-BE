@@ -31,6 +31,8 @@ import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
 import java.util.List;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
 import org.springframework.validation.FieldError;
@@ -45,6 +47,8 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 
 @RestControllerAdvice
 public class GlobalExceptionHandler {
+    private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
     @ExceptionHandler(KakaoRegionLookupException.class)
     public ResponseEntity<ErrorResponse> handleKakaoRegionLookup(KakaoRegionLookupException exception) {
         ErrorCode errorCode = exception.getReason() == KakaoRegionLookupException.Reason.LEGAL_REGION_NOT_FOUND
@@ -286,7 +290,8 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(Exception.class)
     public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception exception) {
-        // 내부 예외 정보는 노출하지 않고 모든 API에 같은 500 계약을 적용한다.
+        // 내부 예외 정보는 응답엔 노출하지 않되, 원인 파악을 위해 서버 로그엔 남긴다.
+        log.error("처리되지 않은 예외", exception);
         return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_SERVER_ERROR));
     }
