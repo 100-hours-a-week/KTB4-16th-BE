@@ -36,6 +36,15 @@ gcs:
   project-id: ${GCP_PROJECT_ID}
   bucket-name: ${GCS_BUCKET_NAME}
 
+upload:
+  heic:
+    max-pixels: ${HEIC_MAX_PIXELS:25000000}
+    process-timeout: ${HEIC_PROCESS_TIMEOUT:PT15S}
+    max-concurrent-conversions: ${HEIC_MAX_CONCURRENT_CONVERSIONS:2}
+    permit-timeout: ${HEIC_PERMIT_TIMEOUT:PT1S}
+    heif-convert-command: ${HEIF_CONVERT_COMMAND:heif-convert}
+    jpegtran-command: ${JPEGTRAN_COMMAND:jpegtran}
+
 logging:
   level:
     org.flywaydb: info

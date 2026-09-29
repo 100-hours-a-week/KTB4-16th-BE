@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.upload.controller;
 
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.multipart;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -7,6 +8,8 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.upload.dto.response.UploadResponse;
+import com.ktb4.team16.mulo.upload.exception.HeicConversionException;
+import com.ktb4.team16.mulo.upload.exception.HeicConversionException.Reason;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -63,5 +66,47 @@ class UploadControllerTest {
         mvc.perform(multipart("/api/uploads"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.errors[0].field").value("photo"));
+    }
+
+    @Test
+    void returnsUnsupportedMediaTypeWhenHeicCannotBeDecoded() throws Exception {
+        doThrow(new HeicConversionException(Reason.HEIF_CONVERT_FAILED))
+                .when(uploadService).upload(
+                        org.mockito.ArgumentMatchers.eq(35L),
+                        org.mockito.ArgumentMatchers.any());
+
+        mvc.perform(multipart("/api/uploads").file(heic()))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_IMAGE_FORMAT"));
+    }
+
+    @Test
+    void returnsPayloadTooLargeWhenHeicExceedsPixelLimit() throws Exception {
+        doThrow(new HeicConversionException(Reason.PIXEL_LIMIT_EXCEEDED))
+                .when(uploadService).upload(
+                        org.mockito.ArgumentMatchers.eq(35L),
+                        org.mockito.ArgumentMatchers.any());
+
+        mvc.perform(multipart("/api/uploads").file(heic()))
+                .andExpect(status().isPayloadTooLarge())
+                .andExpect(jsonPath("$.code").value("IMAGE_PIXEL_COUNT_EXCEEDED"))
+                .andExpect(jsonPath("$.message")
+                        .value("사진 해상도는 2,500만 픽셀 이하여야 합니다."));
+    }
+
+    @Test
+    void hidesNativeInfrastructureFailureBehindInternalServerError() throws Exception {
+        doThrow(new HeicConversionException(Reason.JPEGTRAN_UNAVAILABLE))
+                .when(uploadService).upload(
+                        org.mockito.ArgumentMatchers.eq(35L),
+                        org.mockito.ArgumentMatchers.any());
+
+        mvc.perform(multipart("/api/uploads").file(heic()))
+                .andExpect(status().isInternalServerError())
+                .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
+    }
+
+    private MockMultipartFile heic() {
+        return new MockMultipartFile("photo", "photo.heic", "image/heic", new byte[]{1});
     }
 }

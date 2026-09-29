@@ -20,6 +20,7 @@ import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationReque
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportAiCallbackException;
 import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
 import com.ktb4.team16.mulo.upload.exception.EmptyImageException;
+import com.ktb4.team16.mulo.upload.exception.HeicConversionException;
 import com.ktb4.team16.mulo.upload.exception.ImageSizeExceededException;
 import com.ktb4.team16.mulo.upload.exception.InvalidImageFormatException;
 import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
@@ -263,6 +264,18 @@ public class GlobalExceptionHandler {
             InvalidImageFormatException exception) {
         return ResponseEntity.status(ErrorCode.UNSUPPORTED_IMAGE_FORMAT.status())
                 .body(ErrorResponse.of(ErrorCode.UNSUPPORTED_IMAGE_FORMAT));
+    }
+
+    @ExceptionHandler(HeicConversionException.class)
+    public ResponseEntity<ErrorResponse> handleHeicConversion(
+            HeicConversionException exception) {
+        ErrorCode errorCode = switch (exception.reason()) {
+            case INVALID_HEIC, HEIF_CONVERT_FAILED -> ErrorCode.UNSUPPORTED_IMAGE_FORMAT;
+            case PIXEL_LIMIT_EXCEEDED -> ErrorCode.IMAGE_PIXEL_COUNT_EXCEEDED;
+            case OUTPUT_SIZE_EXCEEDED -> ErrorCode.IMAGE_SIZE_EXCEEDED;
+            default -> ErrorCode.INTERNAL_SERVER_ERROR;
+        };
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
     }
 
     @ExceptionHandler(UploadNotFoundException.class)

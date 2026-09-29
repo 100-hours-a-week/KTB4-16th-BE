@@ -1,6 +1,8 @@
 package com.ktb4.team16.mulo.upload.service;
 
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
+import com.ktb4.team16.mulo.upload.conversion.HeicImageConverter;
+import com.ktb4.team16.mulo.upload.conversion.HeicImageConverter.ConvertedImage;
 import com.ktb4.team16.mulo.upload.dto.response.UploadResponse;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
@@ -32,19 +34,22 @@ public class UploadService {
     private final UserRepository userRepository;
     private final GcsStorageService gcsStorageService;
     private final Clock clock;
+    private final HeicImageConverter heicImageConverter;
 
     @Transactional
     public UploadResponse upload(Long userId, MultipartFile photo) {
         ValidatedImage image = ImageFileValidator.validate(photo);
         User user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(UnauthenticatedUserException::new);
-        String objectKey = objectKey(userId, image.extension());
+        UploadImage uploadImage = prepareUploadImage(image);
+        String objectKey = objectKey(userId, uploadImage.extension());
         boolean uploaded = false;
         try {
-            gcsStorageService.upload(objectKey, image.content(), image.contentType());
+            gcsStorageService.upload(objectKey, uploadImage.content(), uploadImage.contentType());
             uploaded = true;
             Upload upload = uploadRepository.saveAndFlush(
-                    Upload.create(user, objectKey, image.contentType(), image.content().length));
+                    Upload.create(user, objectKey, uploadImage.contentType(),
+                            uploadImage.content().length));
             return new UploadResponse(
                     UploadMessage.UPLOAD_COMPLETED.message(),
                     new UploadResponse.Data(upload.getUploadId())
@@ -108,5 +113,16 @@ public class UploadService {
 
     private String objectKey(Long userId, String extension) {
         return "uploads/" + userId + "/" + UUID.randomUUID() + "." + extension;
+    }
+
+    private UploadImage prepareUploadImage(ValidatedImage image) {
+        if (!"heic".equals(image.extension())) {
+            return new UploadImage(image.content(), image.contentType(), image.extension());
+        }
+        ConvertedImage converted = heicImageConverter.convert(image.content());
+        return new UploadImage(converted.content(), converted.contentType(), converted.extension());
+    }
+
+    private record UploadImage(byte[] content, String contentType, String extension) {
     }
 }
