@@ -6,6 +6,8 @@ on:
   workflow_run:
     workflows: ["main CI with backend"]
     types: [completed]
+    # CI 트리거를 develop 등 다른 브랜치로 넓혀도 CD가 따라 돌지 않도록 방어적으로 명시한다.
+    branches: [main]
   workflow_dispatch:
 
 env:
