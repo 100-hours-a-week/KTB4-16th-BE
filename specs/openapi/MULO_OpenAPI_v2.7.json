@@ -1769,7 +1769,7 @@
         ],
         "summary": "사진 임시 업로드",
         "operationId": "postApiUploads",
-        "description": "사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다.\n\n허용 형식: JPG, JPEG, PNG, HEIC, WebP\n최대 용량: 10MB",
+        "description": "사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다. HEIC은 JPEG quality 90으로 변환하고 촬영 metadata를 제거하되 ICC color profile은 유지하며, 원본 HEIC은 저장하지 않는다.\n\n허용 형식: JPG, JPEG, PNG, HEIC, WebP\n최대 입력 및 변환 결과 용량: 10MiB\nHEIC 변환 최대 총 픽셀: 25,000,000",
         "responses": {
           "201": {
             "description": "새 임시 업로드 리소스가 생성되므로 201.",
@@ -1870,7 +1870,7 @@
             }
           },
           "413": {
-            "description": "업로드한 이미지가 MULO에서 허용하는 최대 파일 크기인 10MB를 초과하여 요청 본문을 처리할 수 없으므로 413.",
+            "description": "업로드 입력 또는 변환된 JPEG가 최대 크기 10MiB를 초과하거나, HEIC 이미지가 최대 25,000,000픽셀을 초과하여 처리할 수 없으므로 413.",
             "content": {
               "application/json": {
                 "schema": {
@@ -1884,15 +1884,25 @@
                     }
                   }
                 },
-                "example": {
-                  "code": "IMAGE_SIZE_EXCEEDED",
-                  "message": "사진 최대 용량은 10MB입니다."
+                "examples": {
+                  "fileSizeExceeded": {
+                    "value": {
+                      "code": "IMAGE_SIZE_EXCEEDED",
+                      "message": "사진 최대 용량은 10MB입니다."
+                    }
+                  },
+                  "pixelCountExceeded": {
+                    "value": {
+                      "code": "IMAGE_PIXEL_COUNT_EXCEEDED",
+                      "message": "사진 해상도는 2,500만 픽셀 이하여야 합니다."
+                    }
+                  }
                 }
               }
             }
           },
           "415": {
-            "description": "전달된 파일의 형식이 MULO에서 허용하는 JPG, JPEG, PNG, HEIC, WebP 이미지 형식에 해당하지 않으므로 415.",
+            "description": "전달된 파일이 허용 형식에 해당하지 않거나 HEIC을 정상적으로 디코딩할 수 없으므로 415.",
             "content": {
               "application/json": {
                 "schema": {

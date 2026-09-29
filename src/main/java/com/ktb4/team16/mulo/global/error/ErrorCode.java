@@ -14,6 +14,8 @@ public enum ErrorCode {
     LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
     PHOTO_REQUIRED(HttpStatus.BAD_REQUEST, "사진 파일이 필요합니다."),
     IMAGE_SIZE_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE, "사진 최대 용량은 10MB입니다."),
+    IMAGE_PIXEL_COUNT_EXCEEDED(HttpStatus.PAYLOAD_TOO_LARGE,
+            "사진 해상도는 2,500만 픽셀 이하여야 합니다."),
     UNSUPPORTED_IMAGE_FORMAT(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 이미지 파일 형식입니다."),
     SW_LAT_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 위도 값이 필요합니다."),
     SW_LNG_REQUIRED(HttpStatus.BAD_REQUEST, "남서쪽 경도 값이 필요합니다."),
