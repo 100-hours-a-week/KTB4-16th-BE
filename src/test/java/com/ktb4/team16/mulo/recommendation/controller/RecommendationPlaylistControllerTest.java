@@ -53,20 +53,22 @@ class RecommendationPlaylistControllerTest {
         authenticate(7L);
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(
                 new RecommendationPlaylistData.Playlist(3L, List.of(
-                        new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "url")))));
+                        new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")))));
 
         mvc.perform(get("/api/recommendations/playlists"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("현재 추천 플레이리스트 조회 성공"))
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
-                .andExpect(jsonPath("$.data.playlist.tracks[0].title").value("밤편지"));
+                .andExpect(jsonPath("$.data.playlist.tracks[0].title").value("밤편지"))
+                // 추천 목록 응답이 화면에 필요한 앨범 이미지 URL을 포함하는지 검증한다.
+                .andExpect(jsonPath("$.data.playlist.tracks[0].albumImageUrl").value("image-url"));
     }
 
     @Test
     void createsPlaylistFromCoordinate() throws Exception {
         authenticate(7L);
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(4L,
-                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "url")));
+                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
                 new RecommendationPlaylistCommandService.CreateResult(playlist, true));
 
@@ -82,7 +84,7 @@ class RecommendationPlaylistControllerTest {
     void retainsExistingPlaylistWhenAiReturnsNoRecommendation() throws Exception {
         authenticate(7L);
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(3L,
-                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "url")));
+                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
                 new RecommendationPlaylistCommandService.CreateResult(playlist, false));
 

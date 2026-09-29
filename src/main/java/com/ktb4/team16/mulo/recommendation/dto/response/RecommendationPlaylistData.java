@@ -15,12 +15,13 @@ public record RecommendationPlaylistData(Playlist playlist) {
     public record Playlist(Long recommendationPlaylistId, List<Track> tracks) {
     }
 
-    public record Track(Long musicTrackId, String title, String artistName, String externalUrl) {
+    public record Track(Long musicTrackId, String title, String artistName, String albumImageUrl,
+            String externalUrl) {
         // 추천 항목의 곡 정보를 API 응답용 값으로 변환한다.
         public static Track from(RecommendationPlaylistItem item) {
             var track = item.getMusicTrack();
             return new Track(track.getMusicTrackId(), track.getTitle(), track.getArtistName(),
-                    track.getExternalUrl());
+                    track.getAlbumImageUrl(), track.getExternalUrl());
         }
     }
 }
