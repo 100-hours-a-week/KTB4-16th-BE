@@ -194,9 +194,9 @@ class RecordRepositoryTests {
         assertThat(topArtist.artistName()).isEqualTo("둘아티스트");
     }
 
-    // 장소별 건수를 우선하고 최신 시각까지 같을 때 작은 ID를 선택하며 미분류 장소도 포함한다.
+    // 법정동별 건수와 최신 시각이 같으면 분류된 동을 미분류 그룹보다 우선한다.
     @Test
-    void monthlyTopPlaceUsesCountLatestTimeThenPlaceIdWithUnknownDong() {
+    void monthlyTopPlaceRanksKnownDongBeforeUnknownWhenCountAndTimeTie() {
         long userId = insertUser();
         long first = insertPlace(null, null, "-33.0000000", "-150.0000000");
         long second = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
@@ -210,12 +210,83 @@ class RecordRepositoryTests {
 
         MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
                 userId, start, end, PageRequest.of(0, 1)).getFirst();
-        assertThat(top.placeId()).isEqualTo(first);
+        assertThat(top.placeId()).isEqualTo(second);
+        assertThat(top.legalDongCode()).isEqualTo(LEGAL_DONG_CODE);
+        assertThat(top.legalDongName()).isEqualTo(LEGAL_DONG_NAME);
+    }
+
+    // 같은 법정동에 속한 서로 다른 장소의 기록을 합산해 대표 동을 선정한다.
+    @Test
+    void monthlyTopPlaceCountsRecordsAcrossPlacesInSameLegalDong() {
+        long userId = insertUser();
+        long first = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.0000000", "-150.0000000");
+        long second = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.1000000", "-150.1000000");
+        long other = insertPlace("1111010200", "다른동",
+                "-33.2000000", "-150.2000000");
+        long track = insertTrack("monthly-dong-total");
+        LocalDateTime start = LocalDateTime.of(2026, 9, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 10, 1, 0, 0);
+        insertRecord(userId, first, track, start.plusDays(1), null);
+        insertRecord(userId, first, track, start.plusDays(2), null);
+        insertRecord(userId, second, track, start.plusDays(3), null);
+        insertRecord(userId, second, track, start.plusDays(4), null);
+        insertRecord(userId, other, track, start.plusDays(20), null);
+        insertRecord(userId, other, track, start.plusDays(21), null);
+        insertRecord(userId, other, track, start.plusDays(22), null);
+
+        MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+
+        assertThat(top.legalDongCode()).isEqualTo(LEGAL_DONG_CODE);
+        assertThat(top.legalDongName()).isEqualTo(LEGAL_DONG_NAME);
+        assertThat(top.placeId()).isEqualTo(second);
+    }
+
+    // 법정동 합계와 최신 기록 시각까지 같으면 코드 오름차순으로 동을 선정한다.
+    @Test
+    void monthlyTopPlaceResolvesLegalDongTieByCode() {
+        long userId = insertUser();
+        long laterCode = insertPlace("1111010200", "나동", "-33.0000000", "-150.0000000");
+        long earlierCode = insertPlace("1111010100", "가동", "-33.1000000", "-150.1000000");
+        long track = insertTrack("monthly-dong-tie");
+        LocalDateTime start = LocalDateTime.of(2026, 9, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 10, 1, 0, 0);
+        insertRecord(userId, laterCode, track, start.plusDays(2), null);
+        insertRecord(userId, earlierCode, track, start.plusDays(2), null);
+
+        MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+
+        assertThat(top.placeId()).isEqualTo(earlierCode);
+        assertThat(top.legalDongName()).isEqualTo("가동");
+    }
+
+    // 미분류 장소도 하나의 동 그룹으로 합산해 기록 수가 많으면 선정한다.
+    @Test
+    void monthlyTopPlaceGroupsUnknownLegalDongRecords() {
+        long userId = insertUser();
+        long firstUnknown = insertPlace(null, null, "-33.0000000", "-150.0000000");
+        long secondUnknown = insertPlace(null, null, "-33.1000000", "-150.1000000");
+        long known = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.2000000", "-150.2000000");
+        long track = insertTrack("monthly-unknown-dong");
+        LocalDateTime start = LocalDateTime.of(2026, 9, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 10, 1, 0, 0);
+        insertRecord(userId, firstUnknown, track, start.plusDays(1), null);
+        insertRecord(userId, secondUnknown, track, start.plusDays(2), null);
+        insertRecord(userId, known, track, start.plusDays(3), null);
+
+        MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+
+        assertThat(top.placeId()).isEqualTo(secondUnknown);
         assertThat(top.legalDongCode()).isNull();
         assertThat(top.legalDongName()).isNull();
     }
 
-    // 같은 법정동의 다른 장소를 합치지 않고 최근성보다 장소별 기록 수를 우선한다.
+    // 같은 법정동 안에서 저장할 대표 장소 행은 개별 장소의 기록 수로 고른다.
     @Test
     void monthlyTopPlacePrioritizesPlaceCountOverNewerRecord() {
         long userId = insertUser();
