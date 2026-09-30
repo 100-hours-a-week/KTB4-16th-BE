@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.record.controller;
 
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
@@ -12,6 +13,7 @@ import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordDeletionOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -42,7 +44,8 @@ class RecordCommentUpdateControllerTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
                         new RecordController(recordService, recordCreationOrchestrator,
-                                recordCommentUpdateOrchestrator))
+                                recordCommentUpdateOrchestrator,
+                                mock(RecordDeletionOrchestrator.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

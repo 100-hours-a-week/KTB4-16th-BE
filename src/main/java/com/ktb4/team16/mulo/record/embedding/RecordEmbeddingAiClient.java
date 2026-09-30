@@ -13,7 +13,8 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Component
 public class RecordEmbeddingAiClient {
-    private static final String ENDPOINT = "/api/embeddings/generate";
+    private static final String GENERATE_ENDPOINT = "/api/embeddings/generate";
+    private static final String DELETE_ENDPOINT = "/api/embeddings/";
     private static final String INTERNAL_TOKEN_HEADER = "X-Internal-Token";
 
     private final RestClient restClient;
@@ -32,7 +33,7 @@ public class RecordEmbeddingAiClient {
     public void generate(EmbeddingGenerateRequest request) {
         try {
             var response = restClient.post()
-                    .uri(properties.baseUrl() + ENDPOINT)
+                    .uri(properties.baseUrl() + GENERATE_ENDPOINT)
                     .contentType(MediaType.APPLICATION_JSON)
                     .header(INTERNAL_TOKEN_HEADER, properties.internalToken())
                     .body(request)
@@ -45,6 +46,27 @@ public class RecordEmbeddingAiClient {
                     || !"QUEUED".equals(body.status())
                     || body.jobId() == null
                     || body.jobId().isBlank()) {
+                throw new RecordEmbeddingAiException(response.getStatusCode().value(),
+                        RecordEmbeddingAiException.FailureType.INVALID_RESPONSE);
+            }
+        } catch (RecordEmbeddingAiException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw new RecordEmbeddingAiException(exception.getStatusCode().value());
+        } catch (RestClientException | IllegalArgumentException exception) {
+            throw new RecordEmbeddingAiException();
+        }
+    }
+
+    public void delete(Long recordId) {
+        try {
+            var response = restClient.delete()
+                    .uri(properties.baseUrl() + DELETE_ENDPOINT + recordId)
+                    .header(INTERNAL_TOKEN_HEADER, properties.internalToken())
+                    .retrieve()
+                    .toBodilessEntity();
+
+            if (response.getStatusCode().value() != 204) {
                 throw new RecordEmbeddingAiException(response.getStatusCode().value(),
                         RecordEmbeddingAiException.FailureType.INVALID_RESPONSE);
             }

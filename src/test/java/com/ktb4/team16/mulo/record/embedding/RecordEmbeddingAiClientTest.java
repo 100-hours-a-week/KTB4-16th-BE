@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.record.embedding;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.content;
 import static org.springframework.test.web.client.match.MockRestRequestMatchers.header;
@@ -22,6 +23,7 @@ import org.springframework.web.client.RestClient;
 
 class RecordEmbeddingAiClientTest {
     private static final String ENDPOINT = "http://ai.test/api/embeddings/generate";
+    private static final String DELETE_ENDPOINT = "http://ai.test/api/embeddings/1024";
     private static final EmbeddingGenerateRequest REQUEST = new EmbeddingGenerateRequest(
             1024L, 7L, "https://signed.example/photo",
             new EmbeddingGenerateRequest.Track("밤편지", "아이유", "track-123"),
@@ -93,6 +95,67 @@ class RecordEmbeddingAiClientTest {
         assertThatThrownBy(() -> fixture.client().generate(REQUEST))
                 .isInstanceOf(RecordEmbeddingAiException.class)
                 .hasMessageNotContaining("sensitive transport detail");
+
+        fixture.server().verify();
+    }
+
+    @Test
+    void deletesEmbeddingWithTokenAndNoBodyAndAcceptsNoContent() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo(DELETE_ENDPOINT))
+                .andExpect(method(HttpMethod.DELETE))
+                .andExpect(header("X-Internal-Token", "test-dummy-token"))
+                .andExpect(content().string(""))
+                .andRespond(withStatus(HttpStatus.NO_CONTENT));
+
+        fixture.client().delete(1024L);
+
+        fixture.server().verify();
+    }
+
+    @ParameterizedTest
+    @EnumSource(value = HttpStatus.class, names = {"BAD_REQUEST", "UNAUTHORIZED", "BAD_GATEWAY"})
+    void wrapsDeleteAiHttpErrorsWithoutKeepingResponseBody(HttpStatus status) {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo(DELETE_ENDPOINT))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withStatus(status).body("sensitive AI body"));
+
+        assertThatThrownBy(() -> fixture.client().delete(1024L))
+                .isInstanceOfSatisfying(RecordEmbeddingAiException.class, exception -> {
+                    assertThat(exception.httpStatus()).isEqualTo(status.value());
+                    assertThat(exception.getMessage()).doesNotContain("sensitive AI body");
+                });
+
+        fixture.server().verify();
+    }
+
+    @Test
+    void wrapsDeleteTransportFailureWithoutExposingTransportDetails() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo(DELETE_ENDPOINT))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(request -> {
+                    throw new IOException("sensitive transport detail");
+                });
+
+        assertThatThrownBy(() -> fixture.client().delete(1024L))
+                .isInstanceOf(RecordEmbeddingAiException.class)
+                .hasMessageNotContaining("sensitive transport detail");
+
+        fixture.server().verify();
+    }
+
+    @Test
+    void doesNotRetryDeleteAfterHttpFailure() {
+        Fixture fixture = fixture();
+        fixture.server().expect(requestTo(DELETE_ENDPOINT))
+                .andExpect(method(HttpMethod.DELETE))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE));
+
+        assertThatThrownBy(() -> fixture.client().delete(1024L))
+                .isInstanceOfSatisfying(RecordEmbeddingAiException.class,
+                        exception -> assertThat(exception.httpStatus()).isEqualTo(503));
 
         fixture.server().verify();
     }

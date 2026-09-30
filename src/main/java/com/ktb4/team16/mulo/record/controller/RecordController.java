@@ -12,6 +12,7 @@ import com.ktb4.team16.mulo.record.dto.response.RecordRegionsResponse;
 import com.ktb4.team16.mulo.record.message.RecordMessage;
 import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordDeletionOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import jakarta.validation.Valid;
@@ -40,6 +41,7 @@ public class RecordController {
     private final RecordService recordService;
     private final RecordCreationOrchestrator recordCreationOrchestrator;
     private final RecordCommentUpdateOrchestrator recordCommentUpdateOrchestrator;
+    private final RecordDeletionOrchestrator recordDeletionOrchestrator;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -71,7 +73,7 @@ public class RecordController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long recordId
     ) {
-        recordService.deleteRecord(userId, recordId);
+        recordDeletionOrchestrator.deleteRecord(userId, recordId);
         return new RecordDeleteResponse(RecordMessage.RECORD_DELETED.message());
     }
 

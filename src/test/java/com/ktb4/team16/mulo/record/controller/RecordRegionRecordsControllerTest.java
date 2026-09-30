@@ -11,6 +11,7 @@ import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordDeletionOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -30,7 +31,8 @@ class RecordRegionRecordsControllerTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(new RecordController(recordService,
                         mock(RecordCreationOrchestrator.class),
-                        mock(RecordCommentUpdateOrchestrator.class)))
+                        mock(RecordCommentUpdateOrchestrator.class),
+                        mock(RecordDeletionOrchestrator.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
