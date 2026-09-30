@@ -1,21 +1,24 @@
-name: develop CI with backend
+name: Backend CI
 
+# main push -> 프로덕션 릴리즈, develop push -> 개발서버(Mulo test 프로젝트) 릴리즈+배포,
+# develop PR -> 검증(checkstyle+compile)만. 세 흐름이 한 파일에 공존하므로 각 job은
+# event_name/ref_name으로 자기 몫만 골라 실행되게 가드를 건다.
 on:
   push:
     branches:
+      - main
       - develop
   pull_request:
     branches:
       - develop
 
-concurrency:
-  group: backend-main-release
-  cancel-in-progress: false
-
 env:
   ZONE: asia-northeast3-a
 
 jobs:
+  # ============================================================
+  # develop PR: 머지 전 검증만 (배포 없음)
+  # ============================================================
   pr-ci:
     if: github.event_name == 'pull_request'
     name: Backend CI pull_request
@@ -50,8 +53,8 @@ jobs:
       - name: Run Compile
         run: ./gradlew bootJar
 
-  notify:
-    name: Discord notification
+  develop-pr-notify:
+    name: Discord notification (develop PR)
     runs-on: ubuntu-latest
     needs: pr-ci
     if: ${{ always() && github.event_name == 'pull_request' }}
@@ -100,10 +103,141 @@ jobs:
               }
             ]
 
-  push-ci:
-    if: github.event_name == 'push'
-    name: Backend CI push
+  # ============================================================
+  # main push: 프로덕션 릴리즈 (기존 로직 그대로, ref_name 가드만 추가)
+  # ============================================================
+  main-ci:
+    if: github.event_name == 'push' && github.ref_name == 'main'
+    name: Backend CI (main release)
     runs-on: ubuntu-latest
+    concurrency:
+      group: backend-main-release
+      cancel-in-progress: false
+
+    permissions:
+      contents: write      # Git 태그, Release 생성
+      id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
+
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run Checkstyle
+        run: ./gradlew checkstyleMain
+
+      - name: Run Compile
+        run: ./gradlew bootJar
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      # release.config.main.json을 이 job 안에서만 .releaserc.json으로 복사해서 쓴다.
+      # `semantic-release --extends <path>`로 직접 넘기면 플러그인 모듈 해석 기준 경로가
+      # 달라져서 semantic-release 코어에 번들된 기본 플러그인(commit-analyzer 등)조차
+      # 못 찾는 문제가 있었다(2026-09-30 실제 발생, main-ci에서 재현 확인). cosmiconfig가
+      # 원래 쓰던 자동 탐색 방식 그대로 두고, 파일만 이 job 시작 시점에 맞바꿔 충돌을 피한다.
+      - name: Release backend image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          cp release.config.main.json .releaserc.json
+          npx --yes \
+            --package=semantic-release@25 \
+            --package=@semantic-release/exec@7 \
+            semantic-release
+
+  main-notify:
+    name: Discord notification (main release)
+    runs-on: ubuntu-latest
+    needs: main-ci
+    if: ${{ always() && github.event_name == 'push' && github.ref_name == 'main' }}
+    permissions: {}
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "Backend main CI 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend CI: ${{ needs.main-ci.result }}",
+                "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ needs.main-ci.result == 'success' && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "커밋",
+                    "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "푸시한 사람",
+                    "value": ${{ toJSON(github.actor) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "브랜치",
+                    "value": ${{ toJSON(github.ref_name) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]
+
+  # ============================================================
+  # develop push: 개발서버(별도 GCP 프로젝트 "Mulo test") 릴리즈 + 배포
+  # ============================================================
+  push-ci:
+    if: github.event_name == 'push' && github.ref_name == 'develop'
+    name: Backend CI (develop release)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: backend-develop-release
+      cancel-in-progress: false
 
     permissions:
       contents: write
@@ -159,26 +293,28 @@ jobs:
         run: |
           gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
+      # release.config.develop.json을 .releaserc.json으로 복사해서 쓴다 (main-ci와 동일한 이유).
       - name: Release backend image
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
+          cp release.config.develop.json .releaserc.json
           npx --yes \
             --package=semantic-release@25 \
             --package=@semantic-release/exec@7 \
             semantic-release
 
-  # 1단계 job: Develop VM에 새 버전을 자동으로 배포한다.
+  # 개발서버(Mulo test 프로젝트) VM에 새 버전을 자동으로 배포한다.
   deploy:
     name: Deploy to Develop VM
     runs-on: ubuntu-latest
     needs: push-ci
-    if: github.event_name == 'push'
+    if: github.event_name == 'push' && github.ref_name == 'develop'
     permissions:
       contents: read
       id-token: write   # GCP WIF 인증용 OIDC 토큰 발급 권한
     outputs:
-      vm: ${{ steps.develop.outputs.vm }}  
+      vm: ${{ steps.develop.outputs.vm }}
 
     steps:
       # WIF로 GCP 서비스 계정 인증 (키 파일 없이 임시 토큰 발급)
@@ -238,19 +374,18 @@ jobs:
       # 4. env 파일을 develop VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
       #    같은 VM 위의 frontend/ai/nginx 컨테이너는 건드리지 않는다.
       - run: |
-          run: |
           gcloud compute scp backend.env "${{ steps.develop.outputs.vm }}:~/app/backend.env" \
             --zone="${{ env.ZONE }}" --tunnel-through-iap
 
           gcloud compute ssh "${{ steps.develop.outputs.vm }}" \
             --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
               set -e
-              gcloud auth configure-docker '${{ secrets.GCP_REGION }}-docker.pkg.dev' --quiet
+              sudo gcloud auth configure-docker '${{ secrets.GCP_REGION }}-docker.pkg.dev' --quiet
               cd ~/app
               export IMAGE_TAG=${{ steps.image.outputs.tag }}
               export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_Develop }}
-              docker compose pull backend
-              docker compose up -d backend
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose pull backend
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose up -d backend
             "
 
       # 5. 컨테이너가 healthy 상태가 될 때까지 대기 (비즈니스 로직 검증용 스모크 테스트는 아님).
@@ -272,11 +407,11 @@ jobs:
             exit 1
           "
 
-  notify-2:
-    name: Discord notification
+  develop-push-notify:
+    name: Discord notification (develop deploy)
     runs-on: ubuntu-latest
     needs: [push-ci, deploy]
-    if: ${{ always() && github.event_name == 'push' }}
+    if: ${{ always() && github.event_name == 'push' && github.ref_name == 'develop' }}
     permissions: {}
 
     env:
