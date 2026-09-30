@@ -3,6 +3,7 @@ spring:
     name: mulo
 
   datasource:
+    # MySQL이 보고하는 모호한 KST 대신 Connector/J에 명시적 시간대를 전달한다.
     url: ${DB_URL:jdbc:mysql://localhost:3306/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
     username: ${DB_USERNAME:mulo}
     # 비밀번호 기본값을 두지 않는다. 실행 환경에서 반드시 주입한다.
