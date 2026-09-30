@@ -2,12 +2,16 @@ package com.ktb4.team16.mulo.record.controller;
 
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordDeletionOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -26,12 +30,21 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class RecordDeleteControllerTest {
     @Mock
     private RecordService recordService;
+    @Mock
+    private RecordCreationOrchestrator recordCreationOrchestrator;
+    @Mock
+    private RecordCommentUpdateOrchestrator recordCommentUpdateOrchestrator;
+    @Mock
+    private RecordDeletionOrchestrator recordDeletionOrchestrator;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.standaloneSetup(new RecordController(recordService))
+        mvc = MockMvcBuilders.standaloneSetup(
+                        new RecordController(recordService, recordCreationOrchestrator,
+                                recordCommentUpdateOrchestrator,
+                                recordDeletionOrchestrator))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -50,13 +63,14 @@ class RecordDeleteControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("자물쇠가 삭제되었습니다."));
 
-        verify(recordService).deleteRecord(35L, 125L);
+        verify(recordDeletionOrchestrator).deleteRecord(35L, 125L);
+        verifyNoInteractions(recordService);
     }
 
     @Test
     void returnsExistingInvalidRecordIdResponse() throws Exception {
-        doThrow(new InvalidRecordIdException()).when(recordService).deleteRecord(35L, 0L);
-        doThrow(new InvalidRecordIdException()).when(recordService).deleteRecord(35L, -1L);
+        doThrow(new InvalidRecordIdException()).when(recordDeletionOrchestrator).deleteRecord(35L, 0L);
+        doThrow(new InvalidRecordIdException()).when(recordDeletionOrchestrator).deleteRecord(35L, -1L);
 
         mvc.perform(delete("/api/records/0"))
                 .andExpect(status().isBadRequest())

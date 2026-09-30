@@ -1,72 +1,159 @@
-name : main CI with backend
+name: Backend CI
 
+# main push -> 프로덕션 릴리즈, develop push -> 개발서버(Mulo test 프로젝트) 릴리즈+배포,
+# develop PR -> 검증(checkstyle+compile)만. 세 흐름이 한 파일에 공존하므로 각 job은
+# event_name/ref_name으로 자기 몫만 골라 실행되게 가드를 건다.
 on:
   push:
     branches:
       - main
+      - develop
+  pull_request:
+    branches:
+      - develop
 
-# 버전 작업 동시에 실행되지 않게 
-concurrency:
-  group: backend-main-release
-  cancel-in-progress: false
+env:
+  ZONE: asia-northeast3-a
 
 jobs:
-  ci:
-    name: Backend CI
+  # ============================================================
+  # develop PR: 머지 전 검증만 (배포 없음)
+  # ============================================================
+  pr-ci:
+    if: github.event_name == 'pull_request'
+    name: Backend CI pull_request
     runs-on: ubuntu-latest
 
-    # 워크플로우 권한 정의
     permissions:
-      contents: write      # Git 태그, Release 생성
-      id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
-      
-    env:
-      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
-      
+      contents: read
+
     steps:
-      # 1. 코드 체크아웃
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-            fetch-depth: 0
-        
-      # 2. JDK 환경 설정 (캐싱 포함)
+          fetch-depth: 1
+
       - name: Set up JDK 21
         uses: actions/setup-java@v6
         with:
           java-version: '21'
           distribution: 'temurin'
-          
-      # 3. Gradle 
+
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
-          
-      # 4. Gradle 실행 권한 부여
+
       - name: Grant execute permission
         run: chmod +x gradlew
-        
 
-      # Phase 1: Lint (Checkstyle)
+      # PR 게이트웨이 검사 유지
       - name: Run Checkstyle
         run: ./gradlew checkstyleMain
-        
 
-      # Phase 2: Compile 및 JAR 생성
-      - name: Run Compile 
+      # 컴파일 에러 및 기본 테스트 검증
+      - name: Run Compile
         run: ./gradlew bootJar
 
-      # Phase 3: semantic-release 실행 환경 구성
+  develop-pr-notify:
+    name: Discord notification (develop PR)
+    runs-on: ubuntu-latest
+    needs: pr-ci
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    permissions: {}
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "백엔드 Develop pull_request CI 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend CI: ${{ needs.pr-ci.result }}",
+                "description": ${{ toJSON(github.event.pull_request.title) }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ needs.pr-ci.result == 'success' && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "PR",
+                    "value": "[#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "작성자",
+                    "value": ${{ toJSON(github.event.pull_request.user.login) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "작업 브랜치",
+                    "value": ${{ toJSON(github.head_ref) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "대상 브랜치",
+                    "value": ${{ toJSON(github.base_ref) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]
+
+  # ============================================================
+  # main push: 프로덕션 릴리즈 (기존 로직 그대로, ref_name 가드만 추가)
+  # ============================================================
+  main-ci:
+    if: github.event_name == 'push' && github.ref_name == 'main'
+    name: Backend CI (main release)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: backend-main-release
+      cancel-in-progress: false
+
+    permissions:
+      contents: write      # Git 태그, Release 생성
+      id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
+
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run Checkstyle
+        run: ./gradlew checkstyleMain
+
+      - name: Run Compile
+        run: ./gradlew bootJar
+
       - name: Set up Node.js
         uses: actions/setup-node@v7
         with:
           node-version: "24"
           package-manager-cache: false
 
-      # Phase 4: Docker Build 준비
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v4
 
-      # Phase 5: OIDC를 이용한 서비스 계정 인증
       - name: Authenticate to Google Cloud
         uses: google-github-actions/auth@v3
         with:
@@ -74,17 +161,16 @@ jobs:
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
           service_account: ${{ secrets.SERVICE_ACCOUNT }}
 
-      # Phase 6: gcloud 명령어 사용 준비
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
-        
 
-      # Phase 7: Docker가 GCP 인증 정보를 사용하도록 연결
       - name: Configure Docker authentication
         run: |
-            gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+          gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
-      # Phase 8: 버전 계산 -> image build, push -> Git 태그, Release 생성
+      # release.config.main.json을 명시적으로 지정한다. 저장소에 release.config.develop.json도
+      # 같이 있는데, 파일명이 cosmiconfig 기본 탐색 대상(.releaserc.json 등)이 아니어야
+      # 서로 잘못 로드될 위험이 없다(2026-09-30 develop 병합 시 이 문제를 피하려고 정리함).
       - name: Release backend image
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
@@ -92,53 +178,272 @@ jobs:
           npx --yes \
             --package=semantic-release@25 \
             --package=@semantic-release/exec@7 \
-            semantic-release
-  notify:
-      name: Discord notification
-      runs-on: ubuntu-latest
-      needs: ci
+            semantic-release --extends ./release.config.main.json
 
-      # CI가 실패해도 알림 작업 실행
-      if: ${{ always() }}
-      permissions: {}
+  main-notify:
+    name: Discord notification (main release)
+    runs-on: ubuntu-latest
+    needs: main-ci
+    if: ${{ always() && github.event_name == 'push' && github.ref_name == 'main' }}
+    permissions: {}
 
-      env:
-        DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
 
-      steps:
-        - name: Send CI result to Discord
-          if: ${{ env.DISCORD_WEBHOOK != '' }}
-          uses: Ilshidur/action-discord@0.3.2
-          with:
-            args: "Backend main CI 결과 알림"
-          env:
-            DISCORD_USERNAME: MURO_BOT
-            DISCORD_EMBEDS: |
-              [
-                {
-                  "title": "Backend CI: ${{ needs.ci.result }}",
-                  "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
-                  "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                  "color": ${{ needs.ci.result == 'success' && 3066993 || 15158332 }},
-                  "fields": [
-                    {
-                      "name": "커밋",
-                      "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
-                      "inline": true
-                    },
-                    {
-                      "name": "푸시한 사람",
-                      "value": ${{ toJSON(github.actor) }},
-                      "inline": true
-                    },
-                    {
-                      "name": "브랜치",
-                      "value": ${{ toJSON(github.ref_name) }},
-                      "inline": true
-                    }
-                  ]
-                }
-              ]
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "Backend main CI 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend CI: ${{ needs.main-ci.result }}",
+                "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ needs.main-ci.result == 'success' && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "커밋",
+                    "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "푸시한 사람",
+                    "value": ${{ toJSON(github.actor) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "브랜치",
+                    "value": ${{ toJSON(github.ref_name) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]
 
+  # ============================================================
+  # develop push: 개발서버(별도 GCP 프로젝트 "Mulo test") 릴리즈 + 배포
+  # ============================================================
+  push-ci:
+    if: github.event_name == 'push' && github.ref_name == 'develop'
+    name: Backend CI (develop release)
+    runs-on: ubuntu-latest
+    concurrency:
+      group: backend-develop-release
+      cancel-in-progress: false
 
+    permissions:
+      contents: write
+      id-token: write
+      issues: write
+      pull-requests: write
 
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          # semantic-release가 Git 태그 및 히스토리를 분석해야 하므로 0 유지 필수
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run Compile
+        run: ./gradlew bootJar
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID_Develop }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_Develop }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT_Develop }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      # release.config.develop.json 명시적으로 지정 (main-ci와 동일한 이유).
+      - name: Release backend image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          npx --yes \
+            --package=semantic-release@25 \
+            --package=@semantic-release/exec@7 \
+            semantic-release --extends ./release.config.develop.json
+
+  # 개발서버(Mulo test 프로젝트) VM에 새 버전을 자동으로 배포한다.
+  deploy:
+    name: Deploy to Develop VM
+    runs-on: ubuntu-latest
+    needs: push-ci
+    if: github.event_name == 'push' && github.ref_name == 'develop'
+    permissions:
+      contents: read
+      id-token: write   # GCP WIF 인증용 OIDC 토큰 발급 권한
+    outputs:
+      vm: ${{ steps.develop.outputs.vm }}
+
+    steps:
+      # WIF로 GCP 서비스 계정 인증 (키 파일 없이 임시 토큰 발급)
+      - id: auth
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID_Develop }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_Develop }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT_Develop }}
+
+      - uses: google-github-actions/setup-gcloud@v3
+
+      # 1. 현재 role=develop 라벨이 붙은 VM을 찾는다.
+      - id: develop
+        run: |
+          VM=$(gcloud compute instances list \
+            --filter="labels.role=develop" \
+            --zones="${{ env.ZONE }}" \
+            --format="value(name)")
+          echo "vm=$VM" >> "$GITHUB_OUTPUT"
+
+      # 2. CI(semantic-release)가 방금 push한 이미지 중 가장 최근 태그를 조회한다.
+      #    CD는 이미지를 직접 빌드하지 않고, CI가 이미 push해둔 걸 그대로 가져다 쓴다.
+      - id: image
+        run: |
+          TAG=$(gcloud artifacts docker images list \
+            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}" \
+            --include-tags --sort-by="~UPDATE_TIME" --limit=1 \
+            --format="value(TAGS)" | cut -d',' -f1)
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+
+      # 3. backend.env 파일을 GitHub Secrets 값으로 생성한다.
+      #    이 파일은 여기서만 잠깐 만들어지고, 실제 값은 워크플로 로그에 자동으로 마스킹된다.
+      - run: |
+          cat > backend.env <<ENVEOF
+          DB_URL=${{ secrets.DB_URL_Develop }}
+          DB_USERNAME=${{ secrets.DB_USERNAME_Develop }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD_Develop }}
+          JWT_SECRET=${{ secrets.JWT_SECRET }}
+          GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME_Develop }}
+          GCS_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_Develop }}
+          KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}
+          KMA_SERVICE_KEY=${{ secrets.KMA_SERVICE_KEY }}
+          SPOTIFY_CLIENT_ID=${{ secrets.SPOTIFY_CLIENT_ID }}
+          SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
+          AI_BASE_URL=${{ secrets.AI_BASE_URL }}
+          AI_INTERNAL_TOKEN=${{ secrets.AI_INTERNAL_TOKEN }}
+          MULO_SECURITY_ALLOWED_ORIGINS=${{ secrets.MULO_SECURITY_ALLOWED_ORIGINS_Develop }}
+          REPORT_OPERATION_TOKEN=${{ secrets.REPORT_OPERATION_TOKEN }}
+          # 컨테이너 JVM 기본 시간대가 UTC라, java.sql.Timestamp -> LocalDateTime 변환 시
+          # (Timestamp가 상속하는 java.util.Date의 레거시 getter가 JVM 기본시간대를 씀)
+          # DB에 정상 저장된 KST 값을 9시간 밀려서 읽는 문제가 있었다. JVM 기본시간대 자체를
+          # 앱이 실제 쓰는 Asia/Seoul로 맞춰서 이 변환 단계의 시간대 불일치를 없앤다.
+          JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Seoul
+          ENVEOF
+
+      # 4. env 파일을 develop VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
+      #    같은 VM 위의 frontend/ai/nginx 컨테이너는 건드리지 않는다.
+      - run: |
+          gcloud compute scp backend.env "${{ steps.develop.outputs.vm }}:~/app/backend.env" \
+            --zone="${{ env.ZONE }}" --tunnel-through-iap
+
+          gcloud compute ssh "${{ steps.develop.outputs.vm }}" \
+            --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
+              set -e
+              sudo gcloud auth configure-docker '${{ secrets.GCP_REGION }}-docker.pkg.dev' --quiet
+              cd ~/app
+              export IMAGE_TAG=${{ steps.image.outputs.tag }}
+              export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_Develop }}
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose pull backend
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose up -d backend
+            "
+
+      # 5. 컨테이너가 healthy 상태가 될 때까지 대기 (비즈니스 로직 검증용 스모크 테스트는 아님).
+      #    이게 없으면 승인이 컨테이너 기동 완료 전에 빨리 눌렸을 때, 아직 준비 안 된
+      #    컨테이너로 바로 트래픽이 전환되어 502 다운타임이 생긴다. 최대 60초(3초 x 20회) 대기.
+      - name: "Wait for backend container to be healthy"
+        run: |
+          gcloud compute ssh "${{ steps.develop.outputs.vm }}" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
+            for i in \$(seq 1 20); do
+              status=\$(sudo docker inspect backend --format='{{.State.Health.Status}}')
+              if [ \"\$status\" = \"healthy\" ]; then
+                echo \"backend healthy (시도 \$i/20)\"
+                exit 0
+              fi
+              echo \"대기 중... (\$i/20) 현재 상태: \$status\"
+              sleep 3
+            done
+            echo \"backend가 60초 안에 healthy가 되지 않았습니다.\"
+            exit 1
+          "
+
+  develop-push-notify:
+    name: Discord notification (develop deploy)
+    runs-on: ubuntu-latest
+    needs: [push-ci, deploy]
+    if: ${{ always() && github.event_name == 'push' && github.ref_name == 'develop' }}
+    permissions: {}
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "백엔드 Develop push CI 및 개발 서버 배포 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend Develop 배포: ${{ needs.deploy.result }} (CI: ${{ needs.push-ci.result }})",
+                "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ (needs.push-ci.result == 'success' && needs.deploy.result == 'success') && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "커밋",
+                    "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "푸시한 사람",
+                    "value": ${{ toJSON(github.actor) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "브랜치",
+                    "value": ${{ toJSON(github.ref_name) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]

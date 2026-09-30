@@ -10,6 +10,9 @@ import com.ktb4.team16.mulo.record.dto.response.RecordDetailResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionsResponse;
 import com.ktb4.team16.mulo.record.message.RecordMessage;
+import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
+import com.ktb4.team16.mulo.record.service.RecordDeletionOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import jakarta.validation.Valid;
@@ -36,6 +39,9 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecordController {
 
     private final RecordService recordService;
+    private final RecordCreationOrchestrator recordCreationOrchestrator;
+    private final RecordCommentUpdateOrchestrator recordCommentUpdateOrchestrator;
+    private final RecordDeletionOrchestrator recordDeletionOrchestrator;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -43,7 +49,7 @@ public class RecordController {
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody RecordCreateRequest request
     ) {
-        RecordCreateResponse record = recordService.createRecord(userId, request);
+        RecordCreateResponse record = recordCreationOrchestrator.createRecord(userId, request);
         return new RecordCreateApiResponse(
                 RecordMessage.RECORD_CREATED.message(),
                 record
@@ -67,7 +73,7 @@ public class RecordController {
             @AuthenticationPrincipal Long userId,
             @PathVariable Long recordId
     ) {
-        recordService.deleteRecord(userId, recordId);
+        recordDeletionOrchestrator.deleteRecord(userId, recordId);
         return new RecordDeleteResponse(RecordMessage.RECORD_DELETED.message());
     }
 
@@ -81,7 +87,7 @@ public class RecordController {
             throw new MissingCommentFieldException();
         }
 
-        RecordCommentUpdateResponse response = recordService.updateRecordComment(
+        RecordCommentUpdateResponse response = recordCommentUpdateOrchestrator.updateRecordComment(
                 userId,
                 recordId,
                 request.getComment());
