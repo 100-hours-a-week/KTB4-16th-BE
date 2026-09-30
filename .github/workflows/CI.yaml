@@ -248,8 +248,8 @@ jobs:
               cd ~/app
               export IMAGE_TAG=${{ steps.image.outputs.tag }}
               export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_Develop }}
-              sudo docker compose pull backend
-              sudo docker compose up -d backend
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose pull backend
+              sudo --preserve-env=IMAGE_TAG,GCP_PROJECT_ID docker compose up -d backend
             "
 
       # 5. 컨테이너가 healthy 상태가 될 때까지 대기 (비즈니스 로직 검증용 스모크 테스트는 아님).
