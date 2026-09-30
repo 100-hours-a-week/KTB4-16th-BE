@@ -11,6 +11,7 @@ import com.google.cloud.storage.Storage;
 import com.ktb4.team16.mulo.upload.config.GcsProperties;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -33,5 +34,18 @@ class GoogleCloudStorageServiceTest {
                 ArgumentCaptor.forClass(Storage.SignUrlOption.class);
         verify(storage).signUrl(any(), eq(10L), eq(TimeUnit.MINUTES), option.capture());
         assertThat(option.getValue()).isNotNull();
+    }
+
+    @Test
+    void createsEmbeddingReadSignedUrlForOneHour() throws MalformedURLException {
+        URL signedUrl = new URL("https://signed.example/embedding-photo");
+        when(storage.signUrl(any(), eq(3600L), eq(TimeUnit.SECONDS),
+                any(Storage.SignUrlOption.class))).thenReturn(signedUrl);
+
+        assertThat(service.createReadSignedUrl("records/35/photo.jpg", Duration.ofHours(1)))
+                .isEqualTo(signedUrl.toString());
+
+        verify(storage).signUrl(any(), eq(3600L), eq(TimeUnit.SECONDS),
+                any(Storage.SignUrlOption.class));
     }
 }
