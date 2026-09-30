@@ -52,16 +52,19 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             @Param("endExclusive") LocalDateTime endExclusive
     );
 
-    // 기록 수 동률이면 가장 최근 기록이 있는 장소를 월간 대표 장소로 우선한다.
+    // 장소별 기록 수, 최신 기록 시각, 장소 ID 순으로 대표 장소와 법정동 값을 함께 조회한다.
     @Query("""
-        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyTopPlace(r.place.placeId)
+        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyTopPlace(
+            p.placeId, p.legalDongCode, p.legalDongName
+        )
         FROM Record r
+        JOIN r.place p
         WHERE r.user.userId = :userId
             AND r.deletedAt IS NULL
             AND r.createdAt >= :startInclusive
             AND r.createdAt < :endExclusive
-        GROUP BY r.place.placeId
-        ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, r.place.placeId ASC
+        GROUP BY p.placeId, p.legalDongCode, p.legalDongName
+        ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, p.placeId ASC
         """)
     List<MonthlyTopPlace> findMonthlyTopPlaces(
             @Param("userId") Long userId,

@@ -1,18 +1,20 @@
 package com.ktb4.team16.mulo.report.dto.response;
 
-import com.ktb4.team16.mulo.report.service.MonthlyReportQueryService.MonthlyReportDetail;
+import com.ktb4.team16.mulo.report.entity.MonthlyMoodStat;
+import com.ktb4.team16.mulo.report.entity.MonthlyPhotoSceneStat;
+import com.ktb4.team16.mulo.report.entity.MonthlyReport;
 import java.util.List;
 
 public record MonthlyReportDetailResponse(String message, Data data) {
     public record Data(Long monthlyReportId, int year, int month, Stats stats,
             List<PhotoScene> photoScenes, AiRecap aiRecap) {
-        // Query Service가 조합한 스냅샷을 상세 API 계약으로 변환한다.
-        public static Data from(MonthlyReportDetail detail) {
-            var report = detail.report();
+        // 읽기 트랜잭션 안에서 엔티티 값을 상세 API의 순수 값으로 변환한다.
+        public static Data from(MonthlyReport report, MonthlyMoodStat moodStat,
+                List<MonthlyPhotoSceneStat> photoScenes) {
             var place = report.getTopPlace() == null ? null
                     : new TopPlace(report.getTopPlace().getPlaceId(), report.getTopPlace().getLegalDongName());
-            var mood = detail.moodStat() == null ? null : detail.moodStat().getAverageMoodScore();
-            var scenes = detail.photoScenes().stream()
+            var mood = moodStat == null ? null : moodStat.getAverageMoodScore();
+            var scenes = photoScenes.stream()
                     .map(scene -> new PhotoScene(scene.getSceneTag(), scene.getCount(), scene.getRatio().intValue()))
                     .toList();
             String recapText = report.getAiRecapStatus().name().equals("COMPLETED")
