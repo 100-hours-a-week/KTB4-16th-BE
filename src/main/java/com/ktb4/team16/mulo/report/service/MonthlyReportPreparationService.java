@@ -64,6 +64,7 @@ public class MonthlyReportPreparationService {
             MonthlyReport report = MonthlyReport.prepare(users.getReferenceById(userId), year,
                     monthValue, summary.recordCount().intValue(), artist);
             if (!topPlace.isEmpty()) {
+                // 대표 법정동 안의 장소 행을 기존 top_place_id FK에 연결한다.
                 report.assignTopPlace(places.getReferenceById(topPlace.getFirst().placeId()));
             }
             MonthlyReport saved = reports.save(report);

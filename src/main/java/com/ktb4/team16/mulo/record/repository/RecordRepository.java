@@ -52,26 +52,48 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             @Param("endExclusive") LocalDateTime endExclusive
     );
 
-    // 장소별 기록 수, 최신 기록 시각, 장소 ID 순으로 대표 장소와 법정동 값을 함께 조회한다.
-    @Query("""
-        SELECT new com.ktb4.team16.mulo.report.dto.MonthlyTopPlace(
-            p.placeId, p.legalDongCode, p.legalDongName
+    // 법정동별 합계로 대표 동을 정하고, 그 동의 대표 장소 행을 한 쿼리에서 고른다.
+    @Query(value = """
+        WITH place_counts AS (
+            SELECT p.place_id, p.legal_dong_code, p.legal_dong_name,
+                COUNT(*) AS place_count, MAX(r.created_at) AS latest_record_at
+            FROM records r
+            JOIN places p ON p.place_id = r.place_id
+            WHERE r.user_id = :userId
+                AND r.deleted_at IS NULL
+                AND r.created_at >= :startInclusive
+                AND r.created_at < :endExclusive
+            GROUP BY p.place_id, p.legal_dong_code, p.legal_dong_name
+        ), ranked_places AS (
+            SELECT pc.place_id, pc.legal_dong_code, pc.legal_dong_name,
+                SUM(pc.place_count) OVER (PARTITION BY pc.legal_dong_code) AS dong_count,
+                MAX(pc.latest_record_at) OVER (PARTITION BY pc.legal_dong_code) AS dong_latest,
+                ROW_NUMBER() OVER (PARTITION BY pc.legal_dong_code
+                    ORDER BY pc.place_count DESC, pc.latest_record_at DESC,
+                        pc.place_id ASC) AS place_rank
+            FROM place_counts pc
         )
-        FROM Record r
-        JOIN r.place p
-        WHERE r.user.userId = :userId
-            AND r.deletedAt IS NULL
-            AND r.createdAt >= :startInclusive
-            AND r.createdAt < :endExclusive
-        GROUP BY p.placeId, p.legalDongCode, p.legalDongName
-        ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, p.placeId ASC
-        """)
-    List<MonthlyTopPlace> findMonthlyTopPlaces(
+        SELECT place_id, legal_dong_code, legal_dong_name
+        FROM ranked_places
+        WHERE place_rank = 1
+        ORDER BY dong_count DESC, dong_latest DESC,
+            legal_dong_code IS NULL ASC, legal_dong_code ASC
+        """, nativeQuery = true)
+    List<Object[]> findMonthlyTopPlaceRows(
             @Param("userId") Long userId,
             @Param("startInclusive") LocalDateTime startInclusive,
             @Param("endExclusive") LocalDateTime endExclusive,
             Pageable pageable
     );
+
+    // 집계 쿼리의 첫 결과를 기존 서비스가 사용하는 값 DTO로 변환한다.
+    default List<MonthlyTopPlace> findMonthlyTopPlaces(Long userId, LocalDateTime startInclusive,
+            LocalDateTime endExclusive, Pageable pageable) {
+        return findMonthlyTopPlaceRows(userId, startInclusive, endExclusive, pageable).stream()
+                .map(row -> new MonthlyTopPlace(((Number) row[0]).longValue(),
+                        (String) row[1], (String) row[2]))
+                .toList();
+    }
 
     // 기록 수 동률이면 가장 최근 기록이 있는 아티스트를 월간 대표 아티스트로 우선한다.
     @Query("""
