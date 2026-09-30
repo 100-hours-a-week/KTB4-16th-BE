@@ -16,7 +16,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "docker buildx build --platform linux/amd64 --file Dockerfile --build-arg VITE_SENTRY_DSN=\"$VITE_SENTRY_DSN\" --build-arg SENTRY_ORG=\"$SENTRY_ORG\" --build-arg SENTRY_PROJECT=\"$SENTRY_PROJECT\" --secret id=sentry_auth_token,env=SENTRY_AUTH_TOKEN --tag \"$IMAGE_BASE:${nextRelease.version}\" --push ."
+        "prepareCmd": "docker buildx build --platform linux/amd64 --file Dockerfile --tag \"$IMAGE_BASE:${nextRelease.version}\" --push ."
       }
     ],
     [
