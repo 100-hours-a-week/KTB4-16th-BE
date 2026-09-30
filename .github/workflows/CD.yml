@@ -154,6 +154,28 @@ jobs:
             exit 1
           fi
 
+          # 세 CD(backend/frontend/ai)가 서로 독립적으로 이 라벨/IP를 바꾸다 보니, 이
+          # CD가 스위치해도 다른 두 서비스는 이 VM에 예전에 마지막으로 배포됐던 버전이 남아있을 수도 있음.
+          # active가 되기 전에 다른 서비스들도 최신 태그인지 확인해 동기화한다.
+          for SERVICE in frontend ai; do
+            LATEST=$(gcloud artifacts docker images list \
+              "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/$SERVICE/$SERVICE" \
+              --include-tags --sort-by="~UPDATE_TIME" --limit=1 --format="value(TAGS)" | cut -d',' -f1)
+
+            gcloud compute ssh "$STANDBY_VM" --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
+              cd ~/app &&
+              CURRENT=\$(docker inspect $SERVICE --format='{{.Config.Image}}' | rev | cut -d: -f1 | rev) &&
+              if [ \"\$CURRENT\" != \"$LATEST\" ]; then
+                echo \"$SERVICE 동기화: \$CURRENT -> $LATEST\" &&
+                export IMAGE_TAG=$LATEST &&
+                docker compose pull $SERVICE &&
+                docker compose up -d $SERVICE
+              else
+                echo \"$SERVICE 이미 최신 (\$CURRENT)\"
+              fi
+            "
+          done
+
           gcloud compute instances delete-access-config "$ACTIVE_VM" \
             --zone="${{ env.ZONE }}" --access-config-name="External NAT"
 
