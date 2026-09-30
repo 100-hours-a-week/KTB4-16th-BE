@@ -6,7 +6,9 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
-import com.ktb4.team16.mulo.report.entity.MonthlyReport;
+import com.ktb4.team16.mulo.report.dto.response.MonthlyReportListResponse;
+import com.ktb4.team16.mulo.report.dto.response.MonthlyReportDetailResponse;
+import java.math.BigDecimal;
 import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
 import com.ktb4.team16.mulo.report.service.MonthlyReportQueryService;
 import java.util.List;
@@ -25,7 +27,6 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 @ExtendWith(MockitoExtension.class)
 class MonthlyReportControllerTest {
     @Mock private MonthlyReportQueryService queryService;
-    @Mock private MonthlyReport report;
     private MockMvc mvc;
 
     @BeforeEach
@@ -42,17 +43,30 @@ class MonthlyReportControllerTest {
 
     @Test
     void returnsReportsInQueryServiceOrder() throws Exception {
-        when(report.getMonthlyReportId()).thenReturn(3L);
-        when(report.getReportYear()).thenReturn((short) 2026);
-        when(report.getReportMonth()).thenReturn((short) 8);
-        when(report.getRecordCount()).thenReturn(15);
-        when(report.getAiRecapStatus()).thenReturn(MonthlyReport.AiRecapStatus.COMPLETED);
-        when(queryService.getReports(7L)).thenReturn(List.of(report));
+        when(queryService.getReports(7L)).thenReturn(List.of(
+                new MonthlyReportListResponse.Report(3L, 2026, 8, 15, "COMPLETED")));
 
         mvc.perform(get("/api/monthly-reports"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.reports[0].monthlyReportId").value(3))
                 .andExpect(jsonPath("$.data.reports[0].year").value(2026));
+    }
+
+    // 엔티티 없이 완성된 상세 DTO를 기존 JSON 계약으로 반환한다.
+    @Test
+    void returnsDetailWithTopPlaceNameFromValueDto() throws Exception {
+        var data = new MonthlyReportDetailResponse.Data(3L, 2026, 8,
+                new MonthlyReportDetailResponse.Stats(4,
+                        new MonthlyReportDetailResponse.TopPlace(9L, "테스트동"),
+                        "가수", new BigDecimal("15.0")),
+                List.of(), new MonthlyReportDetailResponse.AiRecap("COMPLETED", "8월 회고"));
+        when(queryService.getDetail(7L, 3L)).thenReturn(data);
+
+        mvc.perform(get("/api/monthly-reports/3"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.stats.topPlace.placeId").value(9))
+                .andExpect(jsonPath("$.data.stats.topPlace.legalDongName").value("테스트동"))
+                .andExpect(jsonPath("$.data.aiRecap.status").value("COMPLETED"));
     }
 
     @Test

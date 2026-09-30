@@ -14,6 +14,8 @@ import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
 import org.springframework.test.context.TestPropertySource;
+import org.springframework.test.context.DynamicPropertyRegistry;
+import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.test.context.web.WebAppConfiguration;
 import org.springframework.mock.web.MockMultipartFile;
@@ -47,13 +49,18 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 @TestPropertySource(properties = {
         "mulo.security.allowed-origins=http://localhost:3000",
         "mulo.security.cookie-secure=false",
-        "mulo.jwt.secret=AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "mulo.jwt.access-token-ttl=PT1H",
         "mulo.jwt.refresh-token-ttl=P7D"
 })
 class SecurityIntegrationTests {
     @Autowired WebApplicationContext context;
     MockMvc mvc;
+
+    /** 테스트 컨텍스트에 하드코딩하지 않은 JWT 서명 키를 제공한다. */
+    @DynamicPropertySource
+    static void registerJwtSecret(DynamicPropertyRegistry registry) {
+        registry.add("mulo.jwt.secret", TestJwtSecret::value);
+    }
 
     @BeforeEach
     void setUp() {

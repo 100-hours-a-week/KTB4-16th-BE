@@ -3,11 +3,8 @@ spring:
     name: mulo
 
   datasource:
-    # serverTimezone(레거시 파라미터)은 LocalDateTime 바인딩 시 드라이버가 JVM 기본
-    # 시간대(UTC)를 기준으로 다시 변환해버려 9시간이 밀리는 문제가 있었다.
-    # connectionTimeZone=SERVER는 드라이버가 별도 변환 없이 DB 세션 시간대를 그대로
-    # 신뢰하도록 해서, 시간대 개념이 없는 DATETIME 컬럼과 정확히 맞아떨어진다.
-    url: ${DB_URL:jdbc:mysql://localhost:3306/mulo?useUnicode=true&characterEncoding=UTF-8&connectionTimeZone=SERVER}
+    # MySQL이 보고하는 모호한 KST 대신 Connector/J에 명시적 시간대를 전달한다.
+    url: ${DB_URL:jdbc:mysql://localhost:3306/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul}
     username: ${DB_USERNAME:mulo}
     # 비밀번호 기본값을 두지 않는다. 실행 환경에서 반드시 주입한다.
     password: ${DB_PASSWORD}

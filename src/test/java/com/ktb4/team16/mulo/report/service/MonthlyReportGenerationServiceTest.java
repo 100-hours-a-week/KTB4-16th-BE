@@ -2,9 +2,11 @@ package com.ktb4.team16.mulo.report.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.report.client.MonthlyReportBatchAiClient;
+import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.YearMonth;
@@ -34,6 +36,22 @@ class MonthlyReportGenerationServiceTest {
                 .generate(target);
 
         verify(preparationService).markProcessing(batch);
+        assertThat(result.createdCount()).isEqualTo(1);
+    }
+
+    // 배치 접수 실패 시 선저장 통계를 유지하도록 실패 상태 전환만 요청한다.
+    @Test
+    void marksPreparedReportsFailedWhenAiRejectsBatch() {
+        YearMonth target = YearMonth.of(2026, 8);
+        var batch = new MonthlyReportPreparationService.PreparedBatch(target, List.of(7L), 1, 0);
+        when(preparationService.prepare(target)).thenReturn(batch);
+        when(aiClient.requestBatch(target, List.of(7L))).thenThrow(new MonthlyReportAiException());
+
+        var result = new MonthlyReportGenerationService(preparationService, aiClient, clock)
+                .generate(target);
+
+        verify(preparationService).markFailed(batch);
+        verify(preparationService, never()).markProcessing(batch);
         assertThat(result.createdCount()).isEqualTo(1);
     }
 }
