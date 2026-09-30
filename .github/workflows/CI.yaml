@@ -238,7 +238,6 @@ jobs:
       # 4. env 파일을 develop VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
       #    같은 VM 위의 frontend/ai/nginx 컨테이너는 건드리지 않는다.
       - run: |
-          run: |
           gcloud compute scp backend.env "${{ steps.develop.outputs.vm }}:~/app/backend.env" \
             --zone="${{ env.ZONE }}" --tunnel-through-iap
 
