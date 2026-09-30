@@ -109,7 +109,7 @@ jobs:
       id-token: write
 
     env:
-      IMAGE_BASE: ${{ secrets.GCP_REGION_Develop }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
 
     steps:
       - name: Checkout code
@@ -147,7 +147,7 @@ jobs:
         with:
           project_id: ${{ secrets.GCP_PROJECT_ID_Develop }}
           workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER_Develop }}
-          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT_Develop }}
 
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v3
