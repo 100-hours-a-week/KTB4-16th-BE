@@ -15,8 +15,12 @@ import com.ktb4.team16.mulo.auth.repository.RefreshTokenRepository;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.Duration;
 import java.time.LocalDateTime;
+import java.util.HexFormat;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -29,6 +33,9 @@ import org.springframework.security.oauth2.jwt.JwtException;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+    private static final String TEST_REFRESH_TOKEN = "refresh-token-raw";
+    private static final String TEST_REFRESH_TOKEN_HASH = sha256(TEST_REFRESH_TOKEN);
+
     @Mock
     private UserRepository userRepository;
 
@@ -109,7 +116,7 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().plusDays(1)
         );
         when(jwtTokenProvider.extractRefreshUserId("refresh-token-raw")).thenReturn(42L);
@@ -153,7 +160,7 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().minusSeconds(1)
         );
         when(jwtTokenProvider.extractRefreshUserId("refresh-token-raw")).thenReturn(42L);
@@ -168,7 +175,7 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().plusDays(1)
         );
         storedToken.revoke(LocalDateTime.now());
@@ -184,7 +191,7 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().plusDays(1)
         );
         when(jwtTokenProvider.extractRefreshUserId("refresh-token-raw")).thenReturn(42L);
@@ -200,11 +207,10 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().plusDays(1)
         );
-        when(refreshTokenRepository.findByTokenHash(
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16"))
+        when(refreshTokenRepository.findByTokenHash(TEST_REFRESH_TOKEN_HASH))
                 .thenReturn(Optional.of(storedToken));
 
         authService.logout("refresh-token-raw");
@@ -225,16 +231,26 @@ class AuthServiceTest {
         User user = User.signup("user@mulo.com", "encoded-password", "mulo");
         RefreshToken storedToken = RefreshToken.create(
                 user,
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16",
+                TEST_REFRESH_TOKEN_HASH,
                 LocalDateTime.now().plusDays(1)
         );
         storedToken.revoke(LocalDateTime.now().minusHours(1));
-        when(refreshTokenRepository.findByTokenHash(
-                "5e4b06c757a1d6a5a10b96b0a1c1af9f9ef85e82c64967bfd724133436f58d16"))
+        when(refreshTokenRepository.findByTokenHash(TEST_REFRESH_TOKEN_HASH))
                 .thenReturn(Optional.of(storedToken));
 
         authService.logout("refresh-token-raw");
 
         verify(refreshTokenRepository, never()).save(any());
+    }
+
+    /** 테스트 입력과 동일한 방식으로 DB 저장용 SHA-256 해시를 계산한다. */
+    private static String sha256(String value) {
+        try {
+            byte[] digest = MessageDigest.getInstance("SHA-256")
+                    .digest(value.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest);
+        } catch (NoSuchAlgorithmException exception) {
+            throw new IllegalStateException("SHA-256 algorithm is unavailable", exception);
+        }
     }
 }
