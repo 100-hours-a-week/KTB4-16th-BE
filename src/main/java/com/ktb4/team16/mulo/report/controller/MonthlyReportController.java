@@ -23,8 +23,7 @@ public class MonthlyReportController {
     // 인증 사용자의 저장된 월간 리포트 목록을 최신 연·월순으로 반환한다.
     @GetMapping
     public MonthlyReportListResponse getReports(@AuthenticationPrincipal Long userId) {
-        List<MonthlyReportListResponse.Report> reports = queryService.getReports(userId).stream()
-                .map(MonthlyReportListResponse.Report::from).toList();
+        List<MonthlyReportListResponse.Report> reports = queryService.getReports(userId);
         return new MonthlyReportListResponse("월간 리포트 목록 조회 성공",
                 new MonthlyReportListResponse.Data(reports));
     }
@@ -34,6 +33,6 @@ public class MonthlyReportController {
     public MonthlyReportDetailResponse getDetail(@AuthenticationPrincipal Long userId,
             @PathVariable @Min(1) Long monthlyReportId) {
         return new MonthlyReportDetailResponse("월간 리포트 상세 조회 성공",
-                MonthlyReportDetailResponse.Data.from(queryService.getDetail(userId, monthlyReportId)));
+                queryService.getDetail(userId, monthlyReportId));
     }
 }

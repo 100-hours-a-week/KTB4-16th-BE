@@ -33,6 +33,8 @@ import org.springframework.security.oauth2.jwt.JwtException;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
+    private static final String TEST_EMAIL = "auth-user@example.test";
+    private static final String UNKNOWN_EMAIL = "unknown@example.test";
     private static final String TEST_REFRESH_TOKEN = "refresh-token-raw";
     private static final String TEST_REFRESH_TOKEN_HASH = sha256(TEST_REFRESH_TOKEN);
 
@@ -63,14 +65,14 @@ class AuthServiceTest {
 
     @Test
     void loginStoresOnlyHashedRefreshTokenAndReturnsTokens() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
-        when(userRepository.findByEmailAndDeletedAtIsNull("user@mulo.com"))
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
+        when(userRepository.findByEmailAndDeletedAtIsNull(TEST_EMAIL))
                 .thenReturn(Optional.of(user));
         when(passwordEncoder.matches("plain-password", "encoded-password")).thenReturn(true);
         when(jwtTokenProvider.createAccessToken(any())).thenReturn("access-token");
         when(jwtTokenProvider.createRefreshToken(any())).thenReturn("refresh-token-raw");
 
-        LoginResult result = authService.login("user@mulo.com", "plain-password");
+        LoginResult result = authService.login(TEST_EMAIL, "plain-password");
 
         ArgumentCaptor<RefreshToken> refreshTokenCaptor = ArgumentCaptor.forClass(RefreshToken.class);
         verify(refreshTokenRepository).save(refreshTokenCaptor.capture());
@@ -83,20 +85,20 @@ class AuthServiceTest {
 
     @Test
     void loginReplacesExistingRefreshTokenForSameUser() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken existing = RefreshToken.create(
                 user,
                 "old-hash",
                 LocalDateTime.of(2026, 9, 19, 12, 0)
         );
-        when(userRepository.findByEmailAndDeletedAtIsNull("user@mulo.com"))
+        when(userRepository.findByEmailAndDeletedAtIsNull(TEST_EMAIL))
                 .thenReturn(Optional.of(user));
         when(passwordEncoder.matches("plain-password", "encoded-password")).thenReturn(true);
         when(jwtTokenProvider.createAccessToken(any())).thenReturn("access-token");
         when(jwtTokenProvider.createRefreshToken(any())).thenReturn("new-refresh-token");
         when(refreshTokenRepository.findByUser(user)).thenReturn(Optional.of(existing));
 
-        authService.login("user@mulo.com", "plain-password");
+        authService.login(TEST_EMAIL, "plain-password");
 
         assertThat(existing.getTokenHash()).hasSize(64).isNotEqualTo("old-hash");
         verify(refreshTokenRepository).save(existing);
@@ -104,16 +106,16 @@ class AuthServiceTest {
 
     @Test
     void loginUsesSameExceptionForUnknownEmailAndWrongPassword() {
-        when(userRepository.findByEmailAndDeletedAtIsNull("unknown@mulo.com"))
+        when(userRepository.findByEmailAndDeletedAtIsNull(UNKNOWN_EMAIL))
                 .thenReturn(Optional.empty());
 
-        assertThatThrownBy(() -> authService.login("unknown@mulo.com", "plain-password"))
+        assertThatThrownBy(() -> authService.login(UNKNOWN_EMAIL, "plain-password"))
                 .isInstanceOf(InvalidCredentialsException.class);
     }
 
     @Test
     void refreshIssuesOnlyNewAccessTokenForValidStoredRefreshToken() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,
@@ -142,7 +144,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRejectsTokenWhenStoredHashDoesNotMatch() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
@@ -157,7 +159,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRejectsExpiredToken() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,
@@ -172,7 +174,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRejectsRevokedToken() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,
@@ -188,7 +190,7 @@ class AuthServiceTest {
 
     @Test
     void refreshRejectsInactiveUserToken() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,
@@ -204,7 +206,7 @@ class AuthServiceTest {
 
     @Test
     void logoutRevokesStoredRefreshTokenUsingCookieHash() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,
@@ -228,7 +230,7 @@ class AuthServiceTest {
 
     @Test
     void logoutDoesNotRewriteAlreadyRevokedToken() {
-        User user = User.signup("user@mulo.com", "encoded-password", "mulo");
+        User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
         RefreshToken storedToken = RefreshToken.create(
                 user,
                 TEST_REFRESH_TOKEN_HASH,

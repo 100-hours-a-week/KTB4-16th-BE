@@ -356,7 +356,7 @@ paths:
               - password
             example:
               nickname: 홍길동
-              email: example@muro.com
+              email: example@example.test
               password: Test1234!
       x-implementation-status: implemented
   "/api/users/me":
@@ -391,7 +391,7 @@ paths:
                 data:
                   userId: 35
                   nickname: 뮤로
-                  email: example@mulo.com
+                  email: example@example.test
         '401':
           description: 현재 사용자 정보를 조회하기 위한 유효한 인증 정보가 없거나, 탈퇴 사용자여서 활성 사용자로 인증할 수 없으므로 401.\
           content:

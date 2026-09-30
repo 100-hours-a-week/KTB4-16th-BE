@@ -537,7 +537,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `report_year` | `SMALLINT` | - | NOT NULL | - | - | 리포트 대상 연도 | 연도 값은 범위가 매우 작으므로 `SMALLINT`로 충분하다. | 특정 연도의 리포트를 조회하는 기준이 된다. |
 | `report_month` | `SMALLINT` | - | NOT NULL | - | - | 리포트 대상 월 | 월은 1~12의 작은 정수값이므로 `SMALLINT`를 사용한다. | 특정 월의 리포트를 조회하는 기준이 된다. |
 | `record_count` | `INTEGER` | - | NOT NULL | 0 | - | 해당 월에 포함된 자물쇠 개수 | 월별 자물쇠 개수는 정수값이므로 `INTEGER`를 사용한다. | 월간 기록 개수를 리포트에 표시한다. |
-| `top_place_id` | `BIGINT` | - | NULL | NULL | FK | 해당 월에 가장 많이 기록된 장소 ID | 가장 많이 기록된 장소가 존재하는 경우 `places.place_id`를 참조한다. 자물쇠가 없는 달에는 값이 없을 수 있으므로 NULL을 허용할 수 있다. | 월간 대표 장소를 표시한다. |
+| `top_place_id` | `BIGINT` | - | NULL | NULL | FK | 해당 월에 가장 많이 기록된 장소 ID | 대상 월 활성 기록의 장소별 기록 수 내림차순, 최신 기록 시각 내림차순, `place_id` 오름차순으로 선정한다. 장소가 존재하면 `places.place_id`를 참조한다. 기록이 없는 달에는 값이 없을 수 있으므로 NULL을 허용한다. | 월간 대표 장소를 표시한다. |
 | `top_artist_name` | `VARCHAR` | 255 | NULL | NULL | - | 해당 월에 가장 많이 기록된 아티스트명 | 음원 유통 메타데이터 표준 (DDEX) 규격 기준 | 월간 대표 아티스트를 표시한다. |
 | `ai_recap_text` | `VARCHAR` | 100 | NULL | NULL | - | AI가 생성한 월간 요약 문장 | AI가 생성한 월간 회고를 최대 100자로 저장하기 위해 `VARCHAR(100)`을 사용한다. | 월간 리포트의 AI RECAP 문장을 표시한다. |
 | `ai_recap_status` | `ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')` | - | NOT NULL | PENDING | - | AI 월간 요약 생성 상태

@@ -11,6 +11,8 @@ import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.report.dto.MonthlyRecordSummary;
 import com.ktb4.team16.mulo.report.dto.MonthlyTopArtist;
 import com.ktb4.team16.mulo.report.dto.MonthlyTopPlace;
+import com.ktb4.team16.mulo.report.repository.MonthlyReportRepository;
+import jakarta.persistence.EntityManager;
 import java.math.BigDecimal;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -20,6 +22,7 @@ import java.util.HashSet;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
+import org.hibernate.Hibernate;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.data.jpa.test.autoconfigure.DataJpaTest;
 import org.springframework.boot.jdbc.test.autoconfigure.AutoConfigureTestDatabase;
@@ -45,6 +48,12 @@ class RecordRepositoryTests {
 
     @Autowired
     private PlaceRepository placeRepository;
+
+    @Autowired
+    private MonthlyReportRepository monthlyReportRepository;
+
+    @Autowired
+    private EntityManager entityManager;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
@@ -180,7 +189,71 @@ class RecordRepositoryTests {
         assertThat(summary.recordCount()).isEqualTo(4L);
         assertThat(summary.averageMoodScore()).isEqualTo(25.0);
         assertThat(topPlace.placeId()).isEqualTo(secondPlace);
+        assertThat(topPlace.legalDongCode()).isEqualTo(LEGAL_DONG_CODE);
+        assertThat(topPlace.legalDongName()).isEqualTo("둘장소");
         assertThat(topArtist.artistName()).isEqualTo("둘아티스트");
+    }
+
+    // 장소별 건수를 우선하고 최신 시각까지 같을 때 작은 ID를 선택하며 미분류 장소도 포함한다.
+    @Test
+    void monthlyTopPlaceUsesCountLatestTimeThenPlaceIdWithUnknownDong() {
+        long userId = insertUser();
+        long first = insertPlace(null, null, "-33.0000000", "-150.0000000");
+        long second = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.1000000", "-150.1000000");
+        long track = insertTrack("monthly-place");
+        LocalDateTime start = LocalDateTime.of(2026, 8, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 1, 0, 0);
+        insertRecord(userId, first, track, start, null);
+        insertRecord(userId, first, track, start.plusDays(2), null);
+        insertRecord(userId, second, track, start, null);
+        insertRecord(userId, second, track, start.plusDays(2), null);
+
+        MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+        assertThat(top.placeId()).isEqualTo(first);
+        assertThat(top.legalDongCode()).isNull();
+        assertThat(top.legalDongName()).isNull();
+    }
+
+    // 같은 법정동의 다른 장소를 합치지 않고 최근성보다 장소별 기록 수를 우선한다.
+    @Test
+    void monthlyTopPlacePrioritizesPlaceCountOverNewerRecord() {
+        long userId = insertUser();
+        long frequent = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.0000000", "-150.0000000");
+        long recent = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.1000000", "-150.1000000");
+        long track = insertTrack("monthly-count");
+        LocalDateTime start = LocalDateTime.of(2026, 8, 1, 0, 0);
+        LocalDateTime end = LocalDateTime.of(2026, 9, 1, 0, 0);
+        insertRecord(userId, frequent, track, start, null);
+        insertRecord(userId, frequent, track, start.plusDays(1), null);
+        insertRecord(userId, recent, track, start.plusDays(20), null);
+
+        MonthlyTopPlace top = recordRepository.findMonthlyTopPlaces(
+                userId, start, end, PageRequest.of(0, 1)).getFirst();
+        assertThat(top.placeId()).isEqualTo(frequent);
+    }
+
+    // 상세 리포트 조회가 소유자를 제한하고 대표 장소를 함께 적재하는지 확인한다.
+    @Test
+    void monthlyReportDetailFetchesTopPlaceForOwner() {
+        long userId = insertUser();
+        long placeId = insertPlace(LEGAL_DONG_CODE, LEGAL_DONG_NAME,
+                "-33.0000000", "-150.0000000");
+        long reportId = insert("""
+                INSERT INTO monthly_reports (user_id, report_year, report_month, record_count,
+                    top_place_id, ai_recap_status) VALUES (?, ?, ?, ?, ?, ?)
+                """, userId, 2026, 8, 1, placeId, "PENDING");
+        entityManager.clear();
+
+        var report = monthlyReportRepository
+                .findByMonthlyReportIdAndUser_UserIdWithTopPlace(reportId, userId).orElseThrow();
+
+        assertThat(Hibernate.isInitialized(report.getTopPlace())).isTrue();
+        assertThat(report.getTopPlace().getLegalDongName()).isEqualTo(LEGAL_DONG_NAME);
+        assertThat(monthlyReportRepository
+                .findByMonthlyReportIdAndUser_UserIdWithTopPlace(reportId, -1L)).isEmpty();
     }
 
     @Test

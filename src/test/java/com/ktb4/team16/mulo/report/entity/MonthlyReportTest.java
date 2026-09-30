@@ -9,7 +9,7 @@ class MonthlyReportTest {
 
     @Test
     void preparesAndCompletesMonthlyReportWithoutDowngradingLateFailure() {
-        User user = User.signup("user@test.com", "hash", "사용자");
+        User user = User.signup("user@example.test", "hash", "사용자");
 
         MonthlyReport report = MonthlyReport.prepare(user, (short) 2026, (short) 9, 3, "뮤로");
 
