@@ -26,6 +26,8 @@ dependencies {
     implementation 'org.springframework.security:spring-security-oauth2-jose'
     // REST API
     implementation 'org.springframework.boot:spring-boot-starter-webmvc'
+    // Spring Boot 4 auto-configuration for Sentry error monitoring.
+    implementation 'io.sentry:sentry-spring-boot-4-starter:8.58.0'
     // Docker healthcheck에 사용할 /actuator/health endpoint 제공
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
     // Swagger/OpenAPI 문서 및 Swagger UI 제공을 위한 의존성
