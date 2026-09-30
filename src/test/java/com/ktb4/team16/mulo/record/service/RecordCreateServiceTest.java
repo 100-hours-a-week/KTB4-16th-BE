@@ -18,7 +18,6 @@ import com.ktb4.team16.mulo.place.client.KakaoRegionLookupException;
 import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
@@ -36,6 +35,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.ArgumentCaptor;
+import org.junit.jupiter.api.BeforeEach;
+import org.springframework.test.util.ReflectionTestUtils;
 
 class RecordCreateServiceTest {
 
@@ -60,6 +61,15 @@ class RecordCreateServiceTest {
             kakaoRegionClient
     );
 
+    @BeforeEach
+    void setUpRecordRepository() {
+        when(recordRepository.save(any(Record.class))).thenAnswer(invocation -> {
+            Record saved = invocation.getArgument(0);
+            ReflectionTestUtils.setField(saved, "recordId", 1024L);
+            return saved;
+        });
+    }
+
     @Test
     void createsRecordPhotoAndDeletesTemporaryMetadataAfterSuccessfulCreation() {
         Long userId = 7L;
@@ -71,6 +81,7 @@ class RecordCreateServiceTest {
         RecordCreateRequest request = request(uploadId);
 
         when(userRepository.findByUserIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        when(user.getUserId()).thenReturn(userId);
         when(placeRepository.findByLatitudeAndLongitude(
                 request.location().latitude(), request.location().longitude()))
                 .thenReturn(Optional.of(place));
@@ -78,15 +89,24 @@ class RecordCreateServiceTest {
         when(musicTrackService.findOrCreate(
                 "track-id", "title", "artist", "album-image", "external-url"))
                 .thenReturn(musicTrack);
+        when(musicTrack.getTitle()).thenReturn("title");
+        when(musicTrack.getArtistName()).thenReturn("artist");
+        when(musicTrack.getExternalTrackId()).thenReturn("track-id");
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenThrow(
                 new WeatherApiException());
         when(upload.getImageUrl()).thenReturn("uploads/7/photo.jpg");
         when(upload.getMimeType()).thenReturn("image/jpeg");
         when(upload.getFileSize()).thenReturn(123L);
 
-        RecordCreateResponse response = recordService.createRecord(userId, request);
+        RecordCreationSnapshot response = recordService.createRecord(userId, request);
 
-        assertThat(response).isNotNull();
+        assertThat(response.recordId()).isEqualTo(1024L);
+        assertThat(response.userId()).isEqualTo(userId);
+        assertThat(response.photoObjectKey()).isEqualTo("uploads/7/photo.jpg");
+        assertThat(response.track()).isEqualTo(
+                new RecordCreationSnapshot.Track("title", "artist", "track-id"));
+        assertThat(response.comment()).isEqualTo("comment");
+        assertThat(response.createdAt()).isNotNull();
         verify(recordPhotoRepository).save(any(RecordPhoto.class));
         verify(uploadService).deleteMetadata(upload);
         verify(musicTrackService).findOrCreate(

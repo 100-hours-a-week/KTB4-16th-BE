@@ -5,6 +5,7 @@ import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.Storage.SignUrlOption;
 import com.ktb4.team16.mulo.upload.config.GcsProperties;
 import java.net.URL;
+import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
@@ -32,8 +33,21 @@ public class GoogleCloudStorageService implements GcsStorageService {
 
     @Override
     public String createReadSignedUrl(String objectKey) {
+        return signUrl(objectKey, SIGNED_URL_MINUTES, TimeUnit.MINUTES);
+    }
+
+    @Override
+    public String createReadSignedUrl(String objectKey, Duration expiration) {
+        if (expiration == null || expiration.isNegative() || expiration.isZero()
+                || expiration.getNano() != 0) {
+            throw new IllegalArgumentException("Signed URL expiration must be positive seconds");
+        }
+        return signUrl(objectKey, expiration.getSeconds(), TimeUnit.SECONDS);
+    }
+
+    private String signUrl(String objectKey, long duration, TimeUnit timeUnit) {
         BlobInfo blobInfo = BlobInfo.newBuilder(properties.bucketName(), objectKey).build();
-        URL signedUrl = storage.signUrl(blobInfo, SIGNED_URL_MINUTES, TimeUnit.MINUTES,
+        URL signedUrl = storage.signUrl(blobInfo, duration, timeUnit,
                 SignUrlOption.withV4Signature());
         return signedUrl.toString();
     }

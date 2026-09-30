@@ -8,6 +8,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -26,12 +27,15 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class RecordDeleteControllerTest {
     @Mock
     private RecordService recordService;
+    @Mock
+    private RecordCreationOrchestrator recordCreationOrchestrator;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.standaloneSetup(new RecordController(recordService))
+        mvc = MockMvcBuilders.standaloneSetup(
+                        new RecordController(recordService, recordCreationOrchestrator))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

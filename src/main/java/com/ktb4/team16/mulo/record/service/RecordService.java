@@ -12,7 +12,6 @@ import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
-import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
@@ -270,7 +269,7 @@ public class RecordService {
 
 
     @Transactional
-    public RecordCreateResponse createRecord(
+    public RecordCreationSnapshot createRecord(
             Long userId,
             RecordCreateRequest request
     ) {
@@ -352,10 +351,10 @@ public class RecordService {
                 LocalDateTime.now()
         );
 
-        recordRepository.save(record);
+        Record savedRecord = recordRepository.save(record);
 
         RecordPhoto recordPhoto = RecordPhoto.create(
-                record,
+                savedRecord,
                 upload.getImageUrl(),
                 upload.getMimeType(),
                 upload.getFileSize()
@@ -364,6 +363,15 @@ public class RecordService {
         recordPhotoRepository.save(recordPhoto);
         uploadService.deleteMetadata(upload);
 
-        return new RecordCreateResponse(record.getRecordId());
+        return new RecordCreationSnapshot(
+                savedRecord.getRecordId(),
+                user.getUserId(),
+                recordPhoto.getImageUrl(),
+                new RecordCreationSnapshot.Track(
+                        musicTrack.getTitle(),
+                        musicTrack.getArtistName(),
+                        musicTrack.getExternalTrackId()),
+                savedRecord.getComment(),
+                savedRecord.getCreatedAt());
     }
 }

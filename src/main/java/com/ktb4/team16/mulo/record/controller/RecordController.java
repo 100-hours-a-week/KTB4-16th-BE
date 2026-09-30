@@ -10,6 +10,7 @@ import com.ktb4.team16.mulo.record.dto.response.RecordDetailResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionsResponse;
 import com.ktb4.team16.mulo.record.message.RecordMessage;
+import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import jakarta.validation.Valid;
@@ -36,6 +37,7 @@ import org.springframework.web.bind.annotation.RestController;
 public class RecordController {
 
     private final RecordService recordService;
+    private final RecordCreationOrchestrator recordCreationOrchestrator;
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
@@ -43,7 +45,7 @@ public class RecordController {
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody RecordCreateRequest request
     ) {
-        RecordCreateResponse record = recordService.createRecord(userId, request);
+        RecordCreateResponse record = recordCreationOrchestrator.createRecord(userId, request);
         return new RecordCreateApiResponse(
                 RecordMessage.RECORD_CREATED.message(),
                 record
