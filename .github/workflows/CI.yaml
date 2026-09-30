@@ -168,17 +168,20 @@ jobs:
         run: |
           gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
-      # release.config.main.json을 명시적으로 지정한다. 저장소에 release.config.develop.json도
-      # 같이 있는데, 파일명이 cosmiconfig 기본 탐색 대상(.releaserc.json 등)이 아니어야
-      # 서로 잘못 로드될 위험이 없다(2026-09-30 develop 병합 시 이 문제를 피하려고 정리함).
+      # release.config.main.json을 이 job 안에서만 .releaserc.json으로 복사해서 쓴다.
+      # `semantic-release --extends <path>`로 직접 넘기면 플러그인 모듈 해석 기준 경로가
+      # 달라져서 semantic-release 코어에 번들된 기본 플러그인(commit-analyzer 등)조차
+      # 못 찾는 문제가 있었다(2026-09-30 실제 발생, main-ci에서 재현 확인). cosmiconfig가
+      # 원래 쓰던 자동 탐색 방식 그대로 두고, 파일만 이 job 시작 시점에 맞바꿔 충돌을 피한다.
       - name: Release backend image
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
+          cp release.config.main.json .releaserc.json
           npx --yes \
             --package=semantic-release@25 \
             --package=@semantic-release/exec@7 \
-            semantic-release --extends ./release.config.main.json
+            semantic-release
 
   main-notify:
     name: Discord notification (main release)
@@ -290,15 +293,16 @@ jobs:
         run: |
           gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
-      # release.config.develop.json 명시적으로 지정 (main-ci와 동일한 이유).
+      # release.config.develop.json을 .releaserc.json으로 복사해서 쓴다 (main-ci와 동일한 이유).
       - name: Release backend image
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
         run: |
+          cp release.config.develop.json .releaserc.json
           npx --yes \
             --package=semantic-release@25 \
             --package=@semantic-release/exec@7 \
-            semantic-release --extends ./release.config.develop.json
+            semantic-release
 
   # 개발서버(Mulo test 프로젝트) VM에 새 버전을 자동으로 배포한다.
   deploy:
