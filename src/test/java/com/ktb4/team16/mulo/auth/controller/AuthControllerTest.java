@@ -43,12 +43,12 @@ class AuthControllerTest {
 
     @Test
     void loginReturnsAccessTokenBodyAndHttpOnlyRefreshCookie() throws Exception {
-        when(authService.login("user@mulo.com", "plain-password"))
+        when(authService.login("auth-user@example.test", "plain-password"))
                 .thenReturn(new LoginResult("access-token", "refresh-token"));
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"user@mulo.com\",\"password\":\"plain-password\"}"))
+                        .content("{\"email\":\"auth-user@example.test\",\"password\":\"plain-password\"}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("로그인 완료"))
                 .andExpect(jsonPath("$.accessToken").value("access-token"))
@@ -84,24 +84,24 @@ class AuthControllerTest {
 
     @Test
     void loginInvalidCredentialsReturnsUnifiedUnauthorizedError() throws Exception {
-        when(authService.login("user@mulo.com", "wrong-password"))
+        when(authService.login("auth-user@example.test", "wrong-password"))
                 .thenThrow(new InvalidCredentialsException());
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"user@mulo.com\",\"password\":\"wrong-password\"}"))
+                        .content("{\"email\":\"auth-user@example.test\",\"password\":\"wrong-password\"}"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("INVALID_CREDENTIALS"));
     }
 
     @Test
     void unexpectedLoginFailureReturnsInternalServerError() throws Exception {
-        when(authService.login("user@mulo.com", "plain-password"))
+        when(authService.login("auth-user@example.test", "plain-password"))
                 .thenThrow(new IllegalStateException());
 
         mvc.perform(post("/api/auth/login")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"email\":\"user@mulo.com\",\"password\":\"plain-password\"}"))
+                        .content("{\"email\":\"auth-user@example.test\",\"password\":\"plain-password\"}"))
                 .andExpect(status().isInternalServerError())
                 .andExpect(jsonPath("$.code").value("INTERNAL_SERVER_ERROR"));
     }

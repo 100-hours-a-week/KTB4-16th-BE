@@ -541,7 +541,7 @@ const spec = {
               },
               "example": {
                 "nickname": "홍길동",
-                "email": "example@muro.com",
+                "email": "example@example.test",
                 "password": "Test1234!"
               }
             }
@@ -591,7 +591,7 @@ const spec = {
                   "data": {
                     "userId": 35,
                     "nickname": "뮤로",
-                    "email": "example@mulo.com"
+                    "email": "example@example.test"
                   }
                 }
               }
@@ -644,9 +644,7 @@ const spec = {
         },
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "implemented"
@@ -1343,7 +1341,7 @@ const spec = {
             }
           }
         ],
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       }
     },
     "/api/users/me/places": {
@@ -1570,9 +1568,7 @@ const spec = {
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "implemented"
@@ -1585,7 +1581,7 @@ const spec = {
         ],
         "summary": "음악 검색",
         "operationId": "getApiMusicSearch",
-        "description": "필수\\nq: String\\n\\n백엔드가 Spotify 검색 API를 프록시한다.\\n\\n정책 및 설명\\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\\n- 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.\\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
+        "description": "필수\nq: String\n\n백엔드가 Spotify 검색 API를 프록시한다.\n\n정책 및 설명\n- 사용자가 입력한 검색어를 기준으로 Spotify 트랙을 검색한다.\n- 검색어 q는 Query Parameter로 전달하며, 공백을 정리한 뒤 2~255자여야 한다.\n- 검색 결과가 없더라도 정상적인 검색 요청이면 200과 빈 배열을 반환한다.\n- 검색 단계에서는 공급자와 Spotify의 음악 식별자인 externalTrackId를 반환한다.\n- 검색된 음악이 MULO DB에 존재하지 않아도 검색 결과에는 포함할 수 있다.\n- 자물쇠 생성 시에는 요청으로 전달된 음악 메타데이터를 사용하며 Spotify를 재호출하지 않는다.\n- V1은 결과를 저장하거나 캐시하지 않으며, 유효한 요청마다 Spotify를 호출한다.\n- 사용자별 또는 Spotify 호출 제한에 걸리면 429와 Retry-After 헤더를 반환한다.",
         "responses": {
           "200": {
             "description": "검색 요청이 정상 처리되었으므로 200.\n\n추가 케이스: 검색 조건에 해당하는 음악이 없더라도 검색 요청 자체는 정상적으로 처리되었으므로 200과 빈 배열을 반환한다.",
@@ -2171,16 +2167,16 @@ const spec = {
                     {
                       "externalTrackId": "6rqhFgbbKwnb9MLmUQDhG6",
                       "title": "밤편지",
-                      "artistName": "아이유"
-                      ,"albumImageUrl": "https://i.scdn.co/image/example"
-                      ,"externalUrl": "https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6"
+                      "artistName": "아이유",
+                      "albumImageUrl": "https://i.scdn.co/image/example",
+                      "externalUrl": "https://open.spotify.com/track/6rqhFgbbKwnb9MLmUQDhG6"
                     },
                     {
                       "externalTrackId": "4exampleTrackId000001",
                       "title": "추천곡 2",
-                      "artistName": "아티스트 2"
-                      ,"albumImageUrl": "https://i.scdn.co/image/example-2"
-                      ,"externalUrl": "https://open.spotify.com/track/4exampleTrackId000001"
+                      "artistName": "아티스트 2",
+                      "albumImageUrl": "https://i.scdn.co/image/example-2",
+                      "externalUrl": "https://open.spotify.com/track/4exampleTrackId000001"
                     }
                   ]
                 }
@@ -2670,7 +2666,7 @@ const spec = {
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       },
       "get": {
@@ -2712,9 +2708,7 @@ const spec = {
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -2813,7 +2807,7 @@ const spec = {
             "description": "서버 내부 오류"
           }
         },
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       }
     },
     "/api/records/{recordId}": {
@@ -3079,9 +3073,7 @@ const spec = {
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "implemented"
@@ -4693,17 +4685,30 @@ const spec = {
                         "stats": {
                           "type": "object",
                           "properties": {
-                            "recordCount": { "type": "integer" },
+                            "recordCount": {
+                              "type": "integer"
+                            },
                             "topPlace": {
                               "nullable": true,
                               "type": "object",
                               "properties": {
-                                "placeId": { "type": "integer", "format": "int64" },
-                                "legalDongName": { "type": "string" }
+                                "placeId": {
+                                  "type": "integer",
+                                  "format": "int64"
+                                },
+                                "legalDongName": {
+                                  "type": "string"
+                                }
                               }
                             },
-                            "topArtistName": { "nullable": true, "type": "string" },
-                            "averageMoodScore": { "nullable": true, "type": "number" }
+                            "topArtistName": {
+                              "nullable": true,
+                              "type": "string"
+                            },
+                            "averageMoodScore": {
+                              "nullable": true,
+                              "type": "number"
+                            }
                           }
                         },
                         "photoScenes": {
@@ -4711,9 +4716,15 @@ const spec = {
                           "items": {
                             "type": "object",
                             "properties": {
-                              "sceneTag": { "type": "string" },
-                              "count": { "type": "integer" },
-                              "ratio": { "type": "integer" }
+                              "sceneTag": {
+                                "type": "string"
+                              },
+                              "count": {
+                                "type": "integer"
+                              },
+                              "ratio": {
+                                "type": "integer"
+                              }
                             }
                           }
                         },
@@ -4740,12 +4751,19 @@ const spec = {
                     "month": 8,
                     "stats": {
                       "recordCount": 15,
-                      "topPlace": { "placeId": 10, "legalDongName": "역삼동" },
+                      "topPlace": {
+                        "placeId": 10,
+                        "legalDongName": "역삼동"
+                      },
                       "topArtistName": "아이유",
                       "averageMoodScore": 24.3
                     },
                     "photoScenes": [
-                      { "sceneTag": "야경", "count": 3, "ratio": 60 }
+                      {
+                        "sceneTag": "야경",
+                        "count": 3,
+                        "ratio": 60
+                      }
                     ],
                     "aiRecap": {
                       "status": "COMPLETED",
@@ -4890,7 +4908,7 @@ const spec = {
         ],
         "summary": "현재 추천 플레이리스트 조회",
         "operationId": "getApiRecommendationsPlaylists",
-        "description": "사용자당 현재 추천 플레이리스트 1개. 아직 생성된 플레이리스트가 없으면 playlist=null.\n\n### 미정 정책\n- 필수\n없음\n\n선택\n없음\n\n정책 및 설명\n- 현재 로그인한 사용자의 현재 추천 플레이리스트를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.\n- 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.\n- 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다.\n- 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.\n- 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다",
+        "description": "사용자당 현재 추천 플레이리스트 1개. 아직 생성된 플레이리스트가 없으면 playlist=null.\n\n### 미정 정책\n- 필수\n없음\n\n선택\n없음\n\n정책 및 설명\n- 현재 로그인한 사용자의 현재 추천 플레이리스트를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.\n- 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.\n- 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.\n- 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.\n- 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다",
         "responses": {
           "200": {
             "description": "리소스가 없는 상태도 현재 추천 상태 조회의 정상 결과이므로 200.\n\n추가 케이스: 현재 추천 플레이리스트가 존재하여 정상 반환하므로 200.",
@@ -4906,7 +4924,42 @@ const spec = {
                       "type": "object",
                       "properties": {
                         "playlist": {
-                          "nullable": true
+                          "nullable": true,
+                          "allOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "recommendationPlaylistId": {
+                                  "type": "integer",
+                                  "format": "int64"
+                                },
+                                "tracks": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "object",
+                                    "properties": {
+                                      "musicTrackId": {
+                                        "type": "integer",
+                                        "format": "int64"
+                                      },
+                                      "title": {
+                                        "type": "string"
+                                      },
+                                      "artistName": {
+                                        "type": "string"
+                                      },
+                                      "albumImageUrl": {
+                                        "type": "string"
+                                      },
+                                      "externalUrl": {
+                                        "type": "string"
+                                      }
+                                    }
+                                  }
+                                }
+                              }
+                            }
+                          ]
                         }
                       }
                     }
@@ -4974,7 +5027,7 @@ const spec = {
         ],
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
-        "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. 사용자의 기록 + 현재 위치 주변 장소의 자물쇠 + 현재 위치/장소 + 날씨 + 기온 + 시간을 추천 컨텍스트로 사용한다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
+        "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.\n- AI가 저하 상태를 알리거나 추천 곡이 비어 있으면 기존 현재 플레이리스트를 유지하고 200을 반환한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5010,6 +5063,30 @@ const spec = {
           }
         },
         "responses": {
+          "200": {
+            "description": "AI가 저하 상태를 알리거나 추천 곡이 없어 기존 현재 플레이리스트를 유지했으므로 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "추천 결과가 없어 기존 플레이리스트 유지",
+                  "data": {
+                    "playlist": null
+                  }
+                }
+              }
+            }
+          },
           "201": {
             "description": "새 추천 플레이리스트 리소스가 생성되므로 201.",
             "content": {
@@ -5047,6 +5124,9 @@ const spec = {
                                   },
                                   "externalUrl": {
                                     "type": "string"
+                                  },
+                                  "albumImageUrl": {
+                                    "type": "string"
                                   }
                                 }
                               }
@@ -5067,7 +5147,8 @@ const spec = {
                           "musicTrackId": 3,
                           "title": "비 오는 날엔",
                           "artistName": "헤이즈",
-                          "externalUrl": "..."
+                          "externalUrl": "...",
+                          "albumImageUrl": "https://i.scdn.co/image/example"
                         }
                       ]
                     }
@@ -5149,28 +5230,6 @@ const spec = {
               }
             }
           },
-          "502": {
-            "description": "현재 위치의 날씨·기온을 확보하지 못해 추천을 생성할 수 없으므로 502.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "WEATHER_API_ERROR",
-                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
-          },
           "500": {
             "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
             "content": {
@@ -5192,6 +5251,28 @@ const spec = {
                 }
               }
             }
+          },
+          "502": {
+            "description": "현재 위치의 날씨·기온을 확보하지 못했거나 AI 서비스 통신·응답 계약이 실패해 추천을 생성할 수 없으므로 502.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "WEATHER_API_ERROR",
+                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
           }
         },
         "x-implementation-status": "implemented",
@@ -5208,9 +5289,7 @@ const spec = {
         "description": "필수\nlatitude: Double\nlongitude: Double\nat: ISO-8601 DateTime\n\n정책 및 설명\n- 요청 at은 받은 offset과 무관하게 KST로 정규화한다. 서버 KST의 현재 시간대 시작보다 이른 요청은 과거로 보고 400 INVALID_WEATHER_REQUEST_TIME으로 처리한다.\n- 위·경도를 기상청 격자(nx, ny)로 변환한다.\n- 같은 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회한다.\n- 해당 날짜·격자의 캐시가 전혀 없을 때만 기상청 단기예보 getVilageFcst를 조회해 저장한다.\n- 응답은 forecastAt, temperature, weatherCondition만 제공한다.\n- weatherCondition은 CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER 중 하나다.\n- 요청 시각의 분이 00~29이면 현재 정각, 30~59이면 다음 정각을 forecast_at으로 사용한다.\n- 예: 15:10 요청은 15:00 예보를 사용하고, 15:50 요청은 16:00 예보를 사용한다.\n\n- 기상청 getVilageFcst를 1회 호출하면 목표 예보시각 이후 항목을 시간대별로 파싱해 weather_grid_forecasts에 일괄 저장한다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n- 최초 호출은 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패 또는 미포함이면 바로 이전 후보 회차를 한 번만 시도한다.\n- 당일 캐시는 있으나 요청 시간대 예보가 없으면 WEATHER_API_ERROR로 처리한다.\n\n### 미정 정책\n- 국내 기상청 격자 범위 밖 좌표: 상태=미정, `WTH-002: HTTP 상태와 Error Code 미정` — 격자 범위 밖 좌표의 구체 상태와 오류 코드는 임의 확정하지 않는다.",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -5732,8 +5811,7 @@ const spec = {
                   "selectedOption": {
                     "type": "string"
                   },
-                  "voteQuestionId": {
-                  }
+                  "voteQuestionId": {}
                 },
                 "required": [
                   "selectedOption",
@@ -5748,9 +5826,7 @@ const spec = {
         },
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "contract-only",
@@ -6088,9 +6164,7 @@ const spec = {
         ],
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "x-implementation-status": "contract-only"
@@ -7639,9 +7713,7 @@ const spec = {
         "description": "현재 사용자의 삭제되지 않은 모든 자물쇠를 법정동 코드 기준으로 그룹화해 반환한다.\n\n- 최근 7일 제한을 적용하지 않는다.\n- 그룹 키는 `places.legal_dong_code`, 표시명은 `places.legal_dong_name`이다.\n- 법정동 미확인 자물쇠는 `legalDongCode=null`, `legalDongName=null`인 하나의 그룹으로 반환한다.\n- 프론트는 NULL 그룹을 `확인할 수 없음` 폴더로 표시한다.\n- 각 그룹의 `recordsCount`는 현재 사용자의 삭제되지 않은 전체 자물쇠 수다.",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "responses": {
@@ -7703,7 +7775,7 @@ const spec = {
             "description": "서버 내부 오류"
           }
         },
-        "x-implementation-status": "contract-only"
+        "x-implementation-status": "implemented"
       }
     },
     "/api/csrf": {
@@ -7738,9 +7810,7 @@ const spec = {
         "summary": "클러스터/장소 인기 음악 조회",
         "description": "필수\nplaceIds: List<Long> (1개 이상)\n\n선택\n없음\n\n정책\n- 비로그인 사용자도 조회할 수 있다.\n- 전달받은 모든 placeIds를 하나의 조회 범위로 합산한다.\n- Record의 placeId가 placeIds에 포함되는 기록만 집계한다.\n- 삭제된 Record는 제외한다.\n- API 조회 시점을 기준으로\n직전 7일 동안 생성된 Record만 집계한다.\n- recordCount는 선택된 placeIds 전체의\n최근 7일 활성 Record 총개수이다.\n- music[].count는 최근 7일 활성 Record 중\n해당 음악이 등록된 횟수이다.\n- 음악별 count DESC로 정렬한다.\n- count가 같으면 해당 음악의\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 클러스터링은 프론트의\nKakao MarkerClusterer가 담당한다.\n- 백엔드는 클러스터를 관리하지 않고\n전달받은 placeIds만 처리한다.\n- 개별 마커 클릭은 placeIds에\n1개의 ID를 전달해 동일하게 처리한다.\n- Cursor pagination과 클라이언트 size 입력은\n사용하지 않는다.\n\n정책 및 설명\n- 선택된 placeIds 전체의 삭제되지 않은 Record를 합산한다.\n- 조회 시점 기준 직전 7일의 Record만 집계한다.\n- recordCount와 music[].count 모두 최근 7일 기준이다.\n- 음악별 count DESC로 정렬하고 동률이면\n가장 최근 Record 생성 시각이 최신인 음악을 우선한다.\n- 개별 마커와 클러스터 클릭을 같은 API로 처리한다.\n- 클러스터 ID나 행정구역 정보는 전달하지 않는다.\n- Cursor pagination, size, TOP N 제한은 현재 명세에 적용하지 않는다.",
         "operationId": "post_api_places_popular_tracks_search",
-        "security": [
-
-        ],
+        "security": [],
         "requestBody": {
           "required": true,
           "content": {
@@ -7846,9 +7916,7 @@ const spec = {
                       "message": "인기 음악 조회 성공",
                       "data": {
                         "recordCount": 0,
-                        "music": [
-
-                        ]
+                        "music": []
                       }
                     }
                   }
@@ -7946,7 +8014,7 @@ const spec = {
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -7960,9 +8028,7 @@ const spec = {
         "operationId": "post_api_users_me_records_search",
         "security": [
           {
-            "bearerAuth": [
-
-            ]
+            "bearerAuth": []
           }
         ],
         "requestBody": {
@@ -8079,9 +8145,7 @@ const spec = {
                     "value": {
                       "message": "내 자물쇠 목록 조회 성공",
                       "data": {
-                        "records": [
-
-                        ],
+                        "records": [],
                         "nextCursor": null
                       }
                     }
@@ -8212,7 +8276,7 @@ const spec = {
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     }

@@ -48,7 +48,7 @@ class MonthlyReportPreparationServiceTest {
         when(records.findMonthlyTopPlaces(7L, start, end, PageRequest.of(0, 1))).thenReturn(List.of());
         when(records.findMonthlyTopArtists(7L, start, end, PageRequest.of(0, 1)))
                 .thenReturn(List.of(new MonthlyTopArtist("뮤로")));
-        when(users.getReferenceById(7L)).thenReturn(User.signup("user@test.com", "hash", "사용자"));
+        when(users.getReferenceById(7L)).thenReturn(User.signup("user@example.test", "hash", "사용자"));
         when(reports.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         var batch = new MonthlyReportPreparationService(records, places, users, reports, moods)
@@ -71,7 +71,7 @@ class MonthlyReportPreparationServiceTest {
                 .thenReturn(Optional.of(new MonthlyRecordSummary(3L, 3.66)));
         when(records.findMonthlyTopPlaces(7L, start, end, PageRequest.of(0, 1))).thenReturn(List.of());
         when(records.findMonthlyTopArtists(7L, start, end, PageRequest.of(0, 1))).thenReturn(List.of());
-        when(users.getReferenceById(7L)).thenReturn(User.signup("user@test.com", "hash", "사용자"));
+        when(users.getReferenceById(7L)).thenReturn(User.signup("user@example.test", "hash", "사용자"));
         when(reports.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
         new MonthlyReportPreparationService(records, places, users, reports, moods).prepare(target);
@@ -87,7 +87,7 @@ class MonthlyReportPreparationServiceTest {
         YearMonth target = YearMonth.of(2026, 9);
         LocalDateTime start = target.atDay(1).atStartOfDay();
         LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
-        MonthlyReport failed = MonthlyReport.prepare(User.signup("user@test.com", "hash", "사용자"),
+        MonthlyReport failed = MonthlyReport.prepare(User.signup("user@example.test", "hash", "사용자"),
                 (short) 2026, (short) 9, 3, "뮤로");
         failed.markFailedUnlessCompleted();
 
@@ -112,12 +112,12 @@ class MonthlyReportPreparationServiceTest {
         YearMonth target = YearMonth.of(2026, 9);
         LocalDateTime start = target.atDay(1).atStartOfDay();
         LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
-        MonthlyReport completed = MonthlyReport.create(User.signup("complete@test.com", "hash", "완료"),
+        MonthlyReport completed = MonthlyReport.create(User.signup("complete@example.test", "hash", "완료"),
                 (short) 2026, (short) 9, 3, "뮤로", "회고");
-        MonthlyReport processing = MonthlyReport.prepare(User.signup("process@test.com", "hash", "처리"),
+        MonthlyReport processing = MonthlyReport.prepare(User.signup("process@example.test", "hash", "처리"),
                 (short) 2026, (short) 9, 3, "뮤로");
         processing.markProcessing();
-        MonthlyReport pending = MonthlyReport.prepare(User.signup("pending@test.com", "hash", "대기"),
+        MonthlyReport pending = MonthlyReport.prepare(User.signup("pending@example.test", "hash", "대기"),
                 (short) 2026, (short) 9, 3, "뮤로");
 
         when(records.findUsersWithActiveRecordsInPeriod(start, end)).thenReturn(List.of(7L, 8L, 9L));
