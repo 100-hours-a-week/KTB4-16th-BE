@@ -107,6 +107,8 @@ jobs:
     permissions:
       contents: write
       id-token: write
+      issues: write
+      pull-requests: write
 
     env:
       IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
