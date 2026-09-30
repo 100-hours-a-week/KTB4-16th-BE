@@ -3,18 +3,17 @@ package com.ktb4.team16.mulo.record.embedding;
 import static org.assertj.core.api.Assertions.assertThat;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
-import com.ktb4.team16.mulo.record.service.RecordCreationSnapshot;
 import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 
 class EmbeddingGenerateRequestTest {
     @Test
     void serializesKstOffsetAndNullCommentWithoutChangingWallClockTime() throws Exception {
-        var snapshot = new RecordCreationSnapshot(
+        var snapshot = new RecordEmbeddingSnapshot(
                 1024L,
                 7L,
                 "records/7/photo.jpg",
-                new RecordCreationSnapshot.Track("밤편지", "아이유", "track-123"),
+                new RecordEmbeddingSnapshot.Track("밤편지", "아이유", "track-123"),
                 null,
                 LocalDateTime.parse("2026-09-30T19:40:00"));
 

@@ -11,11 +11,11 @@ import com.ktb4.team16.mulo.record.cursor.RecordCursorPagination;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
-import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
@@ -105,14 +105,27 @@ public class RecordService {
     }
 
     @Transactional
-    public RecordCommentUpdateResponse updateRecordComment(
+    public RecordEmbeddingSnapshot updateRecordComment(
             Long userId,
             Long recordId,
             String comment
     ) {
         Record record = findActiveRecordForOwner(userId, recordId);
         record.updateComment(comment, LocalDateTime.now());
-        return new RecordCommentUpdateResponse(record.getRecordId(), comment);
+        RecordPhoto recordPhoto = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
+                .orElseThrow(IllegalStateException::new);
+        MusicTrack musicTrack = record.getMusicTrack();
+
+        return new RecordEmbeddingSnapshot(
+                record.getRecordId(),
+                record.getUser().getUserId(),
+                recordPhoto.getImageUrl(),
+                new RecordEmbeddingSnapshot.Track(
+                        musicTrack.getTitle(),
+                        musicTrack.getArtistName(),
+                        musicTrack.getExternalTrackId()),
+                record.getComment(),
+                record.getCreatedAt());
     }
 
     @Transactional
@@ -269,7 +282,7 @@ public class RecordService {
 
 
     @Transactional
-    public RecordCreationSnapshot createRecord(
+    public RecordEmbeddingSnapshot createRecord(
             Long userId,
             RecordCreateRequest request
     ) {
@@ -363,11 +376,11 @@ public class RecordService {
         recordPhotoRepository.save(recordPhoto);
         uploadService.deleteMetadata(upload);
 
-        return new RecordCreationSnapshot(
+        return new RecordEmbeddingSnapshot(
                 savedRecord.getRecordId(),
                 user.getUserId(),
                 recordPhoto.getImageUrl(),
-                new RecordCreationSnapshot.Track(
+                new RecordEmbeddingSnapshot.Track(
                         musicTrack.getTitle(),
                         musicTrack.getArtistName(),
                         musicTrack.getExternalTrackId()),

@@ -18,6 +18,7 @@ import com.ktb4.team16.mulo.place.client.KakaoRegionLookupException;
 import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
+import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
@@ -98,13 +99,13 @@ class RecordCreateServiceTest {
         when(upload.getMimeType()).thenReturn("image/jpeg");
         when(upload.getFileSize()).thenReturn(123L);
 
-        RecordCreationSnapshot response = recordService.createRecord(userId, request);
+        RecordEmbeddingSnapshot response = recordService.createRecord(userId, request);
 
         assertThat(response.recordId()).isEqualTo(1024L);
         assertThat(response.userId()).isEqualTo(userId);
         assertThat(response.photoObjectKey()).isEqualTo("uploads/7/photo.jpg");
         assertThat(response.track()).isEqualTo(
-                new RecordCreationSnapshot.Track("title", "artist", "track-id"));
+                new RecordEmbeddingSnapshot.Track("title", "artist", "track-id"));
         assertThat(response.comment()).isEqualTo("comment");
         assertThat(response.createdAt()).isNotNull();
         verify(recordPhotoRepository).save(any(RecordPhoto.class));

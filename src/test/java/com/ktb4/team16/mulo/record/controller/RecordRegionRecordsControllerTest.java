@@ -9,6 +9,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
+import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
@@ -28,7 +29,8 @@ class RecordRegionRecordsControllerTest {
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(new RecordController(recordService,
-                        mock(RecordCreationOrchestrator.class)))
+                        mock(RecordCreationOrchestrator.class),
+                        mock(RecordCommentUpdateOrchestrator.class)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

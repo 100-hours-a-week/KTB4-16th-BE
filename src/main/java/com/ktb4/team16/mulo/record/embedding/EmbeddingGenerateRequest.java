@@ -1,6 +1,5 @@
 package com.ktb4.team16.mulo.record.embedding;
 
-import com.ktb4.team16.mulo.record.service.RecordCreationSnapshot;
 import java.time.ZoneOffset;
 import java.time.format.DateTimeFormatter;
 
@@ -15,7 +14,7 @@ public record EmbeddingGenerateRequest(
     private static final ZoneOffset KST_OFFSET = ZoneOffset.ofHours(9);
 
     public static EmbeddingGenerateRequest from(
-            RecordCreationSnapshot snapshot,
+            RecordEmbeddingSnapshot snapshot,
             String signedPhotoUrl
     ) {
         String createdAt = snapshot.createdAt().atOffset(KST_OFFSET)

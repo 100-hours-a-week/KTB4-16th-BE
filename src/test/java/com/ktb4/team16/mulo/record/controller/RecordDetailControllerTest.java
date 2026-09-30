@@ -10,6 +10,7 @@ import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.math.BigDecimal;
@@ -33,13 +34,16 @@ class RecordDetailControllerTest {
     private RecordService recordService;
     @Mock
     private RecordCreationOrchestrator recordCreationOrchestrator;
+    @Mock
+    private RecordCommentUpdateOrchestrator recordCommentUpdateOrchestrator;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new RecordController(recordService, recordCreationOrchestrator))
+                        new RecordController(recordService, recordCreationOrchestrator,
+                                recordCommentUpdateOrchestrator))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();

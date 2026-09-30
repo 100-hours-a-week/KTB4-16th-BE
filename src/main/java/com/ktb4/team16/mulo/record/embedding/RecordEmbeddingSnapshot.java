@@ -1,9 +1,9 @@
-package com.ktb4.team16.mulo.record.service;
+package com.ktb4.team16.mulo.record.embedding;
 
 import java.time.LocalDateTime;
 
-/** Scalar data captured while the Record creation transaction is open. */
-public record RecordCreationSnapshot(
+/** Scalar data captured while a Record transaction is open. */
+public record RecordEmbeddingSnapshot(
         Long recordId,
         Long userId,
         String photoObjectKey,

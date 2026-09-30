@@ -10,6 +10,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.record.dto.response.RecordCommentUpdateResponse;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
+import com.ktb4.team16.mulo.record.service.RecordCommentUpdateOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordCreationOrchestrator;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import java.util.List;
@@ -32,13 +33,16 @@ class RecordCommentUpdateControllerTest {
     private RecordService recordService;
     @Mock
     private RecordCreationOrchestrator recordCreationOrchestrator;
+    @Mock
+    private RecordCommentUpdateOrchestrator recordCommentUpdateOrchestrator;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new RecordController(recordService, recordCreationOrchestrator))
+                        new RecordController(recordService, recordCreationOrchestrator,
+                                recordCommentUpdateOrchestrator))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -53,7 +57,7 @@ class RecordCommentUpdateControllerTest {
 
     @Test
     void updatesCommentForAuthenticatedUser() throws Exception {
-        when(recordService.updateRecordComment(35L, 125L, "수정된 코멘트"))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, 125L, "수정된 코멘트"))
                 .thenReturn(new RecordCommentUpdateResponse(125L, "수정된 코멘트"));
 
         mvc.perform(patch("/api/records/125/comment")
@@ -64,12 +68,12 @@ class RecordCommentUpdateControllerTest {
                 .andExpect(jsonPath("$.data.recordId").value(125))
                 .andExpect(jsonPath("$.data.comment").value("수정된 코멘트"));
 
-        verify(recordService).updateRecordComment(35L, 125L, "수정된 코멘트");
+        verify(recordCommentUpdateOrchestrator).updateRecordComment(35L, 125L, "수정된 코멘트");
     }
 
     @Test
     void allowsNullCommentToDeleteComment() throws Exception {
-        when(recordService.updateRecordComment(35L, 125L, null))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, 125L, null))
                 .thenReturn(new RecordCommentUpdateResponse(125L, null));
 
         mvc.perform(patch("/api/records/125/comment")
@@ -78,12 +82,12 @@ class RecordCommentUpdateControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.comment").value(org.hamcrest.Matchers.nullValue()));
 
-        verify(recordService).updateRecordComment(35L, 125L, null);
+        verify(recordCommentUpdateOrchestrator).updateRecordComment(35L, 125L, null);
     }
 
     @Test
     void preservesEmptyComment() throws Exception {
-        when(recordService.updateRecordComment(35L, 125L, ""))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, 125L, ""))
                 .thenReturn(new RecordCommentUpdateResponse(125L, ""));
 
         mvc.perform(patch("/api/records/125/comment")
@@ -92,7 +96,7 @@ class RecordCommentUpdateControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.comment").value(""));
 
-        verify(recordService).updateRecordComment(35L, 125L, "");
+        verify(recordCommentUpdateOrchestrator).updateRecordComment(35L, 125L, "");
     }
 
     @Test
@@ -106,12 +110,13 @@ class RecordCommentUpdateControllerTest {
                 .andExpect(jsonPath("$.errors[0].code").value("INVALID_INPUT_VALUE"));
 
         verifyNoInteractions(recordService);
+        verifyNoInteractions(recordCommentUpdateOrchestrator);
     }
 
     @Test
     void acceptsCommentWithEightyCharacters() throws Exception {
         String comment = "a".repeat(80);
-        when(recordService.updateRecordComment(35L, 125L, comment))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, 125L, comment))
                 .thenReturn(new RecordCommentUpdateResponse(125L, comment));
 
         mvc.perform(patch("/api/records/125/comment")
@@ -132,13 +137,14 @@ class RecordCommentUpdateControllerTest {
                 .andExpect(jsonPath("$.errors[0].code").value("COMMENT_TOO_LONG"));
 
         verifyNoInteractions(recordService);
+        verifyNoInteractions(recordCommentUpdateOrchestrator);
     }
 
     @Test
     void returnsExistingInvalidRecordIdResponse() throws Exception {
-        when(recordService.updateRecordComment(35L, 0L, "comment"))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, 0L, "comment"))
                 .thenThrow(new InvalidRecordIdException());
-        when(recordService.updateRecordComment(35L, -1L, "comment"))
+        when(recordCommentUpdateOrchestrator.updateRecordComment(35L, -1L, "comment"))
                 .thenThrow(new InvalidRecordIdException());
 
         mvc.perform(patch("/api/records/0/comment")
