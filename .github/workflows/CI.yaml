@@ -244,12 +244,12 @@ jobs:
           gcloud compute ssh "${{ steps.develop.outputs.vm }}" \
             --zone="${{ env.ZONE }}" --tunnel-through-iap --command="
               set -e
-              gcloud auth configure-docker '${{ secrets.GCP_REGION }}-docker.pkg.dev' --quiet
+              sudo gcloud auth configure-docker '${{ secrets.GCP_REGION }}-docker.pkg.dev' --quiet
               cd ~/app
               export IMAGE_TAG=${{ steps.image.outputs.tag }}
               export GCP_PROJECT_ID=${{ secrets.GCP_PROJECT_ID_Develop }}
-              docker compose pull backend
-              docker compose up -d backend
+              sudo docker compose pull backend
+              sudo docker compose up -d backend
             "
 
       # 5. 컨테이너가 healthy 상태가 될 때까지 대기 (비즈니스 로직 검증용 스모크 테스트는 아님).
