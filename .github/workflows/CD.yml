@@ -44,7 +44,7 @@ jobs:
       - id: image
         run: |
           TAG=$(gcloud artifacts docker images list \
-            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME_Develop }}" \
+            "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}" \
             --include-tags --sort-by="~UPDATE_TIME" --limit=1 \
             --format="value(TAGS)" | cut -d',' -f1)
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
