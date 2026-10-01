@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
+import io.sentry.Sentry;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
@@ -292,6 +293,7 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception exception) {
         // 내부 예외 정보는 응답엔 노출하지 않되, 원인 파악을 위해 서버 로그엔 남긴다.
         log.error("처리되지 않은 예외", exception);
+        Sentry.captureException(exception);
         return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_SERVER_ERROR));
     }

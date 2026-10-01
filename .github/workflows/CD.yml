@@ -67,6 +67,7 @@ jobs:
           DB_USERNAME=${{ secrets.DB_USERNAME }}
           DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
+          SENTRY_DSN=${{ secrets.SENTRY_DSN }}
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME }}
           GCS_PROJECT_ID=${{ secrets.GCP_PROJECT_ID }}
           KAKAO_REST_API_KEY=${{ secrets.KAKAO_REST_API_KEY }}

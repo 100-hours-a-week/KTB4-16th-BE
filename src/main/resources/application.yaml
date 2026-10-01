@@ -29,6 +29,11 @@ spring:
       # photo 한 장과 multipart boundary/header overhead를 허용한다.
       max-request-size: 11MB
 
+sentry:
+  dsn: ${SENTRY_DSN:}
+  send-default-pii: false
+  max-request-body-size: none
+
 gcs:
   project-id: ${GCP_PROJECT_ID}
   bucket-name: ${GCS_BUCKET_NAME}
