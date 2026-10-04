@@ -11,7 +11,7 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class PhotoRecommendationService {
-    private static final int MAX_TRACKS = 3;
+    private static final int REQUIRED_TRACKS = 5;
 
     private final UploadService uploadService;
     private final PhotoRecommendationAiGateway aiClient;
@@ -19,11 +19,10 @@ public class PhotoRecommendationService {
     public List<PhotoRecommendationResponse.Track> recommend(Long userId, Long uploadId) {
         String signedUrl = uploadService.createReadSignedUrl(userId, uploadId);
         PhotoRecommendationAiResponse response = aiClient.recommend(signedUrl);
-        if (response.degraded()) {
+        if (response.degraded() || response.tracks().size() != REQUIRED_TRACKS) {
             throw new com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException();
         }
         return response.tracks().stream()
-                .limit(MAX_TRACKS)
                 .peek(PhotoRecommendationService::validateTrack)
                 .map(track -> new PhotoRecommendationResponse.Track(
                         track.externalTrackId(), track.title(), track.artistName(),
