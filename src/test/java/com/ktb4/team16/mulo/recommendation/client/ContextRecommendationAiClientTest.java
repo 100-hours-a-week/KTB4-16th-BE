@@ -38,17 +38,20 @@ class ContextRecommendationAiClientTest {
                         {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
                         "localTime":"2026-09-27T19:30:00+09:00","nearbyTracks":[
                         {"title":"비도 오고 그래서","artistName":"헤이즈","count":9}],
-                        "limit":5,"place":{"name":"태평로1가"}}
+                        "limit":10,"place":{"name":"태평로1가"}}
                         """))
-                .andRespond(withSuccess(responseWithTracks(5, false), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess("""
+                        {"tracks":[{"title":"Beautiful","artistName":"Crush",
+                        "externalTrackId":"6mzF8HvHdVrzJNd8M1uFCS","spotifyUri":"spotify:track:6mzF8HvHdVrzJNd8M1uFCS",
+                        "albumImageUrl":"https://image.example/album.jpg","externalUrl":"https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS"}],"degraded":false}
+                        """, MediaType.APPLICATION_JSON));
 
         var result = client.recommend(context());
 
         assertThat(result.degraded()).isFalse();
-        assertThat(result.tracks()).hasSize(5);
-        assertThat(result.tracks().getFirst()).satisfies(track -> {
-            assertThat(track.title()).isEqualTo("Track 1");
-            assertThat(track.externalTrackId()).isEqualTo("track-1");
+        assertThat(result.tracks()).singleElement().satisfies(track -> {
+            assertThat(track.title()).isEqualTo("Beautiful");
+            assertThat(track.externalTrackId()).isEqualTo("6mzF8HvHdVrzJNd8M1uFCS");
         });
         server.verify();
     }
@@ -62,53 +65,43 @@ class ContextRecommendationAiClientTest {
         server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
                 .andExpect(content().json("""
                         {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
-                        "localTime":"2026-09-27T19:30:00+09:00","limit":5}
+                        "localTime":"2026-09-27T19:30:00+09:00","limit":10}
                         """))
                 .andExpect(jsonPath("$.nearbyTracks").doesNotExist())
                 .andExpect(jsonPath("$.place").doesNotExist())
                 .andExpect(jsonPath("$.requestId").doesNotExist())
-                .andRespond(withSuccess(responseWithTracks(5, false), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess("{\"tracks\":[],\"degraded\":false}", MediaType.APPLICATION_JSON));
 
-        var result = client.recommend(new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
+        client.recommend(new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
                 BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of(), null));
 
-        assertThat(result.tracks()).hasSize(5);
         server.verify();
     }
 
-    // 정확히 5곡을 포함한 저하 응답은 기존 degraded 상태를 보존한다.
+    // 장애 응답은 저장 여부를 판단할 수 있도록 degraded 상태를 보존한다.
     @Test
-    void mapsDegradedRecommendationWithExactlyFiveTracks() {
+    void mapsDegradedRecommendationWithoutTracks() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
         server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
-                .andRespond(withSuccess(responseWithTracks(5, true), MediaType.APPLICATION_JSON));
+                .andRespond(withSuccess("{\"tracks\":[],\"degraded\":true}",
+                        MediaType.APPLICATION_JSON));
 
         var result = client.recommend(context());
 
         assertThat(result.degraded()).isTrue();
-        assertThat(result.tracks()).hasSize(5);
+        assertThat(result.tracks()).isEmpty();
         server.verify();
-    }
-
-    @Test
-    void rejectsFourTrackResponse() {
-        assertInvalidTrackCountResponse(4);
-    }
-
-    @Test
-    void rejectsSixTrackResponse() {
-        assertInvalidTrackCountResponse(6);
     }
 
     // DB 필수값인 앨범 이미지가 없으면 저장 전에 AI 연동 오류로 차단한다.
     @Test
     void rejectsTrackWithoutAlbumImageUrl() {
         assertInvalidTrackResponse("""
-                {"title":"Beautiful","artistName":"Crush",
+                {"tracks":[{"title":"Beautiful","artistName":"Crush",
                 "externalTrackId":"6mzF8HvHdVrzJNd8M1uFCS","albumImageUrl":null,
-                "externalUrl":"https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS"}
+                "externalUrl":"https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS"}],"degraded":false}
                 """);
     }
 
@@ -116,9 +109,9 @@ class ContextRecommendationAiClientTest {
     @Test
     void rejectsTrackWithMissingRequiredField() {
         assertInvalidTrackResponse("""
-                {"title":"Beautiful","artistName":"Crush",
+                {"tracks":[{"title":"Beautiful","artistName":"Crush",
                 "albumImageUrl":"https://image.example/album.jpg",
-                "externalUrl":"https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS"}
+                "externalUrl":"https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS"}],"degraded":false}
                 """);
     }
 
@@ -151,24 +144,8 @@ class ContextRecommendationAiClientTest {
         server.verify();
     }
 
-    // AI 응답의 곡 개수가 정확히 5개가 아니면 추천 예외로 변환한다.
-    private void assertInvalidTrackCountResponse(int count) {
-        RestClient.Builder builder = RestClient.builder();
-        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
-        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
-        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
-                .andRespond(withSuccess(responseWithTracks(count, false), MediaType.APPLICATION_JSON));
-
-        assertThatThrownBy(() -> client.recommend(context()))
-                .isInstanceOf(RecommendationAiException.class);
-        server.verify();
-    }
-
-    // 필수 곡 필드가 빠진 5곡 응답의 예외 변환을 검증한다.
-    private void assertInvalidTrackResponse(String invalidTrackJson) {
-        String responseBody = "{\"tracks\":[" + validTrackJson(1) + "," + validTrackJson(2)
-                + "," + validTrackJson(3) + "," + validTrackJson(4) + "," + invalidTrackJson
-                + "],\"degraded\":false}";
+    // 필수 곡 필드가 빠진 응답의 예외 변환을 공통 검증한다.
+    private void assertInvalidTrackResponse(String responseBody) {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
         ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
@@ -178,20 +155,6 @@ class ContextRecommendationAiClientTest {
         assertThatThrownBy(() -> client.recommend(context()))
                 .isInstanceOf(RecommendationAiException.class);
         server.verify();
-    }
-
-    private String responseWithTracks(int count, boolean degraded) {
-        String tracks = java.util.stream.IntStream.rangeClosed(1, count)
-                .mapToObj(this::validTrackJson)
-                .collect(java.util.stream.Collectors.joining(","));
-        return "{\"tracks\":[" + tracks + "],\"degraded\":" + degraded + "}";
-    }
-
-    private String validTrackJson(int index) {
-        return "{\"title\":\"Track " + index + "\",\"artistName\":\"Artist\","
-                + "\"externalTrackId\":\"track-" + index + "\","
-                + "\"albumImageUrl\":\"https://image.example/album.jpg\","
-                + "\"externalUrl\":\"https://open.spotify.com/track/track-" + index + "\"}";
     }
 
     // 모든 HTTP 경계 테스트가 공유하는 명세 기반 AI 설정을 생성한다.

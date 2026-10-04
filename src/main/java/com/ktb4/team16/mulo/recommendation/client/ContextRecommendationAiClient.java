@@ -16,7 +16,7 @@ import org.springframework.web.client.RestClientException;
 @Component
 @ConditionalOnProperty(prefix = "ai", name = "mock-enabled", havingValue = "false", matchIfMissing = true)
 public class ContextRecommendationAiClient implements RecommendationAiClient {
-    private static final int RECOMMENDATION_LIMIT = 5;
+    private static final int RECOMMENDATION_LIMIT = 10;
 
     private final RestClient restClient;
     private final AiProperties properties;
@@ -46,9 +46,6 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
                     .retrieve()
                     .body(ContextRecommendationAiResponse.class);
             if (response == null || response.tracks() == null) {
-                throw new RecommendationAiException();
-            }
-            if (response.tracks().size() != RECOMMENDATION_LIMIT) {
                 throw new RecommendationAiException();
             }
             return new RecommendationResult(response.tracks().stream().map(this::toRecommendedTrack).toList(),

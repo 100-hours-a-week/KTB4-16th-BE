@@ -2102,7 +2102,7 @@
             "bearerAuth": []
           }
         ],
-        "description": "임시 업로드된 사진을 AI가 분석한다. 추천 성공 시 정확히 5곡을 반환하며, AI 응답이 5곡 미만 또는 초과이면 추천 실패로 처리한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.",
+        "description": "임시 업로드된 사진을 AI가 분석해 음악을 최대 3곡 추천한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.",
         "responses": {
           "200": {
             "description": "임시 업로드된 사진 분석과 음악 추천 처리가 정상적으로 완료되어 추천 결과를 반환하므로 200.",
@@ -2116,8 +2116,6 @@
                     },
                     "data": {
                       "type": "array",
-                      "minItems": 5,
-                      "maxItems": 5,
                       "items": {
                         "type": "object",
                         "properties": {
@@ -2164,27 +2162,6 @@
                       "artistName": "아티스트 2",
                       "albumImageUrl": "https://i.scdn.co/image/example-2",
                       "externalUrl": "https://open.spotify.com/track/4exampleTrackId000001"
-                    },
-                    {
-                      "externalTrackId": "5exampleTrackId000001",
-                      "title": "추천곡 3",
-                      "artistName": "아티스트 3",
-                      "albumImageUrl": "https://i.scdn.co/image/example-3",
-                      "externalUrl": "https://open.spotify.com/track/5exampleTrackId000001"
-                    },
-                    {
-                      "externalTrackId": "6exampleTrackId000001",
-                      "title": "추천곡 4",
-                      "artistName": "아티스트 4",
-                      "albumImageUrl": "https://i.scdn.co/image/example-4",
-                      "externalUrl": "https://open.spotify.com/track/6exampleTrackId000001"
-                    },
-                    {
-                      "externalTrackId": "7exampleTrackId000001",
-                      "title": "추천곡 5",
-                      "artistName": "아티스트 5",
-                      "albumImageUrl": "https://i.scdn.co/image/example-5",
-                      "externalUrl": "https://open.spotify.com/track/7exampleTrackId000001"
                     }
                   ]
                 }
@@ -2304,7 +2281,7 @@
             }
           },
           "502": {
-            "description": "AI 서비스 통신 실패 또는 성공 응답의 음악 수가 정확히 5곡이 아닌 경우 추천 실패로 처리하므로 502.",
+            "description": "MULO 백엔드가 의존하는 AI 서버 처리 실패이므로 502.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5035,7 +5012,7 @@
         ],
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
-        "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 저장하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 정확히 5곡인 정상 추천에 성공한 경우에만 기존 현재 플레이리스트를 교체한다.\n- AI 응답이 degraded이고 tracks가 정확히 5곡이면 기존 현재 플레이리스트를 유지하고 200을 반환한다. tracks가 5곡이 아니면 502 AI_SERVICE_ERROR로 실패 처리한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
+        "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 새 추천 생성에 성공한 경우에만 기존 현재 플레이리스트를 교체하며 실패하면 기존 플레이리스트를 유지한다.\n- AI가 저하 상태를 알리거나 추천 곡이 비어 있으면 기존 현재 플레이리스트를 유지하고 200을 반환한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5072,7 +5049,7 @@
         },
         "responses": {
           "200": {
-            "description": "AI가 degraded 상태를 반환했고 응답 tracks가 정확히 5곡이어서 기존 현재 플레이리스트를 유지했으므로 200.",
+            "description": "AI가 저하 상태를 알리거나 추천 곡이 없어 기존 현재 플레이리스트를 유지했으므로 200.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5096,7 +5073,7 @@
             }
           },
           "201": {
-            "description": "AI 응답의 정확히 5곡으로 새 추천 플레이리스트를 생성하므로 201.",
+            "description": "새 추천 플레이리스트 리소스가 생성되므로 201.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5117,8 +5094,6 @@
                             },
                             "tracks": {
                               "type": "array",
-                              "minItems": 5,
-                              "maxItems": 5,
                               "items": {
                                 "type": "object",
                                 "properties": {
@@ -5159,34 +5134,6 @@
                           "artistName": "헤이즈",
                           "externalUrl": "...",
                           "albumImageUrl": "https://i.scdn.co/image/example"
-                        },
-                        {
-                          "musicTrackId": 4,
-                          "title": "추천곡 2",
-                          "artistName": "아티스트 2",
-                          "externalUrl": "https://open.spotify.com/track/example-2",
-                          "albumImageUrl": "https://i.scdn.co/image/example-2"
-                        },
-                        {
-                          "musicTrackId": 5,
-                          "title": "추천곡 3",
-                          "artistName": "아티스트 3",
-                          "externalUrl": "https://open.spotify.com/track/example-3",
-                          "albumImageUrl": "https://i.scdn.co/image/example-3"
-                        },
-                        {
-                          "musicTrackId": 6,
-                          "title": "추천곡 4",
-                          "artistName": "아티스트 4",
-                          "externalUrl": "https://open.spotify.com/track/example-4",
-                          "albumImageUrl": "https://i.scdn.co/image/example-4"
-                        },
-                        {
-                          "musicTrackId": 7,
-                          "title": "추천곡 5",
-                          "artistName": "아티스트 5",
-                          "externalUrl": "https://open.spotify.com/track/example-5",
-                          "albumImageUrl": "https://i.scdn.co/image/example-5"
                         }
                       ]
                     }
@@ -5291,7 +5238,7 @@
             }
           },
           "502": {
-            "description": "날씨·기온 확보 실패, AI 서비스 통신 실패 또는 AI가 정확히 5곡이 아닌 응답을 반환해 추천을 생성할 수 없으므로 502.",
+            "description": "현재 위치의 날씨·기온을 확보하지 못했거나 AI 서비스 통신·응답 계약이 실패해 추천을 생성할 수 없으므로 502.",
             "content": {
               "application/json": {
                 "schema": {

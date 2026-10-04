@@ -29,45 +29,36 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(5), false));
+                new PhotoRecommendationAiResponse(List.of(
+                        track("id-1", "title", "artist", "album", "url")), false));
 
         var result = service.recommend(7L, 123L);
 
-        assertThat(result).hasSize(5);
+        assertThat(result).hasSize(1);
         assertThat(result.getFirst().externalTrackId()).isEqualTo("id-1");
         verify(uploadService).createReadSignedUrl(7L, 123L);
     }
 
     @Test
-    void returnsAllFiveRecommendations() {
+    void limitsRecommendationsToThreeTracks() {
         PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(5), false));
+                new PhotoRecommendationAiResponse(List.of(
+                        track("1", "1", "a", "i", "u"), track("2", "2", "a", "i", "u"),
+                        track("3", "3", "a", "i", "u"), track("4", "4", "a", "i", "u")), false));
 
-        assertThat(service.recommend(7L, 123L)).hasSize(5);
+        assertThat(service.recommend(7L, 123L)).hasSize(3);
     }
 
     @Test
-    void rejectsFourTracksInsteadOfTruncatingOrReturningPartialRecommendations() {
+    void returnsEmptyListWhenAiReturnsNoTracks() {
         PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(4), false));
+                new PhotoRecommendationAiResponse(List.of(), false));
 
-        assertThatThrownBy(() -> service.recommend(7L, 123L))
-                .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);
-    }
-
-    @Test
-    void rejectsSixTracksInsteadOfTruncatingToFive() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
-        when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
-        when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(6), false));
-
-        assertThatThrownBy(() -> service.recommend(7L, 123L))
-                .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);
+        assertThat(service.recommend(7L, 123L)).isEmpty();
     }
 
     @ParameterizedTest
@@ -103,11 +94,5 @@ class PhotoRecommendationServiceTest {
             String artist, String album, String url) {
         return new PhotoRecommendationAiResponse.Track(title, artist, id, "spotify:track:" + id,
                 album, url);
-    }
-
-    private static List<PhotoRecommendationAiResponse.Track> tracks(int count) {
-        return java.util.stream.IntStream.rangeClosed(1, count)
-                .mapToObj(index -> track("id-" + index, "title-" + index, "artist", "album", "url"))
-                .toList();
     }
 }
