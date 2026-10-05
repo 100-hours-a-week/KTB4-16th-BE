@@ -7866,6 +7866,7 @@ const spec = {
         "security": [],
         "requestBody": {
           "required": true,
+          "description": "단일 요청에서 placeIds는 최대 100개까지 전달할 수 있습니다.",
           "content": {
             "application/json": {
               "schema": {
@@ -7873,6 +7874,7 @@ const spec = {
                 "properties": {
                   "placeIds": {
                     "type": "array",
+                    "maxItems": 100,
                     "items": {
                       "type": "integer",
                       "format": "int64",
@@ -7978,7 +7980,7 @@ const spec = {
             }
           },
           "400": {
-            "description": "placeIds가 누락되었거나 빈 배열이므로 400.\n\nplaceIds에 유효하지 않은 장소 ID 형식이 포함되어 있으므로 400.",
+            "description": "placeIds가 누락되었거나 빈 배열이거나, 100개를 초과하거나, 유효하지 않은 장소 ID가 포함되어 있으므로 400.",
             "content": {
               "application/json": {
                 "schema": {
@@ -8032,6 +8034,19 @@ const spec = {
                           "field": "placeIds",
                           "code": "INVALID_PLACE_ID",
                           "message": "올바른 장소 ID를 입력해주세요."
+                        }
+                      ]
+                    }
+                  },
+                  "example3": {
+                    "value": {
+                      "code": "INVALID_INPUT_VALUE",
+                      "message": "입력값을 확인해주세요.",
+                      "errors": [
+                        {
+                          "field": "placeIds",
+                          "code": "PLACE_IDS_COUNT_EXCEEDED",
+                          "message": "한 번의 요청에는 장소 ID를 최대 100개까지 전달할 수 있습니다."
                         }
                       ]
                     }
