@@ -1,10 +1,12 @@
 name: Backend CD
 
-# CI(main CI with backend)가 성공적으로 끝나면 자동으로 실행된다.
+# CI(Backend CI)가 성공적으로 끝나면 자동으로 실행된다.
 # workflow_dispatch는 CI 없이 재배포만 다시 시도하고 싶을 때 수동으로 쓰기 위한 것.
+# 2026-10-01: CI.yaml이 develop 병합 과정에서 "main CI with backend" -> "Backend CI"로
+# 이름이 바뀌었는데 여기를 안 맞춰서, 그 사이 Backend CD가 자동으로 전혀 안 돌았다.
 on:
   workflow_run:
-    workflows: ["main CI with backend"]
+    workflows: ["Backend CI"]
     types: [completed]
     # CI 트리거를 develop 등 다른 브랜치로 넓혀도 CD가 따라 돌지 않도록 방어적으로 명시한다.
     branches: [main]
