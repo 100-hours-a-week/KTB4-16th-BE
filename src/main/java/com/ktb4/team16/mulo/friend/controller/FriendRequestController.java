@@ -91,4 +91,14 @@ public class FriendRequestController {
         return new FriendRequestAcceptedResponse("친구 요청 수락 성공",
                 new FriendRequestAcceptedData(friendshipId, FriendMessage.REQUEST_ACCEPTED));
     }
+
+    /** 요청 당사자가 처리 전 친구 요청을 거절하거나 취소한다. */
+    @DeleteMapping("/friend-requests/{friendRequestId}")
+    public FriendActionResponse deleteFriendRequest(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long friendRequestId
+    ) {
+        friendCommandService.deleteFriendRequest(userId, friendRequestId);
+        return new FriendActionResponse(FriendMessage.REQUEST_DELETED);
+    }
 }
