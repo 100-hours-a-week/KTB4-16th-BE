@@ -58,4 +58,26 @@ public class FriendRequestController {
         return new SentFriendRequestsResponse(FriendMessage.SENT_REQUESTS_RETRIEVED,
                 friendQueryService.getSentRequests(userId, cursor, size));
     }
+
+    /** 닉네임으로 요청을 만들고 자동 수락 결과는 200, 새 요청은 201로 변환한다. */
+    @PostMapping("/users/me/friend-requests")
+    public ResponseEntity<Object> sendFriendRequest(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody SendFriendRequestRequest request
+    ) {
+        SendFriendRequestResult result = friendCommandService.sendFriendRequest(
+                userId, request.nickname());
+        if (result instanceof SendFriendRequestResult.Pending pending) {
+            return ResponseEntity.status(HttpStatus.CREATED).body(
+                    new FriendRequestCreatedResponse("친구 요청 성공",
+                            new FriendRequestCreatedData(
+                                    pending.friendRequestId(), FriendMessage.REQUEST_SENT)));
+        }
+
+        SendFriendRequestResult.BecameFriends becameFriends =
+                (SendFriendRequestResult.BecameFriends) result;
+        return ResponseEntity.ok(new FriendRequestAutoAcceptedResponse("친구 요청 성공",
+                new FriendRequestAutoAcceptedData(
+                        becameFriends.friendshipId(), FriendMessage.REQUEST_AUTO_ACCEPTED)));
+    }
 }
