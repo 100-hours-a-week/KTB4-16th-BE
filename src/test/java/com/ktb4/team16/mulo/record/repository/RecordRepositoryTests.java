@@ -118,6 +118,39 @@ class RecordRepositoryTests {
                 .isEmpty();
     }
 
+    /** 친구 관계의 성립·삭제가 상세 조회 권한에 즉시 반영되는지 실제 DB에서 확인한다. */
+    @Test
+    void activeRecordDetailIsVisibleOnlyToOwnerOrCurrentFriend() {
+        long owner = insertUser();
+        long viewer = insertUser();
+        long stranger = insertUser();
+        long placeId = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.0000000", "-150.0000000");
+        long trackId = insertTrack("friend-detail");
+        long active = insertRecord(owner, placeId, trackId, FIRST_DAY, null);
+        long deleted = insertRecord(owner, placeId, trackId,
+                FIRST_DAY.plusDays(1), FIRST_DAY.plusDays(2));
+
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(owner, active)).isPresent();
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(viewer, active)).isEmpty();
+        jdbcTemplate.update("INSERT INTO friend_requests (requester_id, addressee_id) VALUES (?, ?)",
+                viewer, owner);
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(viewer, active)).isEmpty();
+
+        jdbcTemplate.update("DELETE FROM friend_requests WHERE requester_id = ? AND addressee_id = ?",
+                viewer, owner);
+        jdbcTemplate.update("INSERT INTO friendships (user_low_id, user_high_id) VALUES (?, ?)",
+                Math.min(owner, viewer), Math.max(owner, viewer));
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(viewer, active)).isPresent();
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(viewer, deleted)).isEmpty();
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(stranger, active)).isEmpty();
+
+        jdbcTemplate.update("DELETE FROM friendships WHERE user_low_id = ? AND user_high_id = ?",
+                Math.min(owner, viewer), Math.max(owner, viewer));
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(viewer, active)).isEmpty();
+        assertThat(recordRepository.findActiveRecordVisibleToViewer(owner, active)).isPresent();
+    }
+
     @Test
     void popularTracksUseCountThenLatestRecordThenTrackIdOrder() {
         long userId = insertUser();

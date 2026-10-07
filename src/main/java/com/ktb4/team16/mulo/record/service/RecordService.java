@@ -71,9 +71,14 @@ public class RecordService {
                 .orElseThrow(RecordNotFoundException::new);
     }
 
+    /** 소유자 또는 현재 친구가 읽을 수 있는 활성 자물쇠 상세를 반환한다. */
     @Transactional(readOnly = true)
     public RecordDetailData getRecordDetail(Long userId, Long recordId) {
-        Record record = findActiveRecordForOwner(userId, recordId);
+        if (recordId == null || recordId <= 0) {
+            throw new InvalidRecordIdException();
+        }
+        Record record = recordRepository.findActiveRecordVisibleToViewer(userId, recordId)
+                .orElseThrow(RecordNotFoundException::new);
         RecordPhoto recordPhoto = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
                 .orElseThrow(IllegalStateException::new);
         String photoUrl = gcsStorageService.createReadSignedUrl(recordPhoto.getImageUrl());
@@ -84,6 +89,7 @@ public class RecordService {
         return new RecordDetailData(
                 record.getRecordId(),
                 record.getUser().getUserId(),
+                record.getUser().getUserId().equals(userId),
                 new RecordDetailData.Place(
                         place.getPlaceId(),
                         place.getLegalDongName(),
