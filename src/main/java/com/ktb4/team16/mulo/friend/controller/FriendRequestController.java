@@ -47,4 +47,15 @@ public class FriendRequestController {
         return new ReceivedFriendRequestsResponse(FriendMessage.RECEIVED_REQUESTS_RETRIEVED,
                 friendQueryService.getReceivedRequests(userId, cursor, size));
     }
+
+    /** 현재 사용자가 보낸 pending 친구 요청 페이지를 반환한다. */
+    @GetMapping("/users/me/friend-requests/sent")
+    public SentFriendRequestsResponse getSentRequests(
+            @AuthenticationPrincipal Long userId,
+            @RequestParam(required = false) String cursor,
+            @RequestParam(required = false) Integer size
+    ) {
+        return new SentFriendRequestsResponse(FriendMessage.SENT_REQUESTS_RETRIEVED,
+                friendQueryService.getSentRequests(userId, cursor, size));
+    }
 }
