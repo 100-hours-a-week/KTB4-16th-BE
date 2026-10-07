@@ -5,11 +5,12 @@
 > 구현 시 테이블/ERD/API 문서와 본 정책이 충돌하면, **사용자가 가장 최근에 명시적으로 확정한 정책**을 우선하고 관련 설계 문서를 동기화한다.
 >
 > **작성일:** 2026-09-21 (KST)  
+> **친구 도메인 구현 상태 반영:** 2026-10-08 (KST)
 > **기준 자료**
 > 1. 대화에서 사용자가 직접 확정한 최신 결정
 > 2. `app/mulo-be` 현재 `develop` 작업 트리와 Flyway V1~V4
 > 3. `MULO_테이블_정의서_v8.1`
-> 4. `MULO_OpenAPI_v2.7`
+> 4. `MULO_OpenAPI_v2.8`
 > 5. 테이블 정의서 v7.6, 정책 정의서 v1.9, OpenAPI v2.6
 > 6. API 원본 엑셀, ERD/DDL, 이전 문서는 누락 감사용으로만 사용한다.
 >
@@ -50,7 +51,8 @@
 | 날씨 | 기상청 격자 캐시 기반 조회 구현 | 구현됨 |
 | AI 추천 플레이리스트 | 현재 목록 조회·현재 좌표 기반 생성·기존 목록 유지 처리 구현 | 구현됨 |
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
-| 친구·투표·매칭·채팅·알림 | OpenAPI 계약은 보존하되 현재 저장소 Controller 없음 | contract-only |
+| 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
+| 투표·매칭·채팅·알림 | OpenAPI 계약은 보존하되 현재 저장소 Controller 없음 | contract-only |
 | AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
 
 
@@ -58,7 +60,7 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `GLB-001` | **현재 설계** | 정책 기준 문서 우선순위 | 사용자의 최신 확정 결정, 현재 `develop` 구현과 Flyway, 테이블 정의서 v8.1, OpenAPI v2.7을 우선한다. 과거 문서는 누락 감사용으로만 사용한다. | 본 문서 기준 자료 / 통합 문서 생성 설계 |
+| `GLB-001` | **현재 설계** | 정책 기준 문서 우선순위 | 사용자의 최신 확정 결정, 현재 `develop` 구현과 Flyway, 테이블 정의서 v8.1, OpenAPI v2.8을 우선한다. 과거 문서는 누락 감사용으로만 사용한다. | 본 문서 기준 자료 / 통합 문서 생성 설계 |
 | `GLB-002` | **현재 설계** | 미확정 사항 처리 | 문서 간 충돌하거나 현재 자료에서 결정되지 않은 항목은 임의 확정하지 않고 `확인 필요`로 분리한다. | 테이블 정의서 6차 서두 |
 | `GLB-003` | **현재 설계** | 활성 사용자 기준 | 인증이 필요한 API는 원칙적으로 인증된 활성 사용자를 대상으로 한다. 탈퇴 사용자는 정상 인증 사용자로 취급하지 않는다. | API 명세 상세2차 AUTH/USER 전반 |
 | `GLB-004` | **현재 설계** | 리소스 존재 여부 은닉 | 소유권 또는 접근권한이 없는 일부 개인 리소스는 존재 여부가 노출되지 않도록 미존재와 동일한 404로 처리한다. | API 명세 상세2차 record/friend/match/chat/notification |
@@ -173,9 +175,9 @@
 | `RECORD-005` | **현재 설계** | 날씨 내부 분류 | 외부 날씨 원문은 MULO 내부 날씨 분류값으로 변환해 저장한다. | API 명세 상세2차 정책 요약 R9 |
 | `RECORD-006` | **현재 설계** | 날씨 장애 허용 | 최신 발표본 조회와 허용된 직전 발표본 fallback 모두 실패해 날씨/기온을 확보하지 못한 경우에도 자물쇠 생성 전체 실패로 처리하지 않고 날씨·기온을 NULL로 저장한다. | 사용자 확정 / API 명세 상세2차 |
 | `RECORD-007` | **현재 설계** | 중복 기록 허용 | 같은 사용자·장소·음악 조합의 반복 기록을 허용한다. | API 명세 상세2차 R114 |
-| `RECORD-008` | **현재 설계** | 상세 조회 권한 | 자물쇠 상세는 소유자 또는 요청 시점에 현재 친구 관계인 사용자만 조회할 수 있다. | API 명세 상세2차 R115-R120 |
-| `RECORD-009` | **현재 설계** | 친구 권한 재검증 | 친구 전용 자원 접근은 과거 관계가 아니라 요청 시점의 현재 `friendship`을 매번 재검증한다. | API 명세 상세2차 R115,R120,R180-R184 |
-| `RECORD-010` | **현재 설계** | 상세 404 은닉 | 미존재·soft delete·조회 권한 없음은 동일한 404 `RECORD_NOT_FOUND`로 처리한다. | API 명세 상세2차 R118-R120 |
+| `RECORD-008` | **구현됨** | 상세 조회 권한 | 자물쇠 상세는 소유자 또는 요청 시점에 현재 친구 관계인 사용자만 조회할 수 있다. | `RecordRepository.findActiveRecordVisibleToViewer` / OpenAPI v2.8 |
+| `RECORD-009` | **구현됨** | 친구 권한 재검증 | 친구 전용 자원 접근은 과거 관계가 아니라 요청 시점의 현재 `friendship`을 매번 재검증한다. | `FriendRecordReadService.requireCurrentFriend` / `RecordRepository.findActiveRecordVisibleToViewer` |
+| `RECORD-010` | **구현됨** | 상세 404 은닉 | 미존재·soft delete·조회 권한 없음은 동일한 404 `RECORD_NOT_FOUND`로 처리한다. | `RecordService.getRecordDetail` / OpenAPI v2.8 |
 | `RECORD-011` | **현재 설계** | 수정 범위 | 생성 후 수정 가능한 자물쇠 필드는 `comment`뿐이다. | API 명세 상세2차 R121-R128 |
 | `RECORD-012` | **현재 설계** | 코멘트 삭제 | `comment=null`이면 기존 코멘트를 삭제한다. Body에서 comment 키 자체가 누락되면 400이다. | API 명세 상세2차 R121-R128 |
 | `RECORD-013` | **현재 설계** | 자물쇠 삭제 | 자물쇠 삭제는 소유자만 가능하며 `records.deleted_at`을 설정하는 soft delete이다. | API 명세 상세2차 R129-R134 |
@@ -206,18 +208,19 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `FRIEND-001` | **현재 설계** | 친구 관계 방향성 | friendship은 방향 없는 관계로 사용자 ID를 low/high로 정규화해 한 사용자 쌍당 한 행만 저장한다. | 테이블 정의서 6차 §10 |
-| `FRIEND-002` | **현재 설계** | 친구 요청 pending 전용 | `friend_requests`에는 현재 대기 중인 요청만 저장한다. | 테이블 정의서 6차 §9 |
-| `FRIEND-003` | **현재 설계** | 친구 요청 완료 후 삭제 | 수락 시 friendship을 생성하고 요청을 삭제하며, 거절/취소 시 요청만 물리 삭제한다. | API 명세 상세2차 R170-R179 / 테이블 정의서 §9 |
-| `FRIEND-004` | **현재 설계** | 역방향 요청 자동 친구 | A→B pending 중 B→A 요청이 들어오면 새 요청을 만들지 않고 기존 pending을 삭제한 뒤 즉시 friendship을 생성한다. | API 명세 상세2차 R160-R169 / 테이블 정의서 §9 |
-| `FRIEND-005` | **현재 설계** | 자기 자신 요청 금지 | 자기 자신에게 친구 요청할 수 없다. | API 명세 상세2차 R165 / 테이블 정의서 §9 |
-| `FRIEND-006` | **현재 설계** | 이미 친구 요청 금지 | 이미 친구라면 새 친구 요청을 생성하지 않는다. | API 명세 상세2차 R166,R169 |
-| `FRIEND-007` | **현재 설계** | 동일 방향 중복 요청 금지 | 동일 방향 pending 친구 요청이 존재하면 409로 처리한다. | API 명세 상세2차 R167,R169 |
-| `FRIEND-008` | **현재 설계** | 친구 수락 권한 | 친구 요청의 수신자만 해당 요청을 수락할 수 있다. | API 명세 상세2차 R170-R174 |
-| `FRIEND-009` | **현재 설계** | 친구 거절/취소 권한 | 수신자가 DELETE하면 거절, 발신자가 DELETE하면 취소이며 제3자는 404 처리한다. | API 명세 상세2차 R175-R179 |
-| `FRIEND-010` | **현재 설계** | 친구 삭제 | friendship의 어느 한쪽 사용자든 관계를 물리 삭제할 수 있으며 한 행 삭제로 양쪽 관계가 해제된다. | API 명세 상세2차 R180-R184 / 테이블 정의서 §10 |
-| `FRIEND-011` | **현재 설계** | 친구 목록 정렬 | 친구 목록은 닉네임 오름차순, 동률은 userId 오름차순으로 정렬한다. | API 명세 상세2차 정책 요약 R17 |
-| `FRIEND-012` | **현재 설계** | 친구 목록 페이지 | 친구/받은 요청/보낸 요청은 Cursor 기반이며 기본 size 20이다. 빈 목록은 200과 빈 배열이다. | API 명세 상세2차 R136-R159 |
+| `FRIEND-001` | **구현됨** | 친구 관계 방향성 | friendship은 방향 없는 관계로 사용자 ID를 low/high로 정규화해 한 사용자 쌍당 한 행만 저장한다. | `UserPair`, `Friendship` / Flyway V1 |
+| `FRIEND-002` | **구현됨** | 친구 요청 pending 전용 | `friend_requests`에는 현재 대기 중인 요청만 저장한다. | `FriendRequest` / Flyway V1 |
+| `FRIEND-003` | **구현됨** | 친구 요청 완료 후 삭제 | 수락 시 friendship을 생성하고 요청을 삭제하며, 거절/취소 시 요청만 물리 삭제한다. | `FriendCommandService` / OpenAPI v2.8 |
+| `FRIEND-004` | **구현됨** | 역방향 요청 자동 친구 | A→B pending 중 B→A 요청이 들어오면 새 요청을 만들지 않고 기존 pending을 삭제한 뒤 즉시 friendship을 생성한다. | `FriendCommandService.sendFriendRequest` / OpenAPI v2.8 |
+| `FRIEND-005` | **구현됨** | 자기 자신 요청 금지 | 자기 자신에게 친구 요청할 수 없다. | `FriendCommandService.sendFriendRequest` / Flyway V1 |
+| `FRIEND-006` | **구현됨** | 이미 친구 요청 금지 | 이미 친구라면 새 친구 요청을 생성하지 않는다. | `FriendCommandService.sendFriendRequest` |
+| `FRIEND-007` | **구현됨** | 동일 방향 중복 요청 금지 | 동일 방향 pending 친구 요청이 존재하면 409로 처리한다. | `FriendCommandService.sendFriendRequest` / OpenAPI v2.8 |
+| `FRIEND-008` | **구현됨** | 친구 수락 권한 | 친구 요청의 수신자만 해당 요청을 수락할 수 있다. | `FriendCommandService.acceptFriendRequest` |
+| `FRIEND-009` | **구현됨** | 친구 거절/취소 권한 | 수신자가 DELETE하면 거절, 발신자가 DELETE하면 취소이며 제3자는 404 처리한다. | `FriendCommandService.deleteFriendRequest` |
+| `FRIEND-010` | **구현됨** | 친구 삭제 | friendship의 어느 한쪽 사용자든 관계를 물리 삭제할 수 있으며 한 행 삭제로 양쪽 관계가 해제된다. | `FriendCommandService.deleteFriendship` / Flyway V1 |
+| `FRIEND-011` | **구현됨** | 친구 목록 정렬 | 친구 목록은 닉네임 오름차순, 동률은 userId 오름차순으로 정렬한다. | `FriendQueryService.getFriends` / OpenAPI v2.8 |
+| `FRIEND-012` | **구현됨** | 친구 목록 페이지 | 친구/받은 요청/보낸 요청은 Cursor 기반이며 기본 size 20이다. 빈 목록은 200과 빈 배열이다. | `FriendQueryService` / OpenAPI v2.8 |
+| `FRIEND-013` | **구현됨** | 초기 동시 역방향 요청 | 기존 pending이 없는 상태에서 A→B와 B→A가 동시에 들어와도 최종 상태는 friendship 한 행이며 pending 요청은 남지 않는다. | 사용자 확정 / `FriendMysqlIntegrationTest.concurrentOppositeRequestsBecomeOneFriendship` |
 
 ## 월간 리포트
 
@@ -375,7 +378,7 @@
 
 ## API 전수 대조 체크리스트
 
-> 아래 엔드포인트는 최신 API 명세 상세2차의 실제 행을 기준으로 추출했다. 최종 정책 정의서 작성 시 각 엔드포인트가 최소 1개 이상의 정책 항목과 연결되는지 다시 검사한다.
+> 기존 엔드포인트는 API 명세 상세2차의 실제 행을 유지하고, 친구 자물쇠 읽기처럼 v2.8에서 추가된 경로는 버전으로 표시했다. 각 엔드포인트가 최소 1개 이상의 정책 항목과 연결되는지 다시 검사한다.
 
 | Domain | API 명세 상세2차 행 | 기능 | Method | URL |
 |---|---:|---|---|---|
@@ -404,6 +407,8 @@
 | FRIEND | 170 | 친구 요청 수락 | `POST` | `/api/friend-requests/{friendRequestId}/accept` |
 | FRIEND | 175 | 친구 요청 거절/취소 | `DELETE` | `/api/friend-requests/{friendRequestId}` |
 | FRIEND | 180 | 친구 삭제 | `DELETE` | `/api/friendships/{friendshipId}` |
+| FRIEND RECORD | v2.8 | 친구 자물쇠 지역 요약 | `GET` | `/api/users/{friendUserId}/records/regions` |
+| FRIEND RECORD | v2.8 | 친구 지역 자물쇠 목록 | `GET` | `/api/users/{friendUserId}/records` |
 | REPORT | 186 | 월간 리포트 목록 | `GET` | `/api/monthly-reports` |
 | REPORT | 191 | 월간 리포트 상세 | `GET` | `/api/monthly-reports/{monthlyReportId}` |
 | RECOMMEND | 200 | 현재 추천 플레이리스트 조회 | `GET` | `/api/recommendations/playlists` |
@@ -469,4 +474,4 @@
 - 최신 자료에서 근거가 없는 사항은 자동으로 확정하지 않았다.
 - `미확정 / 추가 결정 필요`와 `보류` 항목은 구현 단계에서 임의 확정하지 않는다.
 - DB 컬럼 사전이 아니라 서비스 동작 판단을 위한 정책 문서이므로, 세부 타입·인덱스·제약조건은 테이블 정의서/ERD/SQL에서 관리하되 정책과 충돌해서는 안 된다.
-- API 전수 대조는 OpenAPI v2.7의 42개 경로·46개 작업을 기준으로 한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V4의 실제 25개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
+- API 전수 대조는 OpenAPI v2.8의 45개 경로·49개 작업을 기준으로 한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V4의 실제 25개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.

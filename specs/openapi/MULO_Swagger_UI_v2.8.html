@@ -4236,7 +4236,7 @@ const spec = {
         ],
         "summary": "친구 요청",
         "operationId": "postApiUsersMeFriendRequests",
-        "description": "필수\nnickname: String\n\n닉네임으로 요청한다. 반대 방향 pending 요청이 이미 있으면 pending을 삭제하고 바로 friendship을 생성한다.",
+        "description": "필수\nnickname: String\n\n닉네임으로 요청한다. 반대 방향 pending 요청이 이미 있으면 pending을 삭제하고 바로 friendship을 생성한다. 처음부터 A→B와 B→A 요청이 동시에 들어와도 최종적으로 friendship 한 건을 성립시키고 pending을 남기지 않는다.",
         "responses": {
           "201": {
             "description": "새 pending friend_request가 생성되므로 201.",
