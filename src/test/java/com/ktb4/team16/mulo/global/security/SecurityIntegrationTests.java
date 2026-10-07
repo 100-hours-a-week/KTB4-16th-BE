@@ -324,6 +324,50 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void friendDashboardAndWriteRoutesRequireAuthenticationAndWritesRequireCsrf() throws Exception {
+        mvc.perform(get("/api/users/me/friends"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mvc.perform(get("/api/users/2/records/regions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(post("/api/users/me/friend-requests"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(post("/api/friend-requests/5/accept"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(delete("/api/friend-requests/5"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(delete("/api/friendships/7"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/users/me/friend-requests")
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/users/me/friend-requests")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/friend-requests/5/accept")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/api/friend-requests/5")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/api/friendships/7")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+    }
+
+    @Test
     void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
         Cookie cookie = csrfCookie();
         mvc.perform(post("/api/private").cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
@@ -408,5 +452,24 @@ class SecurityIntegrationTests {
 
         @DeleteMapping("/api/records/{recordId}")
         String deleteRecord() { return "record deleted"; }
+
+        @GetMapping("/api/users/me/friends")
+        String friendList() { return "friends"; }
+
+        @GetMapping("/api/users/{userId}/records/regions")
+        String friendRecordRegions() { return "friend regions"; }
+
+        @PostMapping("/api/users/me/friend-requests")
+        @ResponseStatus(HttpStatus.CREATED)
+        String sendFriendRequest() { return "friend request created"; }
+
+        @PostMapping("/api/friend-requests/{friendRequestId}/accept")
+        String acceptFriendRequest() { return "friend request accepted"; }
+
+        @DeleteMapping("/api/friend-requests/{friendRequestId}")
+        String deleteFriendRequest() { return "friend request deleted"; }
+
+        @DeleteMapping("/api/friendships/{friendshipId}")
+        String deleteFriendship() { return "friendship deleted"; }
     }
 }
