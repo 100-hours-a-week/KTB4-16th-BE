@@ -80,4 +80,15 @@ public class FriendRequestController {
                 new FriendRequestAutoAcceptedData(
                         becameFriends.friendshipId(), FriendMessage.REQUEST_AUTO_ACCEPTED)));
     }
+
+    /** 수신자 권한을 확인한 뒤 요청을 수락하고 새 friendship ID를 반환한다. */
+    @PostMapping("/friend-requests/{friendRequestId}/accept")
+    public FriendRequestAcceptedResponse acceptFriendRequest(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long friendRequestId
+    ) {
+        Long friendshipId = friendCommandService.acceptFriendRequest(userId, friendRequestId);
+        return new FriendRequestAcceptedResponse("친구 요청 수락 성공",
+                new FriendRequestAcceptedData(friendshipId, FriendMessage.REQUEST_ACCEPTED));
+    }
 }
