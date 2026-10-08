@@ -10,11 +10,15 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class RecordCreationOrchestrator {
+    private final RecordCreationPreparationService preparationService;
     private final RecordService recordService;
     private final RecordEmbeddingSubmitter embeddingSubmitter;
 
     public RecordCreateResponse createRecord(Long userId, RecordCreateRequest request) {
-        RecordEmbeddingSnapshot snapshot = recordService.createRecord(userId, request);
+        var preparedRegion = preparationService.preparePlace(request);
+        PreparedWeather preparedWeather = preparationService.prepareWeather(request);
+        RecordEmbeddingSnapshot snapshot = recordService.createRecord(
+                userId, request, preparedRegion, preparedWeather);
         embeddingSubmitter.submit(snapshot);
         return new RecordCreateResponse(snapshot.recordId());
     }

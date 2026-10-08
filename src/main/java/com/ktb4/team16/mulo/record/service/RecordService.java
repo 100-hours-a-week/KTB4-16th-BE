@@ -27,13 +27,8 @@ import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
-import com.ktb4.team16.mulo.weather.dto.WeatherResponse;
-import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
-import com.ktb4.team16.mulo.weather.service.WeatherService;
-
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
-import java.time.OffsetDateTime;
 import java.util.List;
 import java.util.Objects;
 import java.util.Optional;
@@ -54,12 +49,10 @@ public class RecordService {
     private final RecordCursorCodec recordCursorCodec;
     private final UserRepository userRepository;
     private final PlaceRepository placeRepository;
-    private final WeatherService weatherService;
     private final UploadService uploadService;
     private final MusicTrackService musicTrackService;
     private final RecordPhotoRepository recordPhotoRepository;
     private final GcsStorageService gcsStorageService;
-    private final KakaoRegionClient kakaoRegionClient;
 
 
     public Record findActiveRecordForOwner(Long userId, Long recordId) {
@@ -290,7 +283,9 @@ public class RecordService {
     @Transactional
     public RecordEmbeddingSnapshot createRecord(
             Long userId,
-            RecordCreateRequest request
+            RecordCreateRequest request,
+            KakaoRegionClient.LegalRegion preparedRegion,
+            PreparedWeather preparedWeather
     ) {
         User user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(UnauthenticatedUserException::new);
@@ -299,6 +294,7 @@ public class RecordService {
         BigDecimal latitude = request.location().latitude();
         Long uploadId = request.uploadId();
 
+        // Recheck in the write transaction in case another request created the coordinate meanwhile.
         Optional<Place> existingPlace =
                 placeRepository.findByLatitudeAndLongitude(
                         latitude,
@@ -310,11 +306,9 @@ public class RecordService {
         if (existingPlace.isPresent()) {
             place = existingPlace.get();
         } else {
-            KakaoRegionClient.LegalRegion legalRegion =
-                    kakaoRegionClient.findLegalRegion(latitude, longitude);
             place = new Place(
-                    legalRegion.code(),
-                    legalRegion.name(),
+                    preparedRegion.code(),
+                    preparedRegion.name(),
                     latitude,
                     longitude
             );
@@ -323,28 +317,8 @@ public class RecordService {
 
         Upload upload = uploadService.findValidUpload(userId, uploadId);
 
-        BigDecimal temperature = null;
-        Record.WeatherCondition weatherCondition = null;
-
-        try {
-            WeatherResponse weatherResponse = weatherService.getWeather(
-                    latitude.doubleValue(),
-                    longitude.doubleValue(),
-                    OffsetDateTime.now()
-            );
-
-            WeatherResponse.WeatherData weatherData =
-                    weatherResponse.data();
-
-            temperature = weatherData.temperature();
-
-            weatherCondition = Record.WeatherCondition.valueOf(
-                    weatherData.weatherCondition().name()
-            );
-
-        } catch (WeatherApiException exception) {
-        // 날씨 조회에 실패해도 자물쇠 생성은 계속한다.
-        }
+        BigDecimal temperature = preparedWeather.temperature();
+        Record.WeatherCondition weatherCondition = preparedWeather.weatherCondition();
 
         RecordCreateRequest.Music music = request.music();
 

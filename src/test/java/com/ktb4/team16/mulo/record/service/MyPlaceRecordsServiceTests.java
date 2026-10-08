@@ -14,7 +14,6 @@ import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
-import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -25,7 +24,6 @@ class MyPlaceRecordsServiceTests {
     private final RecordCursorCodec cursorCodec = mock(RecordCursorCodec.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PlaceRepository placeRepository = mock(PlaceRepository.class);
-    private final WeatherService weatherService = mock(WeatherService.class);
     private final UploadService uploadService = mock(UploadService.class);
     private final com.ktb4.team16.mulo.music.service.MusicTrackService musicTrackService =
             mock(com.ktb4.team16.mulo.music.service.MusicTrackService.class);
@@ -35,9 +33,8 @@ class MyPlaceRecordsServiceTests {
     private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository, cursorCodec, userRepository, placeRepository,
-            weatherService, uploadService, musicTrackService, recordPhotoRepository,
-            gcsStorageService,
-            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class));
+            uploadService, musicTrackService, recordPhotoRepository,
+            gcsStorageService);
 
     @Test
     void returnsTwentyRecordsAndCursorWhenRepositoryReturnsMoreThanTwenty() {

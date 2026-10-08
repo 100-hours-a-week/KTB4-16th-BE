@@ -24,7 +24,6 @@ import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
-import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -39,12 +38,10 @@ class RecordCommentUpdateServiceTest {
             mock(RecordCursorCodec.class),
             mock(UserRepository.class),
             mock(PlaceRepository.class),
-            mock(WeatherService.class),
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            mock(GcsStorageService.class),
-            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class)
+            mock(GcsStorageService.class)
     );
 
     @Test
