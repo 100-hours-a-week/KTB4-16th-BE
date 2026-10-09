@@ -380,7 +380,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
                     .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isEqualTo(4);
+                    .isEqualTo(5);
         }
         assertThat(dataSource).isInstanceOf(HikariDataSource.class);
         assertThat(hikariMaximumPoolSize())
