@@ -205,7 +205,7 @@ class RecordCreationWeatherMysqlIntegrationTest {
                     .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isEqualTo(5);
+                    .isEqualTo(6);
         }
     }
 
