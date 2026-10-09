@@ -24,7 +24,6 @@ import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
-import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.math.BigDecimal;
 import java.time.LocalDateTime;
 import java.util.Optional;
@@ -39,12 +38,10 @@ class RecordDetailServiceTests {
             mock(RecordCursorCodec.class),
             mock(UserRepository.class),
             mock(PlaceRepository.class),
-            mock(WeatherService.class),
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            gcsStorageService,
-            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class)
+            gcsStorageService
     );
 
     @Test
@@ -58,10 +55,20 @@ class RecordDetailServiceTests {
     }
 
     @Test
+    void ownerOnlyWriteLookupDoesNotGrantFriendsRecordOwnership() {
+        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(10L, 90L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> recordService.findActiveRecordForOwner(90L, 10L))
+                .isInstanceOf(RecordNotFoundException.class);
+        verify(recordRepository).findByRecordIdAndUser_UserIdAndDeletedAtIsNull(10L, 90L);
+    }
+
+    @Test
     void returnsDetailDataAndSignedPhotoUrlForActiveRecordOwnedByUser() {
         Record record = detailRecord();
         RecordPhoto photo = mock(RecordPhoto.class);
-        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(10L, 35L))
+        when(recordRepository.findActiveRecordVisibleToViewer(35L, 10L))
                 .thenReturn(Optional.of(record));
         when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.of(photo));
         when(photo.getImageUrl()).thenReturn("uploads/35/photo.jpg");
@@ -72,6 +79,7 @@ class RecordDetailServiceTests {
 
         assertThat(detail.recordId()).isEqualTo(10L);
         assertThat(detail.userId()).isEqualTo(35L);
+        assertThat(detail.isOwner()).isTrue();
         assertThat(detail.place()).isEqualTo(new RecordDetailData.Place(
                 20L, "테스트동", new BigDecimal("37.5000000"),
                 new BigDecimal("127.0000000"), "1111010100"));
@@ -87,9 +95,27 @@ class RecordDetailServiceTests {
     }
 
     @Test
+    void returnsReadOnlyDetailForCurrentFriendAndMarksItNotOwned() {
+        Record record = detailRecord();
+        RecordPhoto photo = mock(RecordPhoto.class);
+        when(recordRepository.findActiveRecordVisibleToViewer(90L, 10L))
+                .thenReturn(Optional.of(record));
+        when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.of(photo));
+        when(photo.getImageUrl()).thenReturn("uploads/35/photo.jpg");
+        when(gcsStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
+                .thenReturn("https://signed.example/photo");
+
+        RecordDetailData detail = recordService.getRecordDetail(90L, 10L);
+
+        assertThat(detail.userId()).isEqualTo(35L);
+        assertThat(detail.isOwner()).isFalse();
+        verify(recordRepository).findActiveRecordVisibleToViewer(90L, 10L);
+    }
+
+    @Test
     void throwsExceptionWhenRecordHasNoPhoto() {
         Record record = detailRecord();
-        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(10L, 35L))
+        when(recordRepository.findActiveRecordVisibleToViewer(35L, 10L))
                 .thenReturn(Optional.of(record));
         when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.empty());
 
@@ -108,11 +134,11 @@ class RecordDetailServiceTests {
 
     @Test
     void mapsMissingDeletedOrOtherUsersRecordToNotFound() {
-        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(eq(10L), eq(35L)))
+        when(recordRepository.findActiveRecordVisibleToViewer(eq(35L), eq(10L)))
                 .thenReturn(Optional.empty());
-        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(eq(11L), eq(35L)))
+        when(recordRepository.findActiveRecordVisibleToViewer(eq(35L), eq(11L)))
                 .thenReturn(Optional.empty());
-        when(recordRepository.findByRecordIdAndUser_UserIdAndDeletedAtIsNull(eq(12L), eq(35L)))
+        when(recordRepository.findActiveRecordVisibleToViewer(eq(35L), eq(12L)))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> recordService.getRecordDetail(35L, 10L))

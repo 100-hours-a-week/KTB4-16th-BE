@@ -11,15 +11,15 @@ import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @RequiredArgsConstructor
 public class UserSignupService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final UserSignupWriter userSignupWriter;
 
-    @Transactional
+    // 중복 확인 후 트랜잭션 밖에서 비밀번호를 해시하고 저장 단계만 위임한다.
     public void signup(SignupCommand command) {
         List<FieldError> errors = new ArrayList<>();
         if (userRepository.existsByEmailAndDeletedAtIsNull(command.email())) {
@@ -35,9 +35,8 @@ public class UserSignupService {
 
         String passwordHash = passwordEncoder.encode(command.password());
         try {
-            // 사전 중복 검사 이후 발생할 수 있는 동시 요청의 UNIQUE 경합을 여기서 확정한다.
-            userRepository.saveAndFlush(
-                    User.signup(command.email(), passwordHash, command.nickname()));
+            // 사전 중복 검사 이후의 UNIQUE 경합은 저장 트랜잭션에서 확정한다.
+            userSignupWriter.save(User.signup(command.email(), passwordHash, command.nickname()));
         } catch (DataIntegrityViolationException exception) {
             throw toDuplicateUserException(exception);
         }

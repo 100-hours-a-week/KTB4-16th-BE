@@ -119,6 +119,30 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             Long userId
     );
 
+    /** 활성 기록과 소유자 또는 현재 친구 관계를 한 SQL 조건으로 확인해 상세 접근을 허용한다. */
+    @Query("""
+        SELECT record
+        FROM Record record
+        WHERE record.recordId = :recordId
+            AND record.deletedAt IS NULL
+            AND record.user.deletedAt IS NULL
+            AND (
+                record.user.userId = :viewerId
+                OR EXISTS (
+                    SELECT friendship.friendshipId
+                    FROM Friendship friendship
+                    WHERE (friendship.userLow.userId = :viewerId
+                            AND friendship.userHigh.userId = record.user.userId)
+                        OR (friendship.userHigh.userId = :viewerId
+                            AND friendship.userLow.userId = record.user.userId)
+                )
+            )
+        """)
+    Optional<Record> findActiveRecordVisibleToViewer(
+            @Param("viewerId") Long viewerId,
+            @Param("recordId") Long recordId
+    );
+
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse(
             p.legalDongCode, p.legalDongName, COUNT(r)

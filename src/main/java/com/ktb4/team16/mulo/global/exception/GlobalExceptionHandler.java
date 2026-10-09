@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
+import com.ktb4.team16.mulo.friend.exception.FriendDomainException;
 import io.sentry.Sentry;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
@@ -49,6 +50,13 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    @ExceptionHandler(FriendDomainException.class)
+    // 친구 도메인 오류를 계약 HTTP 상태와 표준 오류 본문으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleFriendDomain(FriendDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
 
     @ExceptionHandler(KakaoRegionLookupException.class)
     public ResponseEntity<ErrorResponse> handleKakaoRegionLookup(KakaoRegionLookupException exception) {
