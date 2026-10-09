@@ -12,9 +12,11 @@ import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsSearchResponse;
 import com.ktb4.team16.mulo.record.message.RecordMessage;
 import com.ktb4.team16.mulo.user.dto.request.UpdateNicknameRequest;
 import com.ktb4.team16.mulo.user.dto.request.UpdatePasswordRequest;
+import com.ktb4.team16.mulo.user.dto.request.UpdatePreferredGenresRequest;
 import com.ktb4.team16.mulo.user.dto.request.UserSignupRequest;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserSignupResponse;
 import com.ktb4.team16.mulo.user.message.UserMessage;
@@ -33,6 +35,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.ModelAttribute;
 import org.springframework.web.bind.annotation.PatchMapping;
 import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -76,6 +79,13 @@ public class UserController {
             @Valid @RequestBody UpdatePasswordRequest request) {
         return userProfileService.updatePassword(
                 userId, request.currentPassword(), request.newPassword());
+    }
+
+    @PutMapping("/me/preferences/genres")
+    public UpdatePreferredGenresResponse updatePreferredGenres(
+            @AuthenticationPrincipal Long userId,
+            @Valid @RequestBody UpdatePreferredGenresRequest request) {
+        return userProfileService.updatePreferredGenres(userId, request.preferredGenres());
     }
 
     @GetMapping("/me/places")
