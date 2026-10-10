@@ -566,6 +566,31 @@
                         },
                         "email": {
                           "type": "string"
+                        },
+                        "preferredGenres": {
+                          "type": "array",
+                          "nullable": true,
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "발라드",
+                              "댄스",
+                              "랩/힙합",
+                              "R&B/Soul",
+                              "인디음악",
+                              "록/메탈",
+                              "포크/블루스",
+                              "트로트",
+                              "POP",
+                              "일렉트로니카",
+                              "OST",
+                              "재즈",
+                              "J-POP"
+                            ]
+                          }
+                        },
+                        "genreOnboardingDone": {
+                          "type": "boolean"
                         }
                       }
                     }
@@ -576,7 +601,9 @@
                   "data": {
                     "userId": 35,
                     "nickname": "뮤로",
-                    "email": "example@example.test"
+                    "email": "example@example.test",
+                    "preferredGenres": null,
+                    "genreOnboardingDone": false
                   }
                 }
               }
@@ -635,6 +662,199 @@
           }
         ],
         "x-implementation-status": "implemented"
+      },
+      "put": {
+        "tags": [
+          "USER / 사용자"
+        ],
+        "summary": "선호 장르 온보딩 응답 저장",
+        "operationId": "putApiUsersMePreferencesGenres",
+        "description": "선택한 선호 장르를 저장하고 온보딩 완료 상태로 변경한다. preferredGenres는 필수이며, 0~3개의 서로 다른 허용 장르만 전달할 수 있다. 빈 배열([])은 사용자가 장르를 선택하지 않고 온보딩을 완료한다는 뜻이며, DB에는 preferred_genres를 NULL로 저장한다. 허용 장르: 발라드, 댄스, 랩/힙합, R&B/Soul, 인디음악, 록/메탈, 포크/블루스, 트로트, POP, 일렉트로니카, OST, 재즈, J-POP.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "preferredGenres"
+                ],
+                "properties": {
+                  "preferredGenres": {
+                    "type": "array",
+                    "minItems": 0,
+                    "maxItems": 3,
+                    "uniqueItems": true,
+                    "items": {
+                      "type": "string",
+                      "enum": [
+                        "발라드",
+                        "댄스",
+                        "랩/힙합",
+                        "R&B/Soul",
+                        "인디음악",
+                        "록/메탈",
+                        "포크/블루스",
+                        "트로트",
+                        "POP",
+                        "일렉트로니카",
+                        "OST",
+                        "재즈",
+                        "J-POP"
+                      ]
+                    },
+                    "description": "0개(빈 배열)는 선택하지 않음으로 온보딩을 완료하는 의미이며, 1~3개의 서로 다른 장르를 선택할 수 있다."
+                  }
+                }
+              },
+              "example": {
+                "preferredGenres": [
+                  "인디음악",
+                  "재즈"
+                ]
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "선호 장르 저장 또는 명시적 건너뛰기가 완료되었으므로 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "preferredGenres": {
+                          "type": "array",
+                          "nullable": true,
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "genreOnboardingDone": {
+                          "type": "boolean"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "선호 장르가 저장되었습니다.",
+                  "data": {
+                    "preferredGenres": [
+                      "인디음악",
+                      "재즈"
+                    ],
+                    "genreOnboardingDone": true
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "preferredGenres 누락/null, 4개 이상, 허용되지 않은 장르 또는 중복 장르이면 400.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INVALID_INPUT_VALUE",
+                  "message": "입력값을 확인해주세요.",
+                  "errors": [
+                    {
+                      "field": "preferredGenres",
+                      "code": "INVALID_INPUT_VALUE",
+                      "message": "INVALID_INPUT_VALUE"
+                    }
+                  ]
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "유효한 인증 정보가 없어 요청 사용자를 식별할 수 없으므로 401.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "UNAUTHORIZED",
+                  "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INTERNAL_SERVER_ERROR",
+                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
+        "x-csrf-required": true
       },
       "delete": {
         "tags": [

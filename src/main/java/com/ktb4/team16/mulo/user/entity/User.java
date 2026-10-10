@@ -7,9 +7,12 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import java.time.LocalDateTime;
+import java.util.List;
 import lombok.AccessLevel;
 import lombok.Getter;
 import lombok.NoArgsConstructor;
+import org.hibernate.annotations.JdbcTypeCode;
+import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "users")
@@ -39,6 +42,13 @@ public class User {
 
     @Column(name = "music_genre", length = 50)
     private String musicGenre;
+
+    @JdbcTypeCode(SqlTypes.JSON)
+    @Column(name = "preferred_genres", columnDefinition = "json")
+    private List<String> preferredGenres;
+
+    @Column(name = "genre_onboarding_done", nullable = false)
+    private boolean genreOnboardingDone;
 
     @Column(name = "created_at", insertable = false, updatable = false)
     private LocalDateTime createdAt;
@@ -70,5 +80,10 @@ public class User {
         // 중요: 비밀번호 원문이 아니라 BCrypt 해시와 수정 시각만 저장한다.
         this.passwordHash = passwordHash;
         this.updatedAt = updatedAt;
+    }
+
+    public void updatePreferredGenres(List<String> preferredGenres) {
+        this.preferredGenres = preferredGenres.isEmpty() ? null : List.copyOf(preferredGenres);
+        this.genreOnboardingDone = true;
     }
 }

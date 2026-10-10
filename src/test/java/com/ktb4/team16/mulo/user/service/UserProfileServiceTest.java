@@ -11,6 +11,7 @@ import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -61,6 +62,57 @@ class UserProfileServiceTest {
         assertThat(response.data().userId()).isEqualTo(1L);
         assertThat(response.data().nickname()).isEqualTo("뮤로16");
         assertThat(response.data().email()).isEqualTo("user@example.com");
+        assertThat(response.data().preferredGenres()).isNull();
+        assertThat(response.data().genreOnboardingDone()).isFalse();
+    }
+
+    @Test
+    void getMyProfileReturnsSelectedGenresAndExplicitSkipState() {
+        User selected = User.signup("selected@example.com", "password-hash", "선택사용자");
+        ReflectionTestUtils.setField(selected, "preferredGenres", List.of("재즈", "인디음악"));
+        ReflectionTestUtils.setField(selected, "genreOnboardingDone", true);
+        User skipped = User.signup("skipped@example.com", "password-hash", "건너뛴사용자");
+        ReflectionTestUtils.setField(skipped, "genreOnboardingDone", true);
+        when(userRepository.findByUserIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(selected));
+        when(userRepository.findByUserIdAndDeletedAtIsNull(2L)).thenReturn(Optional.of(skipped));
+
+        UserProfileResponse selectedResponse = service.getMyProfile(1L);
+        UserProfileResponse skippedResponse = service.getMyProfile(2L);
+
+        assertThat(selectedResponse.data().preferredGenres()).containsExactly("재즈", "인디음악");
+        assertThat(selectedResponse.data().genreOnboardingDone()).isTrue();
+        assertThat(skippedResponse.data().preferredGenres()).isNull();
+        assertThat(skippedResponse.data().genreOnboardingDone()).isTrue();
+    }
+
+    @Test
+    void updatePreferredGenresCompletesOnboardingWithoutChangingDailyMusicGenre() {
+        User user = User.signup("user@example.com", "password-hash", "뮤로16");
+        ReflectionTestUtils.setField(user, "musicGenre", "인디·재즈·R&B");
+        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+                .thenReturn(Optional.of(user));
+
+        var response = service.updatePreferredGenres(1L, List.of("재즈", "인디음악"));
+
+        assertThat(user.getPreferredGenres()).containsExactly("재즈", "인디음악");
+        assertThat(user.isGenreOnboardingDone()).isTrue();
+        assertThat(user.getMusicGenre()).isEqualTo("인디·재즈·R&B");
+        assertThat(response.data().preferredGenres()).containsExactly("재즈", "인디음악");
+        assertThat(response.data().genreOnboardingDone()).isTrue();
+    }
+
+    @Test
+    void emptyPreferredGenresCompletesOnboardingAndStoresNullSelection() {
+        User user = User.signup("user@example.com", "password-hash", "뮤로16");
+        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+                .thenReturn(Optional.of(user));
+
+        var response = service.updatePreferredGenres(1L, List.of());
+
+        assertThat(user.getPreferredGenres()).isNull();
+        assertThat(user.isGenreOnboardingDone()).isTrue();
+        assertThat(response.data().preferredGenres()).isNull();
+        assertThat(response.data().genreOnboardingDone()).isTrue();
     }
 
     @Test

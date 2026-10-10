@@ -6,6 +6,7 @@ import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.place.service.PlaceService;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
@@ -35,10 +36,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.hasItems;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -246,7 +250,7 @@ class UserControllerTest {
         UserProfileResponse response = new UserProfileResponse(
                 "회원 정보 조회 성공",
                 new UserProfileResponse.UserProfileData(
-                        1L, "뮤로16", "user@example.com"));
+                        1L, "뮤로16", "user@example.com", null, false));
         when(profileService.getMyProfile(1L)).thenReturn(response);
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
@@ -256,7 +260,71 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("회원 정보 조회 성공"))
                 .andExpect(jsonPath("$.data.userId").value(1))
                 .andExpect(jsonPath("$.data.nickname").value("뮤로16"))
-                .andExpect(jsonPath("$.data.email").value("user@example.com"));
+                .andExpect(jsonPath("$.data.email").value("user@example.com"))
+                .andExpect(jsonPath("$.data.preferredGenres").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.genreOnboardingDone").value(false));
+    }
+
+    @Test
+    void authenticatedUserCanSaveZeroToThreePreferredGenres() throws Exception {
+        authenticateUser(1L);
+        List<GenreRequestCase> cases = List.of(
+                new GenreRequestCase("{\"preferredGenres\":[]}", List.of(), null),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\"]}",
+                        List.of("재즈"), "[\"재즈\"]"),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\",\"인디음악\"]}",
+                        List.of("재즈", "인디음악"), "[\"재즈\",\"인디음악\"]"),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\",\"인디음악\",\"POP\"]}",
+                        List.of("재즈", "인디음악", "POP"), "[\"재즈\",\"인디음악\",\"POP\"]"));
+
+        for (GenreRequestCase requestCase : cases) {
+            List<String> storedGenres = requestCase.genres().isEmpty()
+                    ? null : requestCase.genres();
+            when(profileService.updatePreferredGenres(1L, requestCase.genres()))
+                    .thenReturn(new UpdatePreferredGenresResponse(
+                            "선호 장르가 저장되었습니다.",
+                            new UpdatePreferredGenresResponse.PreferredGenresData(
+                                    storedGenres, true)));
+
+            var result = mvc.perform(put("/api/users/me/preferences/genres")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestCase.body()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("선호 장르가 저장되었습니다."))
+                    .andExpect(jsonPath("$.data.genreOnboardingDone").value(true))
+                    .andReturn();
+
+            if (storedGenres == null) {
+                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                        .contains("\"preferredGenres\":null");
+            } else {
+                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                        .contains(requestCase.expectedGenresJson());
+            }
+        }
+    }
+
+    @Test
+    void invalidPreferredGenresReturnBadRequestWithoutCallingService() throws Exception {
+        List<String> invalidBodies = List.of(
+                "{\"preferredGenres\":null}",
+                "{}",
+                "{\"preferredGenres\":[\"재즈\",\"인디음악\",\"POP\",\"OST\"]}",
+                "{\"preferredGenres\":[\"클래식\"]}",
+                "{\"preferredGenres\":[\"재즈\",\"재즈\"]}");
+
+        for (String body : invalidBodies) {
+            mvc.perform(put("/api/users/me/preferences/genres")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                    .andExpect(jsonPath("$.errors[0].field").value("preferredGenres"))
+                    .andExpect(jsonPath("$.errors[0].code").value("INVALID_INPUT_VALUE"));
+        }
+
+        verify(profileService, never()).updatePreferredGenres(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -426,4 +494,6 @@ class UserControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(userId, null, List.of()));
     }
+
+    private record GenreRequestCase(String body, List<String> genres, String expectedGenresJson) { }
 }
