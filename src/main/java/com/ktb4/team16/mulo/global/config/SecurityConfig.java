@@ -110,7 +110,7 @@ public class SecurityConfig {
         var cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.allowedOrigins());
         cors.setAllowCredentials(true);
-        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-XSRF-TOKEN"));
         source.registerCorsConfiguration("/api/**", cors);
         return source;
