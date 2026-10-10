@@ -606,6 +606,12 @@ const spec = {
                         },
                         "genreOnboardingDone": {
                           "type": "boolean"
+                        },
+                        "createdAt": {
+                          "type": "string",
+                          "format": "date-time",
+                          "description": "사용자의 가입 시각",
+                          "example": "2026-10-01T12:34:56"
                         }
                       }
                     }
@@ -618,7 +624,8 @@ const spec = {
                     "nickname": "뮤로",
                     "email": "example@example.test",
                     "preferredGenres": null,
-                    "genreOnboardingDone": false
+                    "genreOnboardingDone": false,
+                    "createdAt": "2026-10-01T12:34:56"
                   }
                 }
               }
