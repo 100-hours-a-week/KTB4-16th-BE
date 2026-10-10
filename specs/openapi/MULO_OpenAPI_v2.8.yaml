@@ -408,6 +408,11 @@ paths:
                           - J-POP
                       genreOnboardingDone:
                         type: boolean
+                      createdAt:
+                        type: string
+                        format: date-time
+                        description: 사용자의 가입 시각
+                        example: '2026-10-01T12:34:56'
               example:
                 message: 회원 정보 조회 성공
                 data:
@@ -416,6 +421,7 @@ paths:
                   email: example@example.test
                   preferredGenres: null
                   genreOnboardingDone: false
+                  createdAt: '2026-10-01T12:34:56'
         '401':
           description: 현재 사용자 정보를 조회하기 위한 유효한 인증 정보가 없거나, 탈퇴 사용자여서 활성 사용자로 인증할 수 없으므로 401.\
           content:
