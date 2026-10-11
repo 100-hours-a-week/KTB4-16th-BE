@@ -1,7 +1,8 @@
 # MULO 테이블 정의서 v8.1
 
 > 작성일: 2026-09-21 (KST)  
-> 실제 스키마 기준: `app/mulo-be` 현재 `develop` 작업 트리의 Flyway V1~V4
+> 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
+> 실제 스키마 기준: 현재 백엔드 작업 트리의 Flyway V1~V8
 > 설계·정책 기준: 테이블 정의서 v7.6, 서비스 정책 정의서 v1.9, OpenAPI v2.6, 현재 구현 문서  
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
@@ -9,18 +10,19 @@
 
 | 상태 | 의미 |
 | --- | --- |
-| `구현됨` | Flyway V1~V4에 실제 적용되는 구조 |
+| `구현됨` | Flyway V1~V8에 실제 적용되는 구조 |
 | `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
 | `V1 제외·실제 테이블 존재` | V1 기능 범위에서는 제외됐지만 현재 Flyway에는 테이블이 존재함 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
 
 ### v8.1 핵심 변경 사항
 
-- Flyway V1~V4를 순서대로 적용한 실제 테이블 25개를 기준으로 재정리
+- Flyway V1~V8을 순서대로 적용한 실제 테이블 26개를 기준으로 재정리
 - V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
 - V4의 `places` 컬럼 변경, 법정동 쌍 CHECK, 좌표 UNIQUE를 실제 구조로 반영
 - `record_drafts`는 정책상 V1 제외이지만 Flyway V1에 존재함을 명시
 - 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
+- V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
 - 설계 문서와 Flyway 사이의 차이는 문서 끝의 정합성 표에서 원본과 현재 상태를 함께 표시
 
 ### v7.6에서 승계한 핵심 변경 사항
@@ -1011,7 +1013,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ## 구현·설계 정합성 표
 
-| 대상 | 원본/목표 설계 | Flyway V1~V4 및 현재 코드 | 문서 처리 |
+| 대상 | 원본/목표 설계 | Flyway V1~V8 및 현재 코드 | 문서 처리 |
 | --- | --- | --- | --- |
 | `places` | 법정동 코드·이름 nullable 쌍, 좌표 기반 장소 | V4에서 `external_place_id`, `place_name` 제거, `legal_dong_code`, `legal_dong_name`, 좌표 UNIQUE, 법정동 쌍 CHECK 적용 | V4 실제 구조를 본문에 반영 |
 | `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
@@ -1021,6 +1023,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
 | `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
 | `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | Flyway V1과 현재 작업 트리에 엔티티·생성·목록·상세 조회 구현 | DB와 공개 조회 API는 구현됨, 내부 생성·AI 콜백은 정책서에서 분리 기록 |
+| `notifications`, `outbox_events` | 사용자 알림 이력과 비즈니스 이벤트를 원본 트랜잭션에 함께 보존 | `notifications`는 V7, `outbox_events`는 V8에서 생성되며 현재 알림 API 및 친구·리포트 이벤트 처리가 구현됨 | MATCH_COMPLETED 발행은 배포 환경별 4인 이력 및 Chat DB 참가자 등록 근거 확인 전까지 보류 |
 
 ## Open Questions
 
@@ -1147,5 +1150,46 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 2 | 강수 없음 + `SKY=1` | `CLEAR` |
 | 2 | 강수 없음 + `SKY=2` 또는 `3` | `CLOUDY` |
 | 2 | 강수 없음 + `SKY=4` | `OVERCAST` |
+
+---
+
+## 26. outbox_events - 알림 Outbox 이벤트 테이블
+
+#### 1. 테이블 설명
+
+원본 비즈니스 트랜잭션에서 알림 이벤트를 기록하고, COMMIT 이후 별도 트랜잭션의 Processor가 알림 이력을 생성하도록 V8에서 추가했다. 이벤트 payload와 처리 상태를 보존하며 `aggregate_id`는 원본 도메인 ID 스냅샷이다. 원본 리소스와 FK를 두지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `event_id` | `CHAR(36)` | NOT NULL | - | PK | Outbox 이벤트 UUID |
+| `event_type` | `ENUM` | NOT NULL | - | UK(복합) | `MONTHLY_REPORT_CREATED`, `MATCH_COMPLETED`, `FRIEND_REQUEST`, `FRIEND_ACCEPTED` 중 하나 |
+| `aggregate_id` | `BIGINT` | NOT NULL | - | UK(복합) | 이벤트 유형에 해당하는 원본 리소스 ID 스냅샷. 원본 테이블 FK는 두지 않는다. |
+| `payload` | `JSON` | NOT NULL | - | - | 수신자 및 이벤트 처리에 필요한 payload v1 |
+| `status` | `ENUM('PENDING','COMPLETED','FAILED')` | NOT NULL | `PENDING` | INDEX | 처리 상태 |
+| `retry_count` | `INT` | NOT NULL | `0` | - | 최초 처리를 제외한 추가 재시도 횟수 |
+| `next_retry_at` | `DATETIME(6)` | NULL | NULL | INDEX | 다음 재시도 예정 시각. NULL이면 최초 처리를 기다리는 이벤트다. |
+| `last_error_code` | `VARCHAR(100)` | NULL | NULL | - | 마지막 처리 실패의 안전한 오류 코드 |
+| `last_error_at` | `DATETIME(6)` | NULL | NULL | - | 마지막 처리 실패 시각 |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | INDEX | 원본 트랜잭션에서 이벤트를 기록한 시각 |
+| `processed_at` | `DATETIME(6)` | NULL | NULL | - | 모든 알림 생성이 성공한 시각. FAILED에서는 NULL을 유지한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_outbox_events` | PRIMARY KEY | `event_id` | - | Outbox 이벤트 UUID를 고유하게 식별한다. |
+| `uk_outbox_events_type_aggregate` | UNIQUE | `event_type`, `aggregate_id` | - | 같은 원본 리소스·이벤트 유형의 중복 발행을 방지한다. |
+| `idx_outbox_events_schedule` | INDEX | `status`, `next_retry_at`, `created_at` | - | Scheduler가 처리 가능한 이벤트를 상태·예정 시각·생성 시각 순으로 찾는다. |
+
+#### 3-1. 처리 규칙
+
+- 원본 변경과 Outbox INSERT는 같은 트랜잭션에 기록한다. 원본 COMMIT 후 Processor가 독립 트랜잭션에서 즉시 처리를 시도한다.
+- 한 이벤트의 모든 `notifications` INSERT와 Outbox `COMPLETED` 변경은 원자적으로 처리한다. 일부 수신자만 알림을 받는 상태는 허용하지 않는다.
+- 최초 실패 뒤 최대 5회 추가 재시도한다. 간격은 1, 2, 4, 8, 16분에 사용자 확정 지터 0~30초를 더하며 Scheduler는 1분 주기로 한 번에 최대 20건을 조회한다.
+- 재시도 후보는 `FOR UPDATE SKIP LOCKED` 방식으로 잠가 여러 Worker가 같은 이벤트를 처리하지 않게 한다.
+- 최대 횟수 초과 또는 영구 오류는 `FAILED`로 기록한다. `COMPLETED`에만 `processed_at`을 기록한다.
+- `MATCH_COMPLETED` 발행은 배포 환경별 기존 4인 매칭 이력 0건 확인과 Chat DB 참가자 등록 근거가 확인될 때까지 보류한다.
 
 ---

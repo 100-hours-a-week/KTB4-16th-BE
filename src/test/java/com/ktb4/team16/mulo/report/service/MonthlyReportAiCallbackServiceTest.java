@@ -13,13 +13,18 @@ import com.ktb4.team16.mulo.report.entity.MonthlyPhotoSceneStat;
 import com.ktb4.team16.mulo.report.entity.MonthlyReport;
 import com.ktb4.team16.mulo.report.repository.MonthlyPhotoSceneStatRepository;
 import com.ktb4.team16.mulo.report.repository.MonthlyReportRepository;
+import com.ktb4.team16.mulo.notification.event.NotificationEventPayloads;
+import com.ktb4.team16.mulo.notification.event.NotificationEventType;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxEventPublisher;
 import com.ktb4.team16.mulo.user.entity.User;
 import java.time.OffsetDateTime;
 import java.util.List;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
+import org.mockito.Mockito;
 import org.mockito.junit.jupiter.MockitoExtension;
 
 @ExtendWith(MockitoExtension.class)
@@ -27,6 +32,7 @@ class MonthlyReportAiCallbackServiceTest {
     @Mock private MonthlyReportRepository reports;
     @Mock private MonthlyPhotoSceneStatRepository scenes;
     @Mock private User user;
+    @Mock private NotificationOutboxEventPublisher notificationEvents;
 
     // 완료 콜백의 회고·장면 통계를 저장하고 선저장된 기록 수를 보존한다.
     @Test
@@ -34,10 +40,14 @@ class MonthlyReportAiCallbackServiceTest {
         MonthlyReport report = report();
         when(reports.findByReportYearAndReportMonth((short) 2026, (short) 8))
                 .thenReturn(List.of(report));
+        UUID eventId = UUID.fromString("00000000-0000-0000-0000-000000000401");
+        when(notificationEvents.publish(Mockito.eq(NotificationEventType.MONTHLY_REPORT_CREATED),
+                Mockito.eq(105L), Mockito.any())).thenReturn(eventId);
         var callback = callback(new Result(7L, Status.COMPLETED,
                 new AiRecap("8월 회고"), List.of(new PhotoScene("산책", 2, 100)), null));
 
-        new MonthlyReportAiCallbackService(reports, scenes).apply(callback);
+        List<UUID> eventIds = new MonthlyReportAiCallbackTransactionalService(
+                reports, scenes, notificationEvents).apply(callback);
 
         ArgumentCaptor<MonthlyPhotoSceneStat> saved = ArgumentCaptor.forClass(MonthlyPhotoSceneStat.class);
         verify(scenes).save(saved.capture());
@@ -45,6 +55,12 @@ class MonthlyReportAiCallbackServiceTest {
         assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.COMPLETED);
         assertThat(report.getAiRecapText()).isEqualTo("8월 회고");
         assertThat(report.getRecordCount()).isEqualTo(4);
+        assertThat(eventIds).containsExactly(eventId);
+        Mockito.verify(notificationEvents).publish(
+                org.mockito.ArgumentMatchers.eq(NotificationEventType.MONTHLY_REPORT_CREATED),
+                org.mockito.ArgumentMatchers.eq(105L),
+                org.mockito.ArgumentMatchers.eq(new NotificationEventPayloads.MonthlyReportCreated(
+                        1, List.of(7L), 105L, 2026, 8)));
     }
 
     // 실패 콜백은 미완료 리포트만 FAILED로 바꾸고 기존 통계는 유지한다.
@@ -55,12 +71,15 @@ class MonthlyReportAiCallbackServiceTest {
         when(reports.findByReportYearAndReportMonth((short) 2026, (short) 8))
                 .thenReturn(List.of(report));
 
-        new MonthlyReportAiCallbackService(reports, scenes).apply(
+        List<UUID> eventIds = new MonthlyReportAiCallbackTransactionalService(
+                reports, scenes, notificationEvents).apply(
                 callback(new Result(7L, Status.FAILED, null, null, "UPSTREAM_UNAVAILABLE")));
 
         assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.FAILED);
+        assertThat(eventIds).isEmpty();
         assertThat(report.getRecordCount()).isEqualTo(4);
         assertThat(report.getTopArtistName()).isEqualTo("가수");
+        Mockito.verifyNoInteractions(notificationEvents);
     }
 
     // 재전송된 실패 콜백은 이미 완료된 회고를 되돌리지 않는다.
@@ -71,17 +90,22 @@ class MonthlyReportAiCallbackServiceTest {
         when(reports.findByReportYearAndReportMonth((short) 2026, (short) 8))
                 .thenReturn(List.of(report));
 
-        new MonthlyReportAiCallbackService(reports, scenes).apply(
+        List<UUID> eventIds = new MonthlyReportAiCallbackTransactionalService(
+                reports, scenes, notificationEvents).apply(
                 callback(new Result(7L, Status.FAILED, null, null, "UPSTREAM_UNAVAILABLE")));
 
         assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.COMPLETED);
+        assertThat(eventIds).isEmpty();
         assertThat(report.getAiRecapText()).isEqualTo("완료 회고");
+        Mockito.verifyNoInteractions(notificationEvents);
     }
 
     // 테스트용 기존 사용자·월의 선저장 스냅샷을 만든다.
     private MonthlyReport report() {
         when(user.getUserId()).thenReturn(7L);
-        return MonthlyReport.prepare(user, (short) 2026, (short) 8, 4, "가수");
+        MonthlyReport report = MonthlyReport.prepare(user, (short) 2026, (short) 8, 4, "가수");
+        org.springframework.test.util.ReflectionTestUtils.setField(report, "monthlyReportId", 105L);
+        return report;
     }
 
     // 콜백의 공통 식별값을 고정하고 사용자별 결과만 바꿔 전달한다.

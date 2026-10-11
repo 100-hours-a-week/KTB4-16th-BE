@@ -10,6 +10,8 @@ import com.ktb4.team16.mulo.friend.entity.FriendRequest;
 import com.ktb4.team16.mulo.friend.entity.Friendship;
 import com.ktb4.team16.mulo.friend.repository.FriendRequestRepository;
 import com.ktb4.team16.mulo.friend.repository.FriendshipRepository;
+import com.ktb4.team16.mulo.notification.outbox.NotificationCommandResult;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxEventPublisher;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.lang.reflect.Constructor;
@@ -17,6 +19,7 @@ import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.List;
 import java.util.Optional;
+import java.util.UUID;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -28,7 +31,7 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class FriendCommandTransitionTest {
 
     private static final String SERVICE_CLASS =
-            "com.ktb4.team16.mulo.friend.service.FriendCommandService";
+            "com.ktb4.team16.mulo.friend.service.FriendCommandTransactionalService";
 
     @Mock
     private UserRepository userRepository;
@@ -38,6 +41,9 @@ class FriendCommandTransitionTest {
 
     @Mock
     private FriendshipRepository friendshipRepository;
+
+    @Mock
+    private NotificationOutboxEventPublisher notificationEvents;
 
     @Test
     void onlyTheAddresseeCanAcceptAndAcceptanceDeletesThePendingRequest() throws Exception {
@@ -55,6 +61,8 @@ class FriendCommandTransitionTest {
             ReflectionTestUtils.setField(saved, "friendshipId", 31L);
             return saved;
         });
+        when(notificationEvents.publish(Mockito.any(), Mockito.any(), Mockito.any()))
+                .thenReturn(UUID.fromString("00000000-0000-0000-0000-000000000403"));
 
         Object result = invoke(service, "acceptFriendRequest",
                 new Class<?>[]{Long.class, Long.class}, 35L, 21L);
@@ -144,15 +152,18 @@ class FriendCommandTransitionTest {
     private Object createService() throws Exception {
         Class<?> serviceType = Class.forName(SERVICE_CLASS);
         Constructor<?> constructor = serviceType.getConstructor(
-                UserRepository.class, FriendRequestRepository.class, FriendshipRepository.class);
+                UserRepository.class, FriendRequestRepository.class, FriendshipRepository.class,
+                NotificationOutboxEventPublisher.class);
         return constructor.newInstance(userRepository, friendRequestRepository,
-                friendshipRepository);
+                friendshipRepository, notificationEvents);
     }
 
     /** 전이 메서드를 호출하고 반환값을 검사한다. */
     private static Object invoke(Object service, String methodName, Class<?>[] types, Object... args)
             throws Exception {
-        return service.getClass().getMethod(methodName, types).invoke(service, args);
+        Object result = service.getClass().getMethod(methodName, types).invoke(service, args);
+        return result instanceof NotificationCommandResult<?> commandResult
+                ? commandResult.result() : result;
     }
 
     /** 접근 거부 응답이 존재하지 않는 요청·관계와 같은 도메인 오류인지 확인한다. */

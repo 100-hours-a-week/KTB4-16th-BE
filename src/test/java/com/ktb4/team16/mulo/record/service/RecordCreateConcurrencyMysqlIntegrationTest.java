@@ -56,7 +56,7 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 /** Reproduces Place and MusicTrack unique-key races against an isolated MySQL database. */
-@SpringBootTest
+@SpringBootTest(properties = "spring.datasource.hikari.maximum-pool-size=10")
 @ActiveProfiles("weather-it")
 @Import(RecordCreateConcurrencyMysqlIntegrationTest.ConcurrencySynchronizationConfiguration.class)
 class RecordCreateConcurrencyMysqlIntegrationTest {
@@ -373,7 +373,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         return new Fixture(user.getUserId(), upload.getUploadId(), request);
     }
 
-    /** 격리 DB 연결과 현재 Flyway V7 적용 상태를 확인한다. */
+    /** 격리 DB 연결과 현재 Flyway V8 적용 상태를 확인한다. */
     private void assertDatabaseTarget() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
@@ -381,7 +381,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
                     .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isEqualTo(7);
+                    .isEqualTo(8);
         }
         assertThat(dataSource).isInstanceOf(HikariDataSource.class);
         assertThat(hikariMaximumPoolSize())

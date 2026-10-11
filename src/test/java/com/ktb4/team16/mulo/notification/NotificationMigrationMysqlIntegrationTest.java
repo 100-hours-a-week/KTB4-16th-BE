@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.UUID;
+import java.util.List;
 import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -12,7 +13,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.jdbc.datasource.DriverManagerDataSource;
 
-/** 독립 MySQL 스키마에서 알림 V7의 데이터 보존과 제약을 검증한다. */
+/** 독립 MySQL 스키마에서 알림 V7 데이터 보존과 V8 Outbox 구조를 검증한다. */
 class NotificationMigrationMysqlIntegrationTest {
 
     private String baseUrl;
@@ -99,6 +100,20 @@ class NotificationMigrationMysqlIntegrationTest {
                 .isEqualTo(4);
     }
 
+    /** V8 Outbox가 사건 멱등성과 처리 예약에 필요한 DB 제약을 갖는지 검증한다. */
+    @Test
+    void createsOutboxTableWithPayloadRetryAndSchedulingConstraints() {
+        migrateLatest();
+
+        assertThat(tableExists("outbox_events")).isTrue();
+        assertThat(columnExists("outbox_events", "payload")).isTrue();
+        assertThat(columnExists("outbox_events", "next_retry_at")).isTrue();
+        assertThat(indexColumns("uk_outbox_events_type_aggregate"))
+                .containsExactly("event_type", "aggregate_id");
+        assertThat(indexColumns("idx_outbox_events_schedule"))
+                .containsExactly("status", "next_retry_at", "created_at");
+    }
+
     /** 기존 V1~V6을 재현한다. */
     private void migrateThroughV6() {
         Flyway.configure().dataSource(baseUrl + schema, username, password)
@@ -139,6 +154,26 @@ class NotificationMigrationMysqlIntegrationTest {
         return db.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
                 + "WHERE table_schema = ? AND table_name = 'notifications' AND column_name = ?",
                 Integer.class, schema, columnName) > 0;
+    }
+
+    /** 지정 테이블이 현재 격리 스키마에 존재하는지 조회한다. */
+    private boolean tableExists(String tableName) {
+        return db.queryForObject("SELECT COUNT(*) FROM information_schema.tables "
+                + "WHERE table_schema = ? AND table_name = ?", Integer.class, schema, tableName) > 0;
+    }
+
+    /** 지정 테이블에 필요한 컬럼이 존재하는지 조회한다. */
+    private boolean columnExists(String tableName, String columnName) {
+        return db.queryForObject("SELECT COUNT(*) FROM information_schema.columns "
+                + "WHERE table_schema = ? AND table_name = ? AND column_name = ?",
+                Integer.class, schema, tableName, columnName) > 0;
+    }
+
+    /** 인덱스의 컬럼 순서를 확인한다. */
+    private List<String> indexColumns(String indexName) {
+        return db.query("SELECT column_name FROM information_schema.statistics "
+                + "WHERE table_schema = ? AND table_name = 'outbox_events' AND index_name = ? "
+                + "ORDER BY seq_in_index", (result, rowNum) -> result.getString(1), schema, indexName);
     }
 
     /** FK 보존 여부를 조회한다. */
