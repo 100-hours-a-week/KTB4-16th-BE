@@ -53,7 +53,8 @@
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
 | 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
 | 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정, KST 23:00 신규 요청 차단 및 당일 WAITING 만료 구현 | 구현됨 |
-| 매칭 상태 조회·Chat Server 연동·채팅 | OpenAPI 계약 보존, 현재 Backend에 미구현 | contract-only |
+| 매칭 상태 조회 | 인증된 요청 소유자의 현재 상태를 polling으로 조회 | 구현됨 |
+| Chat Server 연동·채팅 | OpenAPI 계약 보존, 현재 Backend에 미구현 | contract-only |
 | AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
 
 
@@ -288,13 +289,13 @@
 | `MATCH-007` | **현재 구현** | 요청 초기 상태 | 매칭 요청 생성 직후 상태는 WAITING이다. | 현재 `MatchRequest.waiting` |
 | `MATCH-008` | **확정** | 상태 집합 | 매칭 요청 상태는 WAITING, MATCHING, MATCHED, EXPIRED다. | 최신 사용자 확정 / Flyway V6 |
 | `MATCH-009` | **확정·부분 구현** | 매칭 상태 의미 | WAITING은 상대 미결정이며 `match_id=NULL`; MATCHING은 두 요청이 같은 Match에 연결됐지만 ChatRoom은 아직 없을 수 있고 `chat_room_id=NULL`; MATCHED는 Chat Server 생성 완료 후 Match에 논리적 `chat_room_id`가 있다; EXPIRED는 매칭되지 않은 당일 요청이며 `match_id=NULL`이다. | 최신 사용자 확정 |
-| `MATCH-010` | **현재 설계·미구현** | 매칭 상태 조회 | 요청 소유자만 조회한다. 성공 상태는 WAITING/MATCHING/MATCHED/EXPIRED를 표현하며 MATCHED에서만 `chatRoomId`를 제공한다. GET API는 아직 구현되지 않았다. | 최신 정책 / OpenAPI contract-only |
+| `MATCH-010` | **확정·구현** | 매칭 상태 조회 | `GET /api/match-requests/{matchRequestId}`는 인증된 요청 소유자만 조회하며 WAITING/MATCHING/MATCHED/EXPIRED를 반환한다. MATCHED에서만 `chatRoomId`를 제공하고, 미존재 또는 타인 소유 요청은 동일하게 404 처리한다. | 최신 정책 / 현재 Controller·Service / OpenAPI |
 | `MATCH-011` | **확정·미구현** | Chat Server 소유권 | ChatRoom은 별도 Chat DB의 자원이다. Backend는 `matches.chat_room_id`에 논리 ID만 저장하며 cross-database FK를 두지 않는다. | Flyway V6 / 최신 사용자 확정 |
 | `MATCH-012` | **검토 중** | 후보 잠금 동시성 | 현재 후보 조회는 PESSIMISTIC_WRITE를 사용하지만 실제 MySQL 8.4 동시 요청에서 1213 deadlock이 재현됐다. 해결책은 아직 확정·구현되지 않았다. | 현재 MySQL 통합 테스트 및 재현 결과 |
 
 현재 `POST /api/match-requests` 구현은 VoteAnswer 조회·소유자/오늘 질문 검증·중복 확인 후 WAITING 요청을 저장하고, 같은 질문의 반대 선택지 WAITING 후보를 FIFO로 최대 1개 조회한다. 후보가 없으면 WAITING으로 응답하고, 후보가 있으면 Match를 생성해 두 요청을 같은 Match에 연결하고 MATCHING으로 변경한다. API의 201은 실제 ChatRoom 생성 완료가 아니라 MatchRequest 자원 생성 성공을 의미한다.
 
-미구현 범위: GET 매칭 상태 조회, MATCHING→MATCHED 전이, Backend→Chat Server 호출과 실패 복구.
+미구현 범위: MATCHING→MATCHED 전이, Backend→Chat Server 호출과 실패 복구.
 
 ## 채팅
 

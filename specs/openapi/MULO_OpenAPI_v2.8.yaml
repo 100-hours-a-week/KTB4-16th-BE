@@ -4639,7 +4639,7 @@ paths:
         필수
         matchRequestId: Long
 
-        현재 계약만 정의되어 있으며 Backend GET Controller는 미구현이다. 요청 소유자만 조회 가능.
+        현재 로그인 사용자의 매칭 요청 상태를 조회한다. Backend GET Controller가 구현되어 있으며 요청 소유자만 조회할 수 있다.
 
         정책 및 설명
         - 현재 로그인한 사용자의 매칭 요청 상태를 조회한다.
@@ -4652,6 +4652,7 @@ paths:
         - EXPIRED이면 당일 매칭되지 않아 만료된 상태이며 matchId는 NULL이다.
         - 요청 소유자만 조회할 수 있다.
         - 존재하지 않는 요청 또는 현재 사용자 소유가 아닌 요청은 동일하게 404 처리한다.
+        - MATCHED인데 Match 또는 chatRoomId가 없으면 서버 상태 불변조건 위반으로 500 처리한다.
       responses:
         '200':
           description: |-
@@ -4717,7 +4718,7 @@ paths:
                 code: MATCH_REQUEST_NOT_FOUND
                 message: 매칭 요청을 찾을 수 없습니다.
         '500':
-          description: MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.
+          description: MATCHED 상태에 Match 또는 chatRoomId가 누락된 경우 등 서버 내부 불변조건 위반은 500 INTERNAL_SERVER_ERROR.
           content:
             application/json:
               schema:
@@ -4739,7 +4740,7 @@ paths:
           format: int64
       security:
       - bearerAuth: []
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
   "/api/chat-rooms/{chatRoomId}/members":
     post:
       tags:

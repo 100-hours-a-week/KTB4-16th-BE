@@ -2,8 +2,8 @@ package com.ktb4.team16.mulo.match.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
-import com.ktb4.team16.mulo.match.entity.MatchRequest;
 import com.ktb4.team16.mulo.integrationtest.IntegrationTestDatabaseGuard;
+import com.ktb4.team16.mulo.match.entity.MatchRequest;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.LocalDate;
@@ -40,6 +40,28 @@ class MatchRequestRepositoryTests {
     @BeforeEach
     void verifiesIsolatedDatabaseAndAppliedMigrations() throws Exception {
         IntegrationTestDatabaseGuard.verify(dataSource, jdbcTemplate);
+    }
+
+    @Test
+    void findsMatchRequestOnlyForItsOwner() {
+        long questionId = insertQuestion("OWNER_" + suffix());
+        long ownerId = insertUser();
+        long answerId = insertAnswer(questionId, ownerId, "A", createdAt(10));
+        long requestId = insert("""
+                INSERT INTO match_requests (user_id, vote_answer_id, status, match_id, created_at)
+                VALUES (?, ?, 'WAITING', NULL, ?)
+                """, ownerId, answerId, createdAt(11));
+        long anotherUserId = insertUser();
+
+        assertThat(matchRequestRepository.findByMatchRequestIdAndUser_UserId(requestId, ownerId))
+                .isPresent()
+                .get()
+                .extracting(MatchRequest::getMatchRequestId)
+                .isEqualTo(requestId);
+        assertThat(matchRequestRepository.findByMatchRequestIdAndUser_UserId(requestId, anotherUserId))
+                .isEmpty();
+        assertThat(matchRequestRepository.findByMatchRequestIdAndUser_UserId(Long.MAX_VALUE, ownerId))
+                .isEmpty();
     }
 
     @Test

@@ -1,15 +1,20 @@
 package com.ktb4.team16.mulo.match.controller;
 
+import static org.hamcrest.Matchers.nullValue;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
+import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
 import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.dto.response.MatchRequestCreateResponse;
+import com.ktb4.team16.mulo.match.dto.response.MatchRequestStatusResponse;
+import com.ktb4.team16.mulo.match.exception.MatchDomainException;
 import com.ktb4.team16.mulo.match.service.MatchService;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -63,6 +68,34 @@ class MatchRequestControllerTest {
                 .andExpect(jsonPath("$.data.status").value("WAITING"));
 
         verify(matchService).createMatchRequest(11L, new MatchRequestCreateRequest(101L));
+    }
+
+    @Test
+    void returnsMatchRequestStatusForAuthenticatedPrincipal() throws Exception {
+        when(matchService.getMatchRequestStatus(11L, 301L))
+                .thenReturn(new MatchRequestStatusResponse(
+                        "매칭 요청 상태 조회 성공",
+                        new MatchRequestStatusResponse.Data(301L, MatchRequestStatus.WAITING, null)));
+
+        mvc.perform(get("/api/match-requests/{matchRequestId}", 301L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("매칭 요청 상태 조회 성공"))
+                .andExpect(jsonPath("$.data.matchRequestId").value(301))
+                .andExpect(jsonPath("$.data.status").value("WAITING"))
+                .andExpect(jsonPath("$.data.chatRoomId").value(nullValue()));
+
+        verify(matchService).getMatchRequestStatus(11L, 301L);
+    }
+
+    @Test
+    void forwardsMatchRequestStatusDomainException() throws Exception {
+        when(matchService.getMatchRequestStatus(11L, 301L))
+                .thenThrow(new MatchDomainException(ErrorCode.MATCH_REQUEST_NOT_FOUND));
+
+        mvc.perform(get("/api/match-requests/{matchRequestId}", 301L))
+                .andExpect(status().isNotFound())
+                .andExpect(jsonPath("$.code").value("MATCH_REQUEST_NOT_FOUND"))
+                .andExpect(jsonPath("$.message").value("매칭 요청을 찾을 수 없습니다."));
     }
 
     @Test

@@ -21,6 +21,7 @@ class MatchDomainExceptionTest {
         assertError(ErrorCode.MATCH_VOTE_ANSWER_NOT_TODAY, HttpStatus.BAD_REQUEST);
         assertError(ErrorCode.MATCH_REQUEST_ALREADY_EXISTS, HttpStatus.CONFLICT);
         assertError(ErrorCode.MATCH_REQUEST_CLOSED, HttpStatus.CONFLICT);
+        assertError(ErrorCode.MATCH_REQUEST_NOT_FOUND, HttpStatus.NOT_FOUND);
     }
 
     @Test

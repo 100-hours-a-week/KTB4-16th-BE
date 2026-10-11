@@ -71,6 +71,76 @@ class MatchServiceTest {
     }
 
     @Test
+    void returnsCurrentStatusForOwnedMatchRequests() {
+        MatchRequest waiting = matchRequest(301L, MatchRequestStatus.WAITING, null, true);
+        MatchRequest matching = matchRequest(302L, MatchRequestStatus.MATCHING, null, true);
+        MatchRequest expired = matchRequest(303L, MatchRequestStatus.EXPIRED, null, true);
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(301L, 11L))
+                .thenReturn(Optional.of(waiting));
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(302L, 11L))
+                .thenReturn(Optional.of(matching));
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(303L, 11L))
+                .thenReturn(Optional.of(expired));
+
+        assertThat(matchService.getMatchRequestStatus(11L, 301L).data().status())
+                .isEqualTo(MatchRequestStatus.WAITING);
+        assertThat(matchService.getMatchRequestStatus(11L, 301L).data().chatRoomId()).isNull();
+        assertThat(matchService.getMatchRequestStatus(11L, 302L).data().status())
+                .isEqualTo(MatchRequestStatus.MATCHING);
+        assertThat(matchService.getMatchRequestStatus(11L, 302L).data().chatRoomId()).isNull();
+        assertThat(matchService.getMatchRequestStatus(11L, 303L).data().status())
+                .isEqualTo(MatchRequestStatus.EXPIRED);
+        assertThat(matchService.getMatchRequestStatus(11L, 303L).data().chatRoomId()).isNull();
+    }
+
+    @Test
+    void returnsChatRoomIdForMatchedRequest() {
+        MatchRequest matched = matchRequest(304L, MatchRequestStatus.MATCHED, 901L, true);
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(304L, 11L))
+                .thenReturn(Optional.of(matched));
+
+        var response = matchService.getMatchRequestStatus(11L, 304L);
+
+        assertThat(response.data().matchRequestId()).isEqualTo(304L);
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.MATCHED);
+        assertThat(response.data().chatRoomId()).isEqualTo(901L);
+    }
+
+    @Test
+    void hidesMissingAndOtherUsersMatchRequestsWithSameNotFoundError() {
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(404L, 11L))
+                .thenReturn(Optional.empty());
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(405L, 11L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> matchService.getMatchRequestStatus(11L, 404L))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.MATCH_REQUEST_NOT_FOUND);
+        assertThatThrownBy(() -> matchService.getMatchRequestStatus(11L, 405L))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.MATCH_REQUEST_NOT_FOUND);
+        verify(matchRequestRepository).findByMatchRequestIdAndUser_UserId(404L, 11L);
+        verify(matchRequestRepository).findByMatchRequestIdAndUser_UserId(405L, 11L);
+    }
+
+    @Test
+    void rejectsMatchedRequestWithoutMatchOrChatRoomIdAsInternalInvariantViolation() {
+        MatchRequest withoutMatch = matchRequest(306L, MatchRequestStatus.MATCHED, null, false);
+        MatchRequest withoutChatRoom = matchRequest(307L, MatchRequestStatus.MATCHED, null, true);
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(306L, 11L))
+                .thenReturn(Optional.of(withoutMatch));
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(307L, 11L))
+                .thenReturn(Optional.of(withoutChatRoom));
+
+        assertThatThrownBy(() -> matchService.getMatchRequestStatus(11L, 306L))
+                .isInstanceOf(IllegalStateException.class);
+        assertThatThrownBy(() -> matchService.getMatchRequestStatus(11L, 307L))
+                .isInstanceOf(IllegalStateException.class);
+    }
+
+    @Test
     void rejectsMissingVoteAnswer() {
         when(voteAnswerRepository.findById(101L)).thenReturn(Optional.empty());
 
@@ -295,6 +365,29 @@ class MatchServiceTest {
         User user = User.signup("user" + userId + "@example.test", "password-hash", "user" + userId);
         ReflectionTestUtils.setField(user, "userId", userId);
         return user;
+    }
+
+    private MatchRequest matchRequest(
+            Long matchRequestId,
+            MatchRequestStatus status,
+            Long chatRoomId,
+            boolean attachMatch
+    ) {
+        MatchRequest matchRequest = MatchRequest.waiting(requester, mock(VoteAnswer.class));
+        ReflectionTestUtils.setField(matchRequest, "matchRequestId", matchRequestId);
+        if (status == MatchRequestStatus.EXPIRED) {
+            matchRequest.expire();
+        } else if (status == MatchRequestStatus.MATCHING || (status == MatchRequestStatus.MATCHED && attachMatch)) {
+            Match match = Match.create(mock(VoteQuestion.class));
+            ReflectionTestUtils.setField(match, "chatRoomId", chatRoomId);
+            matchRequest.startMatching(match);
+            if (status == MatchRequestStatus.MATCHED) {
+                ReflectionTestUtils.setField(matchRequest, "status", MatchRequestStatus.MATCHED);
+            }
+        } else if (status == MatchRequestStatus.MATCHED) {
+            ReflectionTestUtils.setField(matchRequest, "status", MatchRequestStatus.MATCHED);
+        }
+        return matchRequest;
     }
 
     private MatchService serviceAt(LocalTime time) {
