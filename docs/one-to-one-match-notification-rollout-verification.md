@@ -6,6 +6,16 @@
 
 Backend V6은 `matches`를 매칭 이력 테이블로 만들고 `match_requests`에 `MATCHING` 상태와 `match_id`를 둔다. `chat_room_id`는 별도 Chat DB가 소유하며, Backend에서 Chat 테이블과 cross-DB FK를 제거했다 (`src/main/resources/db/migration/V6__separate_matching_and_chat_schema.sql:6-17,26-59`). V7은 알림 테이블만 변경하며 Outbox 테이블을 만들지 않는다 (`src/main/resources/db/migration/V7__prepare_notification_outbox_schema.sql:1-29`).
 
+## 확인된 문서 간 구조 차이
+
+| 현행 문서 위치 | 문서에 적힌 구조 | V6 실제 구조 | 처리 |
+|---|---|---|---|
+| `specs/MULO_서비스_정책_정의서_v2.1.md:288-289` | `WAITING/MATCHED/EXPIRED` 상태와 `MATCHED`의 `chatRoomId` 반환 | `MATCHING` 상태가 추가됐고 Backend 매칭은 `match_id`를 사용한다. | 이 작업은 매칭 인원·알림 수만 갱신한다. 상태 전이와 API 반환 계약은 소유자 확인 후 별도 정합성 작업으로 결정한다. |
+| `specs/MULO_테이블_정의서_v8.1.md:801-817` | `match_requests.status` 3종 ENUM, `match_requests.chat_room_id`와 해당 FK/CHECK | V6은 상태를 `WAITING/MATCHING/MATCHED/EXPIRED`로 바꾸고 `match_id` FK/CHECK를 추가하며 `match_requests.chat_room_id`를 제거했다. | 1:1 인원 변경만으로 테이블 정의서의 상태·컬럼·제약조건을 추정 수정하지 않는다. 실제 V6 기준 정합성은 별도 설계로 다룬다. |
+| `specs/openapi/MULO_OpenAPI_v2.8.yaml:4668-4671` | API 설명의 상태 집합은 `WAITING/MATCHED/EXPIRED` | DB에는 `MATCHING`이 있지만, V6만으로 이 상태가 외부 API 응답에 노출되는지는 확정할 수 없다. | 기존 경로·필드·상태코드는 이 변경에서 유지한다. API 소유자가 결정하기 전 OpenAPI 상태 계약을 바꾸지 않는다. |
+
+이 차이는 확인된 사실과 적용 경계를 기록하기 위한 것이다. API 응답이나 매칭 상태 전이를 새로 추론하지 않는다.
+
 ## 환경별 결과
 
 | 환경 | 확인 시각 (KST) | 확인 범위 | 결과 | 적용 상태 |
@@ -54,4 +64,4 @@ ORDER BY SCHEMA_NAME;
 4. DB 접속·조회 권한이 없거나 결과를 기록하지 못하면 해당 환경은 `미확인 · 배포 보류`로 둔다.
 5. 환경별 조회 시각, DB 식별자(비밀정보 제외), 읽기 전용 SQL, 행 수, 확인자와 적용 판정을 기록한 뒤에만 전체 환경 0건 조건을 재평가한다.
 
-두 참가자의 Chat DB 등록 완료를 Backend가 어떻게 신뢰성 있게 확인할지는 별도 프로토콜 설계가 필요하다. V6의 `matches`와 논리 `chat_room_id`만으로는 Chat DB 참가자 등록이 완료됐다고 판단할 수 없다. 이 확인 계약이 마련되기 전에는 `MATCH_COMPLETED` Outbox 발행 구현도 배포 게이트를 통과하지 못한다.
+두 참가자의 Chat DB 등록 완료를 Backend가 어떻게 신뢰성 있게 확인할지는 별도 프로토콜 설계가 필요하다. V6의 `matches`와 논리 `chat_room_id`만으로는 Chat DB 참가자 등록이 완료됐다고 판단할 수 없다. 이 확인 계약이 마련되기 전에는 `MATCH_COMPLETED` Outbox 발행 구현을 시작하지 않는다. 프로토콜과 발행 동작을 검증하고 모든 적용 환경의 0건 조건을 확인할 때까지 1:1 전용 처리기 배포도 보류한다.
