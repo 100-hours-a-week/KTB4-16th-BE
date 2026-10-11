@@ -30,7 +30,7 @@ tags:
 - name: WEATHER / 날씨
 - name: VOTE / 투표
 - name: MATCH / 매칭
-- name: CHAT / 채팅
+- name: CHAT SERVER / 채팅 서버
 - name: NOTIFICATION / 알림
 - name: MEMORY / 기억 [V1 제외]
 paths:
@@ -4506,15 +4506,15 @@ paths:
         필수
         voteAnswerId: Long
 
-        사용자의 당일 투표 답변 기반 매칭.
-        - KST 기준 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다.
-        - 동일 vote_question_id를 기준으로 매칭한다.
-        - 동일 질문에서 A 선택 사용자 2명 + B 선택 사용자 2명이 모이면 4인 채팅방을 생성한다.
-        - 필요한 인원보다 WAITING 요청이 많으면 created_at ASC, 동률은 match_request_id ASC FIFO로 선택한다.
-        - KST 23:00 시점에 남아 있는 모든 WAITING 요청은 EXPIRED로 변경하고 이후 추가 매칭하지 않는다.
+        같은 VoteQuestion에 답한 서로 반대 선택지(A/B)의 사용자 2명을 1:1로 매칭한다.
+        WAITING 후보는 created_at ASC, 동률이면 match_request_id ASC FIFO로 선택한다.
+        성공 응답의 status는 WAITING 또는 MATCHING이다. 201은 MatchRequest 자원 생성 성공이며 실제 ChatRoom 생성 완료를 뜻하지 않는다.
+
+        확정 정책이나 현재 미구현: KST 22:59:59까지 신규 요청 가능, 23:00부터 신규 요청 차단 및 남은 WAITING 만료. 이미 MATCHING인 pair는 만료하지 않는다.
+        현재 구현은 요청 검증·WAITING 저장·후보 선택·Match 연결·두 요청 MATCHING 전이까지이며, 23:00 cutoff와 만료 Scheduler 및 Chat Server 호출은 미구현이다.
       responses:
         '201':
-          description: 새 매칭 요청 자원이 생성되므로 201.
+          description: MatchRequest 자원 생성 성공. 응답 status는 WAITING 또는 MATCHING이며, 201은 ChatRoom 생성 완료를 의미하지 않는다.
           content:
             application/json:
               schema:
@@ -4530,6 +4530,9 @@ paths:
                         format: int64
                       status:
                         type: string
+                        enum:
+                        - WAITING
+                        - MATCHING
               example:
                 message: 매칭 요청 생성 성공
                 data:
@@ -4537,9 +4540,9 @@ paths:
                   status: WAITING
         '400':
           description: |-
-            필수 입력값 누락은 400.
-
-            추가 케이스: voteAnswerId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.
+            VoteAnswer가 존재하지 않으면 MATCH_VOTE_ANSWER_NOT_FOUND.
+            VoteAnswer가 오늘의 VoteQuestion 답변이 아니면 MATCH_VOTE_ANSWER_NOT_TODAY.
+            요청 DTO의 필드 검증 오류도 400이다.
           content:
             application/json:
               schema:
@@ -4549,24 +4552,9 @@ paths:
                     type: string
                   message:
                     type: string
-                  errors:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        field:
-                          type: string
-                        code:
-                          type: string
-                        message:
-                          type: string
               example:
-                code: INVALID_INPUT_VALUE
-                message: 입력값을 확인해주세요.
-                errors:
-                - field: voteAnswerId
-                  code: VOTE_ANSWER_ID_REQUIRED
-                  message: 투표 답변 식별자가 필요합니다.
+                code: MATCH_VOTE_ANSWER_NOT_FOUND
+                message: 투표 답변을 찾을 수 없습니다.
         '401':
           description: 인증이 필요한 서비스 401
           content:
@@ -4581,8 +4569,8 @@ paths:
               example:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
-        '404':
-          description: 현재 사용자가 소유한 유효 투표 답변이 없으므로 404.
+        '403':
+          description: VoteAnswer는 존재하지만 현재 사용자의 답변이 아니므로 MATCH_VOTE_ANSWER_NOT_OWNED.
           content:
             application/json:
               schema:
@@ -4593,14 +4581,11 @@ paths:
                   message:
                     type: string
               example:
-                code: VOTE_ANSWER_NOT_FOUND
-                message: 투표 답변을 찾을 수 없습니다.
+                code: MATCH_VOTE_ANSWER_NOT_OWNED
+                message: 해당 투표 답변에 접근할 권한이 없습니다.
         '409':
           description: |-
-            이미 매칭 요청 존재
-            동일 vote_answer에 하나의 match_request만 허용하므로 409.
-
-            추가 케이스: 23:00 이후에는 해당 일자 매칭을 새로 진행할 수 없으므로 409.
+            해당 VoteAnswer로 이미 MatchRequest가 존재하면 409 MATCH_REQUEST_ALREADY_EXISTS.
           content:
             application/json:
               schema:
@@ -4641,7 +4626,7 @@ paths:
               - voteAnswerId
             example:
               voteAnswerId: 43
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/match-requests/{matchRequestId}":
     get:
@@ -4653,16 +4638,17 @@ paths:
         필수
         matchRequestId: Long
 
-        프론트 polling으로 WAITING/MATCHED/EXPIRED 상태를 조회한다. 요청 소유자만 조회 가능.
+        현재 계약만 정의되어 있으며 Backend GET Controller는 미구현이다. 요청 소유자만 조회 가능.
 
         정책 및 설명
         - 현재 로그인한 사용자의 매칭 요청 상태를 조회한다.
         - 인증된 활성 사용자만 사용할 수 있다.
         - 프론트는 polling 방식으로 상태를 조회한다.
-        - 매칭 상태는 WAITING, MATCHED, EXPIRED 중 하나이다.
-        - WAITING이면 아직 매칭이 완료되지 않은 상태이다.
-        - MATCHED이면 4인 매칭이 완료된 상태이며 chatRoomId를 반환한다.
-        - EXPIRED이면 당일 매칭이 성사되지 않아 만료된 상태이다.
+        - 매칭 상태는 WAITING, MATCHING, MATCHED, EXPIRED 중 하나이다.
+        - WAITING이면 상대가 결정되지 않았고 matchId는 NULL이다.
+        - MATCHING이면 두 요청이 같은 Match에 연결됐으나 ChatRoom 생성이 끝나지 않았을 수 있다. chatRoomId는 NULL일 수 있다.
+        - MATCHED이면 Chat Server의 ChatRoom 생성이 완료되어 chatRoomId를 반환한다.
+        - EXPIRED이면 당일 매칭되지 않아 만료된 상태이며 matchId는 NULL이다.
         - 요청 소유자만 조회할 수 있다.
         - 존재하지 않는 요청 또는 현재 사용자 소유가 아닌 요청은 동일하게 404 처리한다.
       responses:
@@ -4688,6 +4674,11 @@ paths:
                         format: int64
                       status:
                         type: string
+                        enum:
+                        - WAITING
+                        - MATCHING
+                        - MATCHED
+                        - EXPIRED
                       chatRoomId:
                         nullable: true
               example:
@@ -4751,14 +4742,15 @@ paths:
   "/api/chat-rooms/{chatRoomId}/members":
     post:
       tags:
-      - CHAT / 채팅
+      - CHAT SERVER / 채팅 서버
       summary: 채팅방 입장
       operationId: postApiChatRoomsChatRoomIdMembers
       description: |-
         필수
         chatRoomId: Long
 
-        매칭 참가자만 입장 가능. 최초 실제 입장 시 joined_at을 기록하며 left_at이 설정된 사용자는 재입장할 수 없다.
+        Chat Server 소유 API이며 현재 Backend Controller는 제공하지 않는다.
+        매칭된 두 참가자만 입장할 수 있다. 최초 입장 시각을 기록하며 명시적으로 퇴장한 사용자는 재입장할 수 없다.
       responses:
         '200':
           description: 기존 participant의 입장 상태 변경이 완료되었으므로 200.
@@ -4868,17 +4860,17 @@ paths:
   "/api/chat-rooms/{chatRoomId}":
     get:
       tags:
-      - CHAT / 채팅
+      - CHAT SERVER / 채팅 서버
       summary: 채팅방 정보 조회
       operationId: getApiChatRoomsChatRoomId
       description: |-
         필수
         chatRoomId: Long
 
-        참가자에게 채팅방 정보와 참여자 닉네임만 노출한다.
+        Chat Server 소유 API이며 현재 Backend Controller는 제공하지 않는다. 참가자에게 1:1 채팅방 정보와 두 참가자의 닉네임을 반환한다.
       responses:
         '200':
-          description: "접근 가능한 채팅방 메타데이터 조회 성공이므로 200.\n\nsenderId는 \nchat_room_participants.user_id\nusers.nickname\n을 이용하므로 테이블 변경은 없다"
+          description: 접근 가능한 Chat Server 채팅방 메타데이터 조회 성공이므로 200.
           content:
             application/json:
               schema:
@@ -4911,10 +4903,6 @@ paths:
                     nickname: 가나다
                   - userId: 34
                     nickname: 나다라
-                  - userId: 56
-                    nickname: 다라마
-                  - userId: 78
-                    nickname: 라마바
         '400':
           description: chatRoomId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.
           content:
@@ -4997,14 +4985,14 @@ paths:
   "/api/chat-rooms/{chatRoomId}/messages":
     get:
       tags:
-      - CHAT / 채팅
+      - CHAT SERVER / 채팅 서버
       summary: 채팅 메시지 내역 조회
       operationId: getApiChatRoomsChatRoomIdMessages
       description: |-
         필수
         chatRoomId: Long
 
-        Cursor 페이지네이션, 페이지 크기 기본값은 30 (최대값 제한 100). 방이 물리 삭제되면 메시지 이력도 더 이상 조회할 수 없다.
+        Chat Server 소유 API이며 현재 Backend Controller는 제공하지 않는다. Cursor 페이지네이션, 기본 크기 30·최대 100을 사용한다. 한 참가자가 퇴장한 뒤에도 남은 사용자는 기존 이력을 조회할 수 있다. 두 참가자 모두 퇴장하거나 KST 00:00에 방이 종료되면 방과 메시지는 물리 삭제되어 이력을 조회할 수 없다.
       responses:
         '200':
           description: |-
@@ -5152,14 +5140,16 @@ paths:
   "/api/chat-rooms/{chatRoomId}/leave":
     post:
       tags:
-      - CHAT / 채팅
+      - CHAT SERVER / 채팅 서버
       summary: 채팅방 퇴장
       operationId: postApiChatRoomsChatRoomIdLeave
       description: |-
         필수
         chatRoomId: Long
 
-        participant.left_at을 기록하고 남은 참가자에게 퇴장 사실을 알린다. 4명 모두 퇴장하면 방을 물리 삭제할 수 있다. 자정에도 방을 물리 삭제하는 정책.
+        Chat Server 소유 API이며 현재 Backend Controller는 제공하지 않는다.
+        한 명이 퇴장하면 left_at을 기록하고 재입장을 금지한다. 남은 사용자는 기존 메시지를 조회할 수 있지만 새 메시지를 보낼 수 없다.
+        두 참가자가 모두 퇴장하면 ChatRoom과 종속 participant/message를 물리 삭제한다. KST 00:00에는 ROOM_CLOSED 이벤트를 전달한 뒤 동일하게 물리 삭제한다. soft delete는 사용하지 않는다.
       responses:
         '200':
           description: 참가자의 퇴장 상태 변경이 정상 완료되었으므로 200.
