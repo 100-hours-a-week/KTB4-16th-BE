@@ -74,6 +74,11 @@ public class MonthlyReportPreparationChunkService {
             }
 
             var summary = records.findMonthlyRecordSummary(userId, start, end).orElseThrow();
+            if (summary.recordCount() == 0L) {
+                // 대상 ID를 읽은 뒤 기간 기록이 모두 삭제된 경우 빈 평균값과 리포트를 저장하지 않는다.
+                skipped++;
+                continue;
+            }
             var topPlace = records.findMonthlyTopPlaces(userId, start, end, PageRequest.of(0, 1));
             var topArtist = records.findMonthlyTopArtists(userId, start, end, PageRequest.of(0, 1));
             String artist = topArtist.isEmpty() ? null : topArtist.getFirst().artistName();

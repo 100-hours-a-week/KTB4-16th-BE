@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.report.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
@@ -148,5 +149,45 @@ class MonthlyReportPreparationServiceTest {
         assertThat(batch.skippedCount()).isZero();
         verify(reports, never()).save(any());
         verify(moods, never()).save(any());
+    }
+
+    // 대상 ID 조회 후 기록이 모두 삭제된 사용자는 빈 집계를 저장하지 않고 건너뛴다.
+    @Test
+    void skipsUserWhenRecordsDisappearBeforeChunkAggregation() {
+        YearMonth target = YearMonth.of(2026, 9);
+        LocalDateTime start = target.atDay(1).atStartOfDay();
+        LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
+        when(reports.findByUser_UserIdAndReportYearAndReportMonth(7L, (short) 2026, (short) 9))
+                .thenReturn(Optional.empty());
+        when(reports.findByUser_UserIdAndReportYearAndReportMonth(8L, (short) 2026, (short) 9))
+                .thenReturn(Optional.empty());
+        when(records.findMonthlyRecordSummary(7L, start, end))
+                .thenReturn(Optional.of(new MonthlyRecordSummary(0L, null)));
+        when(records.findMonthlyRecordSummary(8L, start, end))
+                .thenReturn(Optional.of(new MonthlyRecordSummary(2L, 4.2)));
+        when(records.findMonthlyTopPlaces(8L, start, end, PageRequest.of(0, 1))).thenReturn(List.of());
+        when(records.findMonthlyTopArtists(8L, start, end, PageRequest.of(0, 1)))
+                .thenReturn(List.of(new MonthlyTopArtist("뮤로")));
+        when(users.getReferenceById(8L)).thenReturn(User.signup("active@example.test", "hash", "활성"));
+        when(reports.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
+
+        var batch = new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(7L, 8L));
+
+        assertThat(batch.userIds()).containsExactly(8L);
+        assertThat(batch.createdCount()).isEqualTo(1);
+        assertThat(batch.skippedCount()).isEqualTo(1);
+        verify(records, never()).findMonthlyTopPlaces(
+                eq(7L), eq(start), eq(end), eq(PageRequest.of(0, 1)));
+        verify(records, never()).findMonthlyTopArtists(
+                eq(7L), eq(start), eq(end), eq(PageRequest.of(0, 1)));
+        verify(records).findMonthlyTopPlaces(8L, start, end, PageRequest.of(0, 1));
+        verify(records).findMonthlyTopArtists(8L, start, end, PageRequest.of(0, 1));
+        ArgumentCaptor<MonthlyReport> report = ArgumentCaptor.forClass(MonthlyReport.class);
+        verify(reports).save(report.capture());
+        assertThat(report.getValue().getRecordCount()).isEqualTo(2);
+        ArgumentCaptor<MonthlyMoodStat> stat = ArgumentCaptor.forClass(MonthlyMoodStat.class);
+        verify(moods).save(stat.capture());
+        assertThat(stat.getValue().getAverageMoodScore()).isEqualByComparingTo("4.2");
     }
 }

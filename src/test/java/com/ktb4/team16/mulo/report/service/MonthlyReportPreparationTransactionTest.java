@@ -56,6 +56,7 @@ class MonthlyReportPreparationTransactionTest {
             assertThat(transactions.rollbacks).isZero();
             assertThat(transactions.committedUserCounts).containsExactly(0, 500, 500, 1);
             assertThat(transactions.committedActiveUserLookupCounts).containsExactly(1, 0, 0, 0);
+            assertThat(transactions.readOnlyTransactions).containsExactly(true, false, false, false);
         }
     }
 
@@ -168,6 +169,7 @@ class MonthlyReportPreparationTransactionTest {
         private final List<Integer> rolledBackUserCounts = new ArrayList<>();
         private final List<Integer> committedActiveUserLookupCounts = new ArrayList<>();
         private final List<Integer> rolledBackActiveUserLookupCounts = new ArrayList<>();
+        private final List<Boolean> readOnlyTransactions = new ArrayList<>();
 
         // 현재 묶음에서 조회한 사용자 수를 트랜잭션 결과와 연결한다.
         void recordUserLookup() {
@@ -188,6 +190,7 @@ class MonthlyReportPreparationTransactionTest {
         @Override
         // 이 테스트 트랜잭션은 외부 자원을 시작하지 않는다.
         protected void doBegin(Object transaction, TransactionDefinition definition) {
+            readOnlyTransactions.add(definition.isReadOnly());
             currentUserLookups = 0;
             currentActiveUserLookups = 0;
         }
