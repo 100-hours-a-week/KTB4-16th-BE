@@ -52,7 +52,7 @@
 | AI 추천 플레이리스트 | 현재 목록 조회·현재 좌표 기반 생성·기존 목록 유지 처리 구현 | 구현됨 |
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
 | 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
-| 매칭 요청 생성 | POST API와 WAITING→MATCHING 후보 결정 구현 | 구현됨 |
+| 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정 및 KST 23:00 신규 요청 차단 구현 | 구현됨 |
 | 매칭 상태 조회·Chat Server 연동·채팅 | OpenAPI 계약 보존, 현재 Backend에 미구현 | contract-only |
 | AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
 
@@ -281,7 +281,7 @@
 |---|---|---|---|---|
 | `MATCH-001` | **확정** | 매칭 구성 | 같은 `VoteQuestion`에 답한 서로 반대 선택지(A/B)의 사용자 2명을 1:1로 매칭한다. | 최신 사용자 확정 |
 | `MATCH-002` | **확정** | 매칭 후보 순서 | 같은 질문의 반대 선택지 WAITING 후보 중 `created_at ASC`, 동률이면 `match_request_id ASC` 순서로 FIFO 선택한다. | 최신 사용자 확정 |
-| `MATCH-003` | **확정·미구현** | 매칭 운영 종료 | KST 22:59:59까지 신규 요청을 허용하고 23:00부터 차단한다. 23:00에 남은 WAITING만 EXPIRED 처리하며 이미 MATCHING인 pair는 만료하지 않는다. | 최신 사용자 확정 |
+| `MATCH-003` | **확정·부분 구현** | 매칭 운영 종료 | KST 22:59:59까지 신규 요청을 허용하고 23:00부터 차단한다. 23:00에 남은 WAITING만 EXPIRED 처리하며 이미 MATCHING인 pair는 만료하지 않는다. 신규 요청 차단은 구현됐고 WAITING 만료는 미구현이다. | 최신 사용자 확정 / 현재 `MatchService.createMatchRequest` |
 | `MATCH-004` | **현재 설계** | 매칭 요청 기준 답변 | 매칭 요청은 현재 사용자가 소유한 오늘 날짜의 유효한 투표 답변을 기준으로 한다. | 현재 `MatchService.createMatchRequest` |
 | `MATCH-005` | **확정** | 잘못된 voteAnswerId | 미존재·오늘 질문 아님은 400, 타인 소유는 403으로 구분한다. 오류 코드는 각각 `MATCH_VOTE_ANSWER_NOT_FOUND`, `MATCH_VOTE_ANSWER_NOT_TODAY`, `MATCH_VOTE_ANSWER_NOT_OWNED`다. | 최신 사용자 확정 및 현재 ErrorCode |
 | `MATCH-006` | **현재 설계** | 답변당 요청 1회 | 하나의 `vote_answer`에는 하나의 `match_request`만 생성할 수 있으며 중복은 409 `MATCH_REQUEST_ALREADY_EXISTS`다. | Flyway V1 UNIQUE / 현재 서비스 |
@@ -294,7 +294,7 @@
 
 현재 `POST /api/match-requests` 구현은 VoteAnswer 조회·소유자/오늘 질문 검증·중복 확인 후 WAITING 요청을 저장하고, 같은 질문의 반대 선택지 WAITING 후보를 FIFO로 최대 1개 조회한다. 후보가 없으면 WAITING으로 응답하고, 후보가 있으면 Match를 생성해 두 요청을 같은 Match에 연결하고 MATCHING으로 변경한다. API의 201은 실제 ChatRoom 생성 완료가 아니라 MatchRequest 자원 생성 성공을 의미한다.
 
-미구현 범위: GET 매칭 상태 조회, MATCHING→MATCHED 전이, Backend→Chat Server 호출과 실패 복구, 23:00 신규 요청 차단 및 WAITING 만료 Scheduler.
+미구현 범위: GET 매칭 상태 조회, MATCHING→MATCHED 전이, Backend→Chat Server 호출과 실패 복구, 23:00에 남은 WAITING 만료 Scheduler.
 
 ## 채팅
 

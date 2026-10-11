@@ -15,6 +15,7 @@ import com.ktb4.team16.mulo.vote.entity.VoteAnswer;
 import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
 import java.time.Clock;
 import java.time.LocalDate;
+import java.time.LocalTime;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -37,6 +38,10 @@ public class MatchService {
             Long userId,
             MatchRequestCreateRequest request
     ) {
+        if (!LocalTime.now(clock).isBefore(LocalTime.of(23, 0))) {
+            throw new MatchDomainException(ErrorCode.MATCH_REQUEST_CLOSED);
+        }
+
         VoteAnswer voteAnswer = voteAnswerRepository.findById(request.voteAnswerId())
                 .orElseThrow(() -> new MatchDomainException(ErrorCode.MATCH_VOTE_ANSWER_NOT_FOUND));
 

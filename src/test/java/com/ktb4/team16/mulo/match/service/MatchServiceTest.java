@@ -7,6 +7,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
@@ -25,12 +26,16 @@ import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
 import java.time.Clock;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
@@ -75,6 +80,43 @@ class MatchServiceTest {
                 .isEqualTo(ErrorCode.MATCH_VOTE_ANSWER_NOT_FOUND);
 
         verify(matchRequestRepository, never()).saveAndFlush(any());
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"23:00:00", "23:00:01", "23:59:59"})
+    void rejectsNewMatchRequestAtOrAfterCutoffWithoutDatabaseAccess(String time) {
+        matchService = serviceAt(LocalTime.parse(time));
+
+        assertThatThrownBy(() -> matchService.createMatchRequest(
+                11L, new MatchRequestCreateRequest(101L)))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.MATCH_REQUEST_CLOSED);
+
+        verifyNoInteractions(matchRepository, matchRequestRepository,
+                voteAnswerRepository, voteQuestionRepository);
+    }
+
+    @Test
+    void allowsNewMatchRequestBeforeCutoff() {
+        stubWaitingRequestFor(TODAY);
+        matchService = serviceAt(LocalTime.of(22, 59, 59));
+
+        var response = matchService.createMatchRequest(11L, new MatchRequestCreateRequest(101L));
+
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.WAITING);
+        verify(matchRequestRepository).saveAndFlush(any(MatchRequest.class));
+    }
+
+    @Test
+    void allowsTimePolicyAtMidnightAndChecksTodaysQuestionSeparately() {
+        stubWaitingRequestFor(TODAY);
+        matchService = serviceAt(LocalTime.MIDNIGHT);
+
+        var response = matchService.createMatchRequest(11L, new MatchRequestCreateRequest(101L));
+
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.WAITING);
+        verify(matchRequestRepository).saveAndFlush(any(MatchRequest.class));
     }
 
     @Test
@@ -223,6 +265,28 @@ class MatchServiceTest {
         User user = User.signup("user" + userId + "@example.test", "password-hash", "user" + userId);
         ReflectionTestUtils.setField(user, "userId", userId);
         return user;
+    }
+
+    private MatchService serviceAt(LocalTime time) {
+        Clock clock = Clock.fixed(LocalDateTime.of(TODAY, time).atZone(KST).toInstant(), KST);
+        return new MatchService(
+                matchRepository, matchRequestRepository, voteAnswerRepository, voteQuestionRepository, clock);
+    }
+
+    private void stubWaitingRequestFor(LocalDate voteDate) {
+        VoteQuestion question = question(voteDate);
+        VoteAnswer requesterAnswer = answer(101L, requester, question);
+        when(voteAnswerRepository.findById(101L)).thenReturn(Optional.of(requesterAnswer));
+        when(matchRequestRepository.existsByVoteAnswer_VoteAnswerId(101L)).thenReturn(false);
+        when(voteQuestionRepository.findByVoteQuestionIdForUpdate(201L)).thenReturn(Optional.of(question));
+        when(matchRequestRepository.saveAndFlush(any(MatchRequest.class)))
+                .thenAnswer(invocation -> {
+                    MatchRequest request = invocation.getArgument(0);
+                    ReflectionTestUtils.setField(request, "matchRequestId", 301L);
+                    return request;
+                });
+        when(matchRequestRepository.findOppositeWaitingForUpdate(101L, PageRequest.of(0, 1)))
+                .thenReturn(List.of());
     }
 
     private VoteQuestion question(LocalDate voteDate) {

@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.match.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.when;
 
 import com.google.cloud.storage.Storage;
 import com.ktb4.team16.mulo.integrationtest.IntegrationTestDatabaseGuard;
@@ -9,7 +10,9 @@ import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.dto.response.MatchRequestCreateResponse;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
+import java.time.Clock;
 import java.time.LocalDate;
+import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
@@ -34,6 +37,8 @@ import org.springframework.test.context.bean.override.mockito.MockitoBean;
 @ActiveProfiles("integration-test")
 class MatchConcurrencyMysqlIntegrationTest {
 
+    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
+
     @Autowired
     private DataSource dataSource;
 
@@ -46,6 +51,9 @@ class MatchConcurrencyMysqlIntegrationTest {
     @MockitoBean
     private Storage storage;
 
+    @MockitoBean
+    private Clock clock;
+
     private Long voteQuestionId;
     private Long waitingUserId;
     private Long requesterBUserId;
@@ -56,6 +64,8 @@ class MatchConcurrencyMysqlIntegrationTest {
 
     @BeforeEach
     void verifiesIsolatedDatabaseAndAppliedMigrations() throws Exception {
+        when(clock.instant()).thenReturn(LocalDate.now(KST).atTime(12, 0).atZone(KST).toInstant());
+        when(clock.getZone()).thenReturn(KST);
         IntegrationTestDatabaseGuard.verify(dataSource, jdbcTemplate);
     }
 
