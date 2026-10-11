@@ -1,0 +1,57 @@
+spring:
+  datasource:
+    url: ${MULO_INTEGRATION_TEST_DB_URL}
+    username: ${MULO_INTEGRATION_TEST_DB_USERNAME}
+    password: ${MULO_INTEGRATION_TEST_DB_PASSWORD}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 10
+  jpa:
+    hibernate:
+      ddl-auto: validate
+  flyway:
+    enabled: true
+    locations: classpath:db/migration
+
+gcs:
+  project-id: mulo-integration-test
+  bucket-name: mulo-integration-test
+
+mulo:
+  jwt:
+    secret: ${MULO_INTEGRATION_TEST_JWT_SECRET}
+    access-token-ttl: PT1H
+    refresh-token-ttl: P7D
+  security:
+    allowed-origins:
+      - http://localhost:3000
+    cookie-secure: false
+
+kakao:
+  rest-api-key: integration-test-only
+
+kma:
+  base-url: https://example.invalid/weather
+  service-key: integration-test-only
+
+spotify:
+  client-id: integration-test-only
+  client-secret: integration-test-only
+  accounts-base-url: https://example.invalid
+  api-base-url: https://example.invalid
+  connect-timeout: PT2S
+  read-timeout: PT3S
+  user-limit-30-seconds: 8
+  user-limit-60-seconds: 15
+  global-limit-30-seconds: 80
+
+ai:
+  base-url: http://127.0.0.1:9
+  internal-token: integration-test-only
+  connect-timeout: PT1S
+  read-timeout: PT1S
+  mock-enabled: true
+
+report:
+  operation:
+    token: integration-test-only
