@@ -754,7 +754,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자가 취향 투표 질문에서 선택한 답변을 저장하는 테이블이다. 어떤 사용자가 어떤 질문에서 어떤 선택지를 선택했는지 기록하며, 이후 동일 질문에서 A 선택 2명과 B 선택 2명을 구성하는 매칭의 기준 데이터로 사용한다.
+사용자가 취향 투표 질문에서 선택한 답변을 저장하는 테이블이다. 어떤 사용자가 어떤 질문에서 어떤 선택지를 선택했는지 기록하며, 이후 동일 질문에서 A 선택 1명과 B 선택 1명을 구성하는 매칭의 기준 데이터로 사용한다.
 
 #### 2. 컬럼 정의
 
@@ -763,7 +763,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `vote_answer_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 취향 투표 답변 고유 ID | 각각의 투표 답변을 고유하게 식별하기 위해 사용하며 데이터 증가 가능성을 고려해 `BIGINT`를 사용한다. | 개별 투표 답변을 식별하고 매칭 등의 다른 데이터에서 특정 답변을 참조할 수 있게 한다. |
 | `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 사용자가 답변한 취향 투표 질문 ID | `vote_questions.vote_question_id`를 참조한다. | 어떤 질문에 대한 답변인지 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 취향 투표에 참여한 사용자 ID | `users.user_id`를 참조한다. | 누가 해당 답변을 선택했는지 식별한다. |
-| `selected_option` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자가 선택한 선택지 | 두 개의 선택지 중 어떤 것을 선택했는지 실제 선택지 텍스트로 저장한다. | 동일 질문의 매칭 대상에서 A/B 선택 인원을 판별하여 A 2명 + B 2명 구성을 만드는 데 사용한다. |
+| `selected_option` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자가 선택한 선택지 | 두 개의 선택지 중 어떤 것을 선택했는지 실제 선택지 텍스트로 저장한다. | 동일 질문의 매칭 대상에서 A/B 선택 인원을 판별하여 A 1명 + B 1명 구성을 만드는 데 사용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사용자가 투표한 시각 | 사용자가 실제로 답변을 제출한 시점을 기록한다. | 투표 참여 시점을 확인하고 답변 이력을 관리한다. |
 
 #### 3. 제약조건
@@ -789,7 +789,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 #### 1. 테이블 설명
 
 사용자가 취향 투표 답변을 기준으로 랜덤 채팅 매칭을 요청한 정보를 저장하는 테이블이다.
-매칭 요청의 대기, 완료, 만료 상태를 관리한다. 동일 질문에서 A 선택 사용자 2명과 B 선택 사용자 2명이 23:00 이전에 모이면 매칭이 완료되어 생성된 채팅방을 해당 요청과 연결한다. 23:00 시점까지 매칭되지 않은 요청은 `EXPIRED`로 변경한다.
+매칭 요청의 대기, 완료, 만료 상태를 관리한다. 동일 질문에서 A 선택 사용자 1명과 B 선택 사용자 1명이 23:00 이전에 모이면 매칭이 완료되어 생성된 채팅방을 해당 요청과 연결한다. 23:00 시점까지 매칭되지 않은 요청은 `EXPIRED`로 변경한다.
 
 #### 2. 컬럼 정의
 
@@ -797,7 +797,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `match_request_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 매칭 요청 고유 ID | 각 매칭 요청을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 개별 매칭 요청을 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭을 요청한 사용자 ID | `users.user_id`를 참조하여 요청자를 식별한다. | 누가 매칭을 요청했는지 확인한다. |
-| `vote_answer_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭 기준이 되는 취향 투표 답변 ID | `vote_answers.vote_answer_id`를 참조하여 사용자가 어떤 질문에서 어떤 답변을 선택했는지 연결한다. | 동일한 `vote_question_id`를 기준으로 A 선택 2명과 B 선택 2명을 구성하는 매칭에 사용한다. |
+| `vote_answer_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭 기준이 되는 취향 투표 답변 ID | `vote_answers.vote_answer_id`를 참조하여 사용자가 어떤 질문에서 어떤 답변을 선택했는지 연결한다. | 동일한 `vote_question_id`를 기준으로 A 선택 1명과 B 선택 1명을 구성하는 매칭에 사용한다. |
 | `status` | `ENUM('WAITING', 'MATCHED', 'EXPIRED')` | - | NOT NULL | `WAITING` | - | 매칭 요청 상태
 ( `WAITING`, `MATCHED`, `EXPIRED`) | 매칭 요청 상태가 `WAITING`, `MATCHED`, `EXPIRED` 세 가지로 확정되어 있으므로 허용 가능한 상태값을 제한하기 위해 `ENUM`을 사용한다. | 매칭 요청이 대기 중인지, 매칭 완료되어 채팅방에 배정되었는지, 정책상 만료된 상태인지를 구분한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 매칭 요청 생성 시각 | 실제 매칭 요청이 발생한 시점을 기록한다. | 매칭 요청 시점 기록, 대기 순서 확인 및 일자별 요청 조회 등에 활용한다. |
@@ -820,7 +820,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_match_complete` | 동일한 `vote_question_id`의 `WAITING` 요청 중 A 선택 사용자 2명과 B 선택 사용자 2명이 23:00 이전에 모이면 4인 채팅방을 생성하고 해당 4개 요청을 `MATCHED`로 변경한다. |
+| `rule_match_complete` | 동일한 `vote_question_id`의 `WAITING` 요청 중 A 선택 사용자 1명과 B 선택 사용자 1명이 23:00 이전에 모이면 1:1 채팅방을 생성하고 해당 2개 요청을 `MATCHED`로 변경한다. |
 | `rule_match_request_cutoff` | 당일 23:00 이후에는 새로운 매칭 요청을 생성하지 않는다. |
 | `rule_match_expire` | 당일 23:00 시점에 아직 `WAITING` 상태인 매칭 요청은 모두 `EXPIRED`로 변경한다. 23:00 이후에는 기존 `WAITING` 요청을 대상으로 추가 매칭을 진행하지 않는다. |
 
@@ -838,15 +838,15 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-동일한 `vote_question_id`의 매칭 요청 중 A 선택 사용자 2명과 B 선택 사용자 2명이 모였을 때 생성되는 4인 채팅방을 저장하는 테이블이다. 채팅방 생성 시 매칭된 4명의 사용자가 배정되며, 이후 채팅 참여자와 메시지를 관리하는 기준이 된다. 채팅방은 생성 당일에만 유지되며, 자정이 되거나 참여자 4명이 모두 퇴장하면 삭제된다.
+동일한 `vote_question_id`의 매칭 요청 중 A 선택 사용자 1명과 B 선택 사용자 1명이 모였을 때 생성되는 1:1 채팅방을 저장하는 테이블이다. 채팅방 생성 시 매칭된 두 사용자가 배정되며, 이후 채팅 참여자와 메시지를 관리하는 기준이 된다. 채팅방은 생성 당일에만 유지되며, 자정이 되거나 두 참여자 모두 퇴장하면 삭제된다.
 
 #### 2. 컬럼 정의
 
 | 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `chat_room_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 채팅방 고유 ID | 각 채팅방을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 채팅 참여자와 메시지가 특정 채팅방을 참조할 때 기준 ID로 사용한다. |
-| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방 매칭의 기준이 된 취향 투표 질문 ID | 동일한 질문에서 A 선택 사용자 2명과 B 선택 사용자 2명을 한 채팅방으로 구성하므로 `vote_questions.vote_question_id`를 참조한다. | 어떤 취향 투표 질문을 기준으로 생성된 채팅방인지 식별한다. |
-| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 채팅방 생성 시각 | 4명의 사용자가 모여 채팅방이 실제 생성된 시점을 기록한다. | 채팅방 생성 시점을 확인한다. |
+| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방 매칭의 기준이 된 취향 투표 질문 ID | 동일한 질문에서 A 선택 사용자 1명과 B 선택 사용자 1명을 한 채팅방으로 구성하므로 `vote_questions.vote_question_id`를 참조한다. | 어떤 투표 질문을 기준으로 생성된 채팅방인지 식별한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 채팅방 생성 시각 | 두 사용자가 모여 채팅방이 실제 생성된 시점을 기록한다. | 채팅방 생성 시점을 확인한다. |
 
 #### 3. 제약조건
 
@@ -859,14 +859,14 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_chat_room_match_composition` | 하나의 채팅방은 동일한 `vote_question_id`에서 A 선택 사용자 2명과 B 선택 사용자 2명으로 구성한다. 선택지는 참여자의 `vote_answers.selected_option`에서 판별하며 `chat_rooms`에 단일 선택지 컬럼을 중복 저장하지 않는다. |
+| `rule_chat_room_match_composition` | 하나의 채팅방은 동일한 `vote_question_id`에서 A 선택 사용자 1명과 B 선택 사용자 1명으로 구성한다. 선택지는 참여자의 `vote_answers.selected_option`에서 판별하며 `chat_rooms`에 단일 선택지 컬럼을 중복 저장하지 않는다. |
 
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
 | `vote_questions` | `chat_rooms.vote_question_id` → `vote_questions.vote_question_id` | N:1 | 하나의 취향 투표 질문을 기준으로 여러 개의 채팅방이 생성될 수 있으며, 각 채팅방은 하나의 질문을 기준으로 한다. |
-| `chat_room_participants` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 매칭이 완료된 4명의 참여자 정보가 생성되며, 각 참여자는 하나의 채팅방에 속한다. |
+| `chat_room_participants` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여자는 하나의 채팅방에 속한다. |
 | `chat_messages` | `chat_messages.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 여러 개의 메시지가 존재할 수 있으며, 각 메시지는 하나의 채팅방에 속한다. |
 
 ---
@@ -900,15 +900,15 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_chat_room_join` | 매칭 완료 시 4명의 참여자 정보를 먼저 생성하고, 사용자가 실제 채팅방에 입장하면 `joined_at`을 기록한다. |
+| `rule_chat_room_join` | 매칭 완료 시 두 참여자의 정보를 먼저 생성하고, 사용자가 실제 채팅방에 입장하면 `joined_at`을 기록한다. |
 | `rule_chat_room_reentry` | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없다. |
-| `rule_chat_room_delete` | 채팅방 참여자 4명이 모두 퇴장했거나 자정이 되면 채팅방을 삭제한다. |
+| `rule_chat_room_delete` | 채팅방 두 참여자가 모두 퇴장했거나 자정이 되면 채팅방을 삭제한다. |
 
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
-| `chat_rooms` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 매칭이 완료된 4명의 참여자 정보가 생성되며, 각 참여 정보는 하나의 채팅방에 속한다. 채팅방이 삭제되면 해당 참여자 정보도 함께 삭제된다. |
+| `chat_rooms` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여 정보는 하나의 채팅방에 속한다. 채팅방이 삭제되면 해당 참여자 정보도 함께 삭제된다. |
 | `users` | `chat_room_participants.user_id` → `users.user_id` | N:1 | 한 사용자는 서로 다른 여러 채팅방에 참여할 수 있으며, 각 참여 정보는 한 명의 사용자에게 속한다. |
 
 ---

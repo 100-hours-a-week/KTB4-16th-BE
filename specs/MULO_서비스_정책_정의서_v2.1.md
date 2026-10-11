@@ -278,7 +278,7 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `MATCH-001` | **확정** | 매칭 구성 | 동일 `vote_question_id`에서 A 선택 사용자 2명 + B 선택 사용자 2명이 모이면 4인 채팅방을 생성한다. | API 명세 상세2차 정책 요약 R23 / 테이블 정의서 §18-19 |
+| `MATCH-001` | **확정** | 매칭 구성 | 동일 `vote_question_id`에서 A 선택 사용자 1명 + B 선택 사용자 1명이 모이면 1:1 채팅방을 생성하고 두 매칭 요청을 `MATCHED`로 변경한다. | 사용자 확정 2026-10-11 / 테이블 정의서 §18-19 |
 | `MATCH-002` | **확정** | 매칭 운영 종료 | 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다. | 사용자 확정 / API 명세 상세2차 R238,R246 |
 | `MATCH-003` | **확정** | 23시 대기 요청 만료 | 당일 23:00 시점에 남아 있는 모든 WAITING 요청을 EXPIRED로 변경하고 이후 추가 매칭하지 않는다. | 사용자 확정 / API 명세 상세2차 정책 요약 R23 |
 | `MATCH-004` | **현재 설계** | 매칭 요청 기준 답변 | 매칭 요청은 현재 사용자가 소유한 오늘 날짜의 유효한 투표 답변을 기준으로 한다. | API 명세 상세2차 R238-R246 |
@@ -295,9 +295,9 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `CHAT-001` | **현재 설계** | 채팅방 수명 | 채팅방은 생성 당일에만 유지하며 자정 또는 참여자 4명 모두 퇴장 시 물리 삭제한다. | 테이블 정의서 6차 §19-20 / API 명세 상세2차 R279-R285 |
-| `CHAT-002` | **확정** | 방 단일 선택지 제거 | A2+B2 방이므로 `chat_rooms.selected_option`을 두지 않고 각 참여자의 선택은 `vote_answers.selected_option`에서 판별한다. | 테이블 정의서 6차 §19 / 최근 정책 동기화 |
-| `CHAT-003` | **현재 설계** | 참가자 선등록 | 매칭 완료 시 4명의 `chat_room_participants`를 먼저 생성한다. | 테이블 정의서 6차 §20 |
+| `CHAT-001` | **현재 설계** | 채팅방 수명 | 채팅방은 생성 당일에만 유지하며 자정 또는 두 참여자 모두 퇴장 시 물리 삭제한다. | 테이블 정의서 6차 §19-20 / API 명세 상세2차 R279-R285 / 사용자 확정 2026-10-11 |
+| `CHAT-002` | **확정** | 방 단일 선택지 제거 | A1+B1 방이므로 `chat_rooms.selected_option`을 두지 않고 각 참여자의 선택은 `vote_answers.selected_option`에서 판별한다. | 테이블 정의서 6차 §19 / 사용자 확정 2026-10-11 |
+| `CHAT-003` | **현재 설계** | 참가자 선등록 | 매칭 완료 시 두 명의 `chat_room_participants`를 먼저 생성한다. | 테이블 정의서 6차 §20 / 사용자 확정 2026-10-11 |
 | `CHAT-004` | **현재 설계** | 최초 입장 | 실제 최초 채팅방 입장 시 `joined_at`을 기록한다. | API 명세 상세2차 R256-R262 |
 | `CHAT-005` | **현재 설계** | 재입장 금지 | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없고 403 `CHAT_REENTRY_FORBIDDEN`이다. | API 명세 상세2차 R259,R262 |
 | `CHAT-006` | **현재 설계** | 참가자 접근 은닉 | 삭제된 방 또는 비참가자의 접근은 동일한 404 `CHAT_ROOM_NOT_FOUND`로 처리한다. | API 명세 상세2차 R262,R268,R278,R285 |
@@ -323,6 +323,7 @@
 | `NOTI-008` | **현재 설계** | Target 없는 알림 UI | `targetId=null`인 과거 알림은 표시하되 해당 Target으로 이동/처리하는 기능은 비활성화한다. | API 명세 상세2차 정책 요약 R32 |
 | `NOTI-009` | **현재 설계** | 알림 삭제 범위 | 알림 삭제는 알림 자체만 삭제하고 연결된 Target 리소스는 삭제하지 않는다. | API 명세 상세2차 R301-R306 |
 | `NOTI-010` | **현재 설계** | 알림 소유권 은닉 | 읽음/삭제 시 미존재 또는 타인 소유 알림은 404 `NOTIFICATION_NOT_FOUND`로 처리한다. | API 명세 상세2차 R298,R304,R306 |
+| `NOTI-011` | **확정** | 매칭 완료 알림 | 동일 `vote_question_id`에서 A/B 선택 사용자 각 1명으로 구성된 매칭이다. Chat DB에서 두 참가자의 선등록 완료가 확인된 뒤 매칭당 `MATCH_COMPLETED` Outbox 이벤트 1건을 발행한다. Payload v1은 `matchParticipantCount=2`와 중복 없는 `recipientUserIds` 두 개를 포함하고, 이벤트 처리 시 수신자별 알림 1건씩 총 2건을 생성한다. | 사용자 확정 2026-10-11 / MULO V2 알림 통합 프롬프트 §3.1·§5.2 / Flyway V6 |
 
 
 ## 목록·페이지네이션
@@ -365,7 +366,7 @@
 | ID | 대상 | 수정 필요 내용 |
 |---|---|---|
 | `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
-| `SYNC-002` | `chat_rooms.selected_option` | A2+B2 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
+| `SYNC-002` | `chat_rooms.selected_option` | A1+B1 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
 | `SYNC-003` | `record_drafts` | 정책상 V1 제외지만 Flyway V1에 실제 테이블이 존재한다. 기능에서 사용하지 않으며 삭제 여부는 별도 migration 결정으로 남긴다. |
 | `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
 | `SYNC-005` | AI 오류 코드 | 기존 `AI_API_ERROR` 표기는 `AI_SERVICE_ERROR`로 통일한다. 최소 기억 검색 API와 AI 추천 API 문구를 함께 점검한다. |
