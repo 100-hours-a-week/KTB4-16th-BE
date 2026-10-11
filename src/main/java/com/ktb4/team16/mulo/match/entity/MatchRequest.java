@@ -69,4 +69,11 @@ public class MatchRequest {
         this.match = match;
         this.status = MatchRequestStatus.MATCHING;
     }
+
+    public void expire() {
+        if (this.status != MatchRequestStatus.WAITING || this.match != null) {
+            throw new IllegalStateException("대기 중인 미매칭 요청만 만료할 수 있습니다.");
+        }
+        this.status = MatchRequestStatus.EXPIRED;
+    }
 }

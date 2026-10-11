@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.match.repository;
 
+import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
 import com.ktb4.team16.mulo.match.entity.MatchRequest;
 import jakarta.persistence.LockModeType;
 import java.util.List;
@@ -36,5 +37,19 @@ public interface MatchRequestRepository extends JpaRepository<MatchRequest, Long
     List<MatchRequest> findOppositeWaitingForUpdate(
             @Param("requesterVoteAnswerId") Long requesterVoteAnswerId,
             Pageable pageable
+    );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT request
+            FROM MatchRequest request
+            JOIN request.voteAnswer answer
+            WHERE answer.voteQuestion.voteQuestionId = :voteQuestionId
+                AND request.status = :status
+            ORDER BY request.matchRequestId ASC
+            """)
+    List<MatchRequest> findByVoteQuestionIdAndStatusForUpdate(
+            @Param("voteQuestionId") Long voteQuestionId,
+            @Param("status") MatchRequestStatus status
     );
 }

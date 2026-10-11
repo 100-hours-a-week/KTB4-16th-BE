@@ -31,6 +31,7 @@ import java.time.LocalTime;
 import java.time.ZoneId;
 import java.util.List;
 import java.util.Optional;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
@@ -106,6 +107,35 @@ class MatchServiceTest {
 
         assertThat(response.data().status()).isEqualTo(MatchRequestStatus.WAITING);
         verify(matchRequestRepository).saveAndFlush(any(MatchRequest.class));
+    }
+
+    @Test
+    void rejectsRequestThatObtainsQuestionLockAfterCutoff() {
+        AtomicReference<Instant> now = new AtomicReference<>(
+                LocalDateTime.of(TODAY, LocalTime.of(22, 59, 59)).atZone(KST).toInstant());
+        Clock changingClock = mock(Clock.class);
+        when(changingClock.getZone()).thenReturn(KST);
+        when(changingClock.instant()).thenAnswer(invocation -> now.get());
+
+        VoteQuestion question = mock(VoteQuestion.class);
+        when(question.getVoteQuestionId()).thenReturn(201L);
+        VoteAnswer requesterAnswer = answer(101L, requester, question);
+        when(voteAnswerRepository.findById(101L)).thenReturn(Optional.of(requesterAnswer));
+        when(matchRequestRepository.existsByVoteAnswer_VoteAnswerId(101L)).thenReturn(false);
+        when(voteQuestionRepository.findByVoteQuestionIdForUpdate(201L)).thenAnswer(invocation -> {
+            now.set(LocalDateTime.of(TODAY, LocalTime.of(23, 0)).atZone(KST).toInstant());
+            return Optional.of(question);
+        });
+        matchService = new MatchService(
+                matchRepository, matchRequestRepository, voteAnswerRepository, voteQuestionRepository, changingClock);
+
+        assertThatThrownBy(() -> matchService.createMatchRequest(
+                11L, new MatchRequestCreateRequest(101L)))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.MATCH_REQUEST_CLOSED);
+
+        verify(matchRequestRepository, never()).saveAndFlush(any());
     }
 
     @Test

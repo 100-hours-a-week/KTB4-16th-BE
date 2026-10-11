@@ -56,6 +56,9 @@ public class MatchService {
         VoteQuestion voteQuestion = voteQuestionRepository.findByVoteQuestionIdForUpdate(
                         voteAnswer.getVoteQuestion().getVoteQuestionId())
                 .orElseThrow(() -> new IllegalStateException("투표 답변에 연결된 질문이 없습니다."));
+        if (!LocalTime.now(clock).isBefore(LocalTime.of(23, 0))) {
+            throw new MatchDomainException(ErrorCode.MATCH_REQUEST_CLOSED);
+        }
         LocalDate today = LocalDate.now(clock);
         if (!voteQuestion.getVoteDate().equals(today)) {
             throw new MatchDomainException(ErrorCode.MATCH_VOTE_ANSWER_NOT_TODAY);
