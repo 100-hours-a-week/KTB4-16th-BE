@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.report.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
@@ -26,6 +27,8 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.data.domain.PageRequest;
 
 @ExtendWith(MockitoExtension.class)
@@ -35,6 +38,23 @@ class MonthlyReportPreparationServiceTest {
     @Mock private UserRepository users;
     @Mock private MonthlyReportRepository reports;
     @Mock private MonthlyMoodStatRepository moods;
+    @Mock private MonthlyReportPreparationChunkService chunkService;
+
+    // 청크 트랜잭션 예외를 다시 던지면서 월과 청크 위치를 운영 로그에 남긴다.
+    @Test
+    @ExtendWith(OutputCaptureExtension.class)
+    void logsFailedChunkAndPropagatesItsException(CapturedOutput output) {
+        YearMonth target = YearMonth.of(2026, 9);
+        RuntimeException failure = new IllegalStateException("database unavailable");
+        when(chunkService.findActiveUserIds(target)).thenReturn(List.of(7L, 8L));
+        when(chunkService.prepareChunk(target, List.of(7L, 8L))).thenThrow(failure);
+
+        MonthlyReportPreparationService service = new MonthlyReportPreparationService(reports, chunkService);
+
+        assertThatThrownBy(() -> service.prepare(target)).isSameAs(failure);
+        assertThat(output.getOut())
+                .contains("month=2026-09", "chunkIndex=1", "chunkSize=2");
+    }
 
     @Test
     void preparesPendingSnapshotForActiveUser() {

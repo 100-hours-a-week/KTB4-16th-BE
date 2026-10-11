@@ -6,9 +6,11 @@ import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.function.Consumer;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class MonthlyReportPreparationService {
     // 롤백에 영향을 받는 최대 인원을 1,000명보다 낮추기 위해 선택한 사용자 기준이다.
@@ -33,8 +35,15 @@ public class MonthlyReportPreparationService {
         for (int offset = 0; offset < activeUserIds.size(); offset += USER_CHUNK_SIZE) {
             int limit = Math.min(offset + USER_CHUNK_SIZE, activeUserIds.size());
             List<Long> userChunk = List.copyOf(activeUserIds.subList(offset, limit));
-            MonthlyReportPreparationChunkService.PreparedChunk chunk =
-                    chunkService.prepareChunk(month, userChunk);
+            MonthlyReportPreparationChunkService.PreparedChunk chunk;
+            try {
+                chunk = chunkService.prepareChunk(month, userChunk);
+            } catch (RuntimeException | Error exception) {
+                // REQUIRES_NEW 트랜잭션이 롤백된 뒤 월과 청크 위치를 기록한다.
+                log.error("월간 리포트 집계 청크 실패: month={}, chunkIndex={}, chunkSize={}",
+                        month, offset / USER_CHUNK_SIZE + 1, userChunk.size(), exception);
+                throw exception;
+            }
             preparedUserIds.addAll(chunk.userIds());
             created += chunk.createdCount();
             skipped += chunk.skippedCount();
