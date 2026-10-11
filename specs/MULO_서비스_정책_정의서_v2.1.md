@@ -313,13 +313,13 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `NOTI-001` | **현재 설계** | 알림 유형 | 알림 유형은 MONTHLY_REPORT_CREATED, AI_PLAYLIST, MATCH_COMPLETED, FRIEND_REQUEST, FRIEND_ACCEPTED의 5종이다. | 테이블 정의서 6차 §22 |
+| `NOTI-001` | **확정** | 알림 유형 | 첫 알림 구현의 신규 유형은 MONTHLY_REPORT_CREATED, MATCH_COMPLETED, FRIEND_REQUEST, FRIEND_ACCEPTED의 4종이다. AI_PLAYLIST 유형은 V7에서 제거한다. | MULO V2 알림 통합 프롬프트 §4 / `V7__prepare_notification_outbox_schema.sql` |
 | `NOTI-002` | **현재 설계** | 알림 목록 | 현재 사용자 알림을 최신순 Cursor 기반으로 조회하며 기본 20, 최대 100이다. | API 명세 상세2차 R287-R294 |
 | `NOTI-003` | **현재 설계** | 알림 GET read-only | GET `/api/notifications` 자체는 `read_at`을 변경하지 않는다. | API 명세 상세2차 R287,R294 |
 | `NOTI-004` | **현재 설계** | 읽음 일괄 처리 | 개별 읽음 API 없이 `notificationIds` 배열을 받는 batch read API만 제공한다. | API 명세 상세2차 R295-R300 |
 | `NOTI-005` | **현재 설계** | batch read 원자성 | 배열 중 하나라도 미존재 또는 타인 소유 알림이면 전체 요청을 404로 실패시키고 일부만 읽음 처리하지 않는다. | API 명세 상세2차 R300 |
 | `NOTI-006` | **현재 설계** | 자동 읽음 UI 흐름 | 프론트는 알림 페이지를 받은 뒤 해당 페이지의 unread IDs를 모아 batch read API를 별도 호출한다. | API 명세 상세2차 R287,R294 |
-| `NOTI-007` | **현재 설계** | Target 삭제 후 알림 유지 | 연결 Target이 삭제되어도 알림은 과거 이력으로 유지하고 Target FK만 NULL로 만든다. | API 명세 상세2차 정책 요약 R32 / 테이블 정의서 §22 |
+| `NOTI-007` | **현재 설계** | Target 삭제 후 알림 유지 | 연결 Target이 삭제되어도 알림은 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. 별도 Chat DB의 `chat_room_id`는 FK가 없으므로 알림 구현에서 삭제 시점의 정합성을 별도로 처리해야 한다. | API 명세 상세2차 정책 요약 R32 / Flyway V6 / 테이블 정의서 §22 |
 | `NOTI-008` | **현재 설계** | Target 없는 알림 UI | `targetId=null`인 과거 알림은 표시하되 해당 Target으로 이동/처리하는 기능은 비활성화한다. | API 명세 상세2차 정책 요약 R32 |
 | `NOTI-009` | **현재 설계** | 알림 삭제 범위 | 알림 삭제는 알림 자체만 삭제하고 연결된 Target 리소스는 삭제하지 않는다. | API 명세 상세2차 R301-R306 |
 | `NOTI-010` | **현재 설계** | 알림 소유권 은닉 | 읽음/삭제 시 미존재 또는 타인 소유 알림은 404 `NOTIFICATION_NOT_FOUND`로 처리한다. | API 명세 상세2차 R298,R304,R306 |

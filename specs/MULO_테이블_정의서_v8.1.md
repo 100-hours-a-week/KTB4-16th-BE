@@ -956,7 +956,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자에게 전달할 서비스 알림 정보를 저장하는 테이블이다. 알림의 대상 사용자, 알림 유형, 내용, 발생 시점과 읽음 여부를 관리하며 사용자가 자신의 알림 목록을 조회할 때 사용한다.
+사용자에게 전달할 서비스 알림 정보를 저장하는 테이블이다. 알림의 대상 사용자, 알림 유형, 내용, 발생 시점과 읽음 여부를 관리하며 사용자가 자신의 알림 목록을 조회할 때 사용한다. V7부터 알림 유형은 4종이며 `source_event_id`는 Outbox 이벤트 식별자 스냅샷으로 저장하고 실제 Outbox FK는 두지 않는다.
 
 #### 2. 컬럼 정의
 
@@ -966,15 +966,14 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 알림 수신 사용자 ID | `users.user_id`를 참조한다. | 누구에게 전달되는 알림인지 식별한다. |
 | `type` | `ENUM` | - | NOT NULL | - | - | 알림 유형
 `MONTHLY_REPORT_CREATED`, 
-`AI_PLAYLIST`, 
 `MATCH_COMPLETED`, 
 `FRIEND_REQUEST`, 
-`FRIEND_ACCEPTED` | 발생 원인과 알림 클릭 시 처리할 동작을 구분하기 위해 사용한다. | 월별 리포트, AI 플리, 매칭 완료, 친구 요청/수락 알림을 구분한다. |
+`FRIEND_ACCEPTED` | 발생 원인과 알림 클릭 시 처리할 동작을 구분하기 위해 사용한다. | 월별 리포트, 매칭 완료, 친구 요청/수락 알림을 구분한다. |
 | `monthly_report_id` | `BIGINT` | - | NULL | NULL | FK | 생성된 월별 리포트 ID | `MONTHLY_REPORT_CREATED` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 해당 월별 리포트와 연결한다. |
-| `recommendation_playlist_id` | `BIGINT` | - | NULL | NULL | FK | 생성된 AI 추천 플레이리스트 ID | `AI_PLAYLIST` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 생성된 AI 플레이리스트와 연결한다. |
-| `chat_room_id` | `BIGINT` | - | NULL | NULL | FK | 매칭 완료로 생성된 채팅방 ID | `MATCH_COMPLETED` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 매칭된 채팅방으로 이동하는 데 사용한다. |
+| `chat_room_id` | `BIGINT` | - | NULL | NULL | 논리 참조 | 매칭 완료로 생성된 채팅방 ID | V6 이후 채팅방은 별도 Chat DB 소유이므로 Backend DB FK 없이 ID만 저장한다. | 알림 클릭 시 매칭된 채팅방으로 이동하는 데 사용한다. |
 | `friendship_id` | `BIGINT` | - | NULL | NULL | FK | 친구 관계 ID | `FRIEND_ACCEPTED` 알림에서 사용하며 `friendships.friendship_id`를 참조한다. | 수락 결과 생성된 친구 관계를 식별한다. |
 | `friend_request_id` | `BIGINT` | - | NULL | NULL | FK | 친구 요청 ID | 친구 요청 알림에서 사용하며 `friend_requests.friend_request_id`를 참조한다. | 어떤 친구 요청으로 발생한 알림인지 식별하고, 수락·거절 처리 시 해당 친구 요청을 참조하는 데 사용한다. |
+| `source_event_id` | `CHAR` | 36 | NULL | NULL | UNIQUE 구성 | 원본 Outbox 이벤트 UUID | 기존 알림은 `NULL`을 허용하고 신규 알림은 애플리케이션에서 값을 기록한다. Outbox FK는 두지 않는다. | 이벤트당 사용자 알림 중복을 방지한다. |
 | `title` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 제목 | 알림 목록에서 주요 내용을 간단히 보여준다. | 사용자에게 알림 종류와 핵심 내용을 표시한다. |
 | `content` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 내용 | 사용자에게 전달할 구체적인 알림 문구를 저장한다. | 알림 상세 내용을 표시한다. |
 | `read_at` | `DATETIME` | - | NULL | NULL | - | 알림을 읽은 시각 | 읽기 전에는 값이 없으므로 `NULL`을 허용한다. | `NULL`이면 읽지 않은 알림, 값이 있으면 읽은 알림으로 판단한다. |
@@ -987,17 +986,16 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `pk_notifications` | PRIMARY KEY | `notification_id` | - | 각 알림을 고유하게 식별한다. |
 | `fk_notifications_user` | FOREIGN KEY | `user_id` | `users.user_id` | 알림 수신자가 실제 사용자 데이터를 참조하도록 한다. |
 | `fk_notifications_monthly_report` | FOREIGN KEY, UNIQUE | `monthly_report_id` | `monthly_reports.monthly_report_id` | `MONTHLY_REPORT_CREATED` 알림이 실제 생성된 리포트를 참조하도록 하며, 리포트가 삭제되면 알림은 유지하고 `monthly_report_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `fk_notifications_playlist` | FOREIGN KEY, UNIQUE | `recommendation_playlist_id` | `recommendation_playlists.recommendation_playlist_id` | `AI_PLAYLIST` 알림이 실제 생성된 플레이리스트를 참조하도록 하며, 플레이리스트가 삭제되면 알림은 유지하고 `recommendation_playlist_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `fk_notifications_chat_room` | FOREIGN KEY | `chat_room_id` | `chat_rooms.chat_room_id` | `MATCH_COMPLETED` 알림이 실제 생성된 채팅방을 참조하도록 하며, 채팅방이 삭제되면 알림은 유지하고 `chat_room_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `fk_notifications_friendship` | FOREIGN KEY, UNIQUE | `friendship_id` | `friendships.friendship_id` | `FRIEND_ACCEPTED` 알림이 실제로 생성된 친구 관계를 참조하도록 하며, 친구 관계가 삭제되면 알림은 유지하고 `friendship_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `chk_notifications_type` | CHECK | `type` | - | 알림 유형을 `MONTHLY_REPORT_CREATED`, `AI_PLAYLIST`, `MATCH_COMPLETED`, `FRIEND_REQUEST`, `FRIEND_ACCEPTED`로 제한한다. |
+| `fk_notifications_friendship` | FOREIGN KEY | `friendship_id` | `friendships.friendship_id` | 친구 관계가 삭제되면 알림은 유지하고 `friendship_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. 같은 관계에 여러 수신자의 알림을 연결할 수 있다. |
 | `fk_notifications_friend_request` | FOREIGN KEY, UNIQUE | `friend_request_id` | `friend_requests.friend_request_id` | `FRIEND_REQUEST` 알림이 실제 친구 요청 데이터를 참조하도록 하며, 친구 요청이 삭제되면 알림은 유지하고 `friend_request_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
+| `uk_notifications_source_event_user` | UNIQUE | `source_event_id`, `user_id` | - | 같은 이벤트가 한 사용자에게 알림을 중복 생성하지 못하게 한다. `source_event_id`가 `NULL`인 기존 이력은 허용한다. |
+| `idx_notifications_friendship` | INDEX | `friendship_id` | - | UNIQUE를 제거해 여러 수신자의 알림을 허용하면서 친구 관계 FK를 지원한다. |
 
 #### 3-1. 비즈니스 규칙
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_notification_target_delete` | 알림이 참조하는 Target Resource가 삭제되어도 알림 자체는 과거 이력으로 유지한다. 해당 Target FK만 `NULL`로 변경한다. |
+| `rule_notification_target_delete` | 알림이 참조하는 Target Resource가 삭제되어도 알림 자체는 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. Chat DB의 채팅방 삭제는 Backend FK가 처리하지 않으므로 후속 알림 코드에서 처리한다. |
 | `rule_notification_target_action` | Target FK가 `NULL`인 과거 알림은 화면에 표시할 수 있으나 해당 리소스로 이동하는 액션은 비활성화한다. |
 
 #### 4. 관계
@@ -1006,10 +1004,9 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- |
 | `users` | `notifications.user_id` → `users.user_id` | N:1 | 한 사용자는 여러 알림을 받을 수 있으며 각 알림은 한 명의 수신자에게 전달된다. |
 | `monthly_reports` | `notifications.monthly_report_id` → `monthly_reports.monthly_report_id` | 0..1:1 | 월별 리포트 생성 알림인 경우 해당 리포트와 연결된다. 리포트 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| `recommendation_playlists` | `notifications.recommendation_playlist_id` → `recommendation_playlists.recommendation_playlist_id` | 0..1:1 | AI 플레이리스트 생성 알림인 경우 생성된 플레이리스트와 연결된다. 플레이리스트 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| `chat_rooms` | `notifications.chat_room_id` → `chat_rooms.chat_room_id` | N:0..1 | 매칭 완료 알림인 경우 생성된 채팅방과 연결된다. 채팅방 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+| `chat_rooms` (별도 Chat DB) | `notifications.chat_room_id` → 채팅방 ID | N:0..1 논리 참조 | Backend DB FK는 없다. 알림 생성 또는 클릭 시 채팅방 존재 여부를 별도 도메인에서 확인해야 한다. |
 | `friend_requests` | `notifications.friend_request_id` → `friend_requests.friend_request_id` | 0..1:1 | 하나의 친구 요청에는 하나의 `FRIEND_REQUEST` 알림이 연결될 수 있다. 친구 요청 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| `friendships` | `notifications.friendship_id` → `friendships.friendship_id` | 0..1:1 | 하나의 친구 관계에는 하나의 `FRIEND_ACCEPTED` 알림이 연결될 수 있다. 친구 관계 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+| `friendships` | `notifications.friendship_id` → `friendships.friendship_id` | 0..N:1 | 하나의 친구 관계에 서로 다른 수신자의 `FRIEND_ACCEPTED` 알림을 연결할 수 있다. 친구 관계 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
 ---
 
 ## 구현·설계 정합성 표
