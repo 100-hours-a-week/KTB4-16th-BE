@@ -40,7 +40,6 @@ class MonthlyReportPreparationServiceTest {
         YearMonth target = YearMonth.of(2026, 8);
         LocalDateTime start = target.atDay(1).atStartOfDay();
         LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
-        when(records.findUsersWithActiveRecordsInPeriod(start, end)).thenReturn(List.of(7L));
         when(reports.findByUser_UserIdAndReportYearAndReportMonth(7L, (short) 2026, (short) 8))
                 .thenReturn(Optional.empty());
         when(records.findMonthlyRecordSummary(7L, start, end))
@@ -51,8 +50,8 @@ class MonthlyReportPreparationServiceTest {
         when(users.getReferenceById(7L)).thenReturn(User.signup("user@example.test", "hash", "사용자"));
         when(reports.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        var batch = new MonthlyReportPreparationService(records, places, users, reports, moods)
-                .prepare(target);
+        var batch = new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(7L));
 
         assertThat(batch.userIds()).containsExactly(7L);
         assertThat(batch.createdCount()).isEqualTo(1);
@@ -64,7 +63,6 @@ class MonthlyReportPreparationServiceTest {
         YearMonth target = YearMonth.of(2026, 9);
         LocalDateTime start = target.atDay(1).atStartOfDay();
         LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
-        when(records.findUsersWithActiveRecordsInPeriod(start, end)).thenReturn(List.of(7L));
         when(reports.findByUser_UserIdAndReportYearAndReportMonth(7L, (short) 2026, (short) 9))
                 .thenReturn(Optional.empty());
         when(records.findMonthlyRecordSummary(7L, start, end))
@@ -74,7 +72,8 @@ class MonthlyReportPreparationServiceTest {
         when(users.getReferenceById(7L)).thenReturn(User.signup("user@example.test", "hash", "사용자"));
         when(reports.save(any())).thenAnswer(invocation -> invocation.getArgument(0));
 
-        new MonthlyReportPreparationService(records, places, users, reports, moods).prepare(target);
+        new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(7L));
 
         ArgumentCaptor<MonthlyMoodStat> stat = ArgumentCaptor.forClass(MonthlyMoodStat.class);
         verify(moods).save(stat.capture());
@@ -91,12 +90,11 @@ class MonthlyReportPreparationServiceTest {
                 (short) 2026, (short) 9, 3, "뮤로");
         failed.markFailedUnlessCompleted();
 
-        when(records.findUsersWithActiveRecordsInPeriod(start, end)).thenReturn(List.of(7L));
         when(reports.findByUser_UserIdAndReportYearAndReportMonth(7L, (short) 2026, (short) 9))
                 .thenReturn(Optional.of(failed));
 
-        var batch = new MonthlyReportPreparationService(records, places, users, reports, moods)
-                .prepare(target);
+        var batch = new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(7L));
 
         assertThat(batch.userIds()).containsExactly(7L);
         assertThat(batch.createdCount()).isZero();
@@ -117,23 +115,37 @@ class MonthlyReportPreparationServiceTest {
         MonthlyReport processing = MonthlyReport.prepare(User.signup("process@example.test", "hash", "처리"),
                 (short) 2026, (short) 9, 3, "뮤로");
         processing.markProcessing();
-        MonthlyReport pending = MonthlyReport.prepare(User.signup("pending@example.test", "hash", "대기"),
-                (short) 2026, (short) 9, 3, "뮤로");
-
-        when(records.findUsersWithActiveRecordsInPeriod(start, end)).thenReturn(List.of(7L, 8L, 9L));
         when(reports.findByUser_UserIdAndReportYearAndReportMonth(7L, (short) 2026, (short) 9))
                 .thenReturn(Optional.of(completed));
         when(reports.findByUser_UserIdAndReportYearAndReportMonth(8L, (short) 2026, (short) 9))
                 .thenReturn(Optional.of(processing));
-        when(reports.findByUser_UserIdAndReportYearAndReportMonth(9L, (short) 2026, (short) 9))
-                .thenReturn(Optional.of(pending));
-
-        var batch = new MonthlyReportPreparationService(records, places, users, reports, moods)
-                .prepare(target);
+        var batch = new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(7L, 8L));
 
         assertThat(batch.userIds()).isEmpty();
         assertThat(batch.createdCount()).isZero();
-        assertThat(batch.skippedCount()).isEqualTo(3);
+        assertThat(batch.skippedCount()).isEqualTo(2);
+        verify(reports, never()).save(any());
+        verify(moods, never()).save(any());
+    }
+
+    // 앞선 묶음이 커밋된 뒤 준비 작업이 중단되면 저장된 PENDING 사용자를 재시도 대상에 포함한다.
+    @Test
+    void includesPendingSnapshotWhenPreparationIsRetried() {
+        YearMonth target = YearMonth.of(2026, 9);
+        LocalDateTime start = target.atDay(1).atStartOfDay();
+        LocalDateTime end = target.plusMonths(1).atDay(1).atStartOfDay();
+        MonthlyReport pending = MonthlyReport.prepare(User.signup("pending@example.test", "hash", "대기"),
+                (short) 2026, (short) 9, 3, "뮤로");
+        when(reports.findByUser_UserIdAndReportYearAndReportMonth(9L, (short) 2026, (short) 9))
+                .thenReturn(Optional.of(pending));
+
+        var batch = new MonthlyReportPreparationChunkService(records, places, users, reports, moods)
+                .prepareChunk(target, List.of(9L));
+
+        assertThat(batch.userIds()).containsExactly(9L);
+        assertThat(batch.createdCount()).isZero();
+        assertThat(batch.skippedCount()).isZero();
         verify(reports, never()).save(any());
         verify(moods, never()).save(any());
     }
