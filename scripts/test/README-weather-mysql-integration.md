@@ -11,8 +11,10 @@ daemon, and OpenSSL. The script starts a fresh `mysql:8.4` container with no
 volume, publishes it only on `127.0.0.1:3307`, and creates the test database
 `mulo_weather_it`. It refuses to start if a running container already publishes
 port 3307. The integration test independently asserts the JDBC URL and catalog,
-and Flyway creates the schema in the disposable database. The container and its
-data are removed when the Gradle process exits or is interrupted.
+and Flyway creates the schema in the disposable database. Notification migration
+tests use separate randomly named schemas on the same disposable server and drop
+them after each test. The container and its data are removed when the Gradle
+process exits or is interrupted.
 
 The script generates an ephemeral database password at runtime and does not
 print it or write it to a file. It does not read application `.env` files and

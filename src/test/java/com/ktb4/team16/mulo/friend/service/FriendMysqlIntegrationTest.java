@@ -40,6 +40,12 @@ class FriendMysqlIntegrationTest {
     @AfterEach
     void cleanUp() {
         for (Long userId : createdUserIds) {
+            jdbcTemplate.update("""
+                    DELETE FROM outbox_events
+                    WHERE event_type IN ('FRIEND_REQUEST', 'FRIEND_ACCEPTED')
+                        AND JSON_CONTAINS(payload, JSON_ARRAY(?), '$.recipientUserIds')
+                    """, userId);
+            jdbcTemplate.update("DELETE FROM notifications WHERE user_id = ?", userId);
             jdbcTemplate.update("DELETE FROM friend_requests WHERE requester_id = ? OR addressee_id = ?",
                     userId, userId);
             jdbcTemplate.update("DELETE FROM friendships WHERE user_low_id = ? OR user_high_id = ?",

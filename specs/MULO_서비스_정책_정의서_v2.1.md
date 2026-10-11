@@ -6,9 +6,10 @@
 >
 > **작성일:** 2026-09-21 (KST)  
 > **친구 도메인 구현 상태 반영:** 2026-10-08 (KST)
+> **알림 도메인 구현 상태 반영:** 2026-10-11 (KST)
 > **기준 자료**
 > 1. 대화에서 사용자가 직접 확정한 최신 결정
-> 2. `app/mulo-be` 현재 `develop` 작업 트리와 Flyway V1~V4
+> 2. 현재 백엔드 작업 트리와 Flyway V1~V8
 > 3. `MULO_테이블_정의서_v8.1`
 > 4. `MULO_OpenAPI_v2.8`
 > 5. 테이블 정의서 v7.6, 정책 정의서 v1.9, OpenAPI v2.6
@@ -52,7 +53,8 @@
 | AI 추천 플레이리스트 | 현재 목록 조회·현재 좌표 기반 생성·기존 목록 유지 처리 구현 | 구현됨 |
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
 | 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
-| 투표·매칭·채팅·알림 | OpenAPI 계약은 보존하되 현재 저장소 Controller 없음 | contract-only |
+| 알림 | 목록·일괄 읽음·삭제 API 및 친구·월간 리포트 Outbox 처리 구현 | MATCH_COMPLETED 발행은 배포 환경의 기존 이력 확인과 Chat DB 참가자 등록 근거 확인 전까지 보류 |
+| 투표·매칭·채팅 | OpenAPI 계약은 보존하되 현재 저장소 Controller 없음 | contract-only |
 | AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
 
 
@@ -278,7 +280,7 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `MATCH-001` | **확정** | 매칭 구성 | 동일 `vote_question_id`에서 A 선택 사용자 2명 + B 선택 사용자 2명이 모이면 4인 채팅방을 생성한다. | API 명세 상세2차 정책 요약 R23 / 테이블 정의서 §18-19 |
+| `MATCH-001` | **확정** | 매칭 구성 | 동일 `vote_question_id`에서 A 선택 사용자 1명 + B 선택 사용자 1명이 모이면 1:1 채팅방을 생성하고 두 매칭 요청을 `MATCHED`로 변경한다. | 사용자 확정 2026-10-11 / 테이블 정의서 §18-19 |
 | `MATCH-002` | **확정** | 매칭 운영 종료 | 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다. | 사용자 확정 / API 명세 상세2차 R238,R246 |
 | `MATCH-003` | **확정** | 23시 대기 요청 만료 | 당일 23:00 시점에 남아 있는 모든 WAITING 요청을 EXPIRED로 변경하고 이후 추가 매칭하지 않는다. | 사용자 확정 / API 명세 상세2차 정책 요약 R23 |
 | `MATCH-004` | **현재 설계** | 매칭 요청 기준 답변 | 매칭 요청은 현재 사용자가 소유한 오늘 날짜의 유효한 투표 답변을 기준으로 한다. | API 명세 상세2차 R238-R246 |
@@ -295,9 +297,9 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `CHAT-001` | **현재 설계** | 채팅방 수명 | 채팅방은 생성 당일에만 유지하며 자정 또는 참여자 4명 모두 퇴장 시 물리 삭제한다. | 테이블 정의서 6차 §19-20 / API 명세 상세2차 R279-R285 |
-| `CHAT-002` | **확정** | 방 단일 선택지 제거 | A2+B2 방이므로 `chat_rooms.selected_option`을 두지 않고 각 참여자의 선택은 `vote_answers.selected_option`에서 판별한다. | 테이블 정의서 6차 §19 / 최근 정책 동기화 |
-| `CHAT-003` | **현재 설계** | 참가자 선등록 | 매칭 완료 시 4명의 `chat_room_participants`를 먼저 생성한다. | 테이블 정의서 6차 §20 |
+| `CHAT-001` | **현재 설계** | 채팅방 수명 | 채팅방은 생성 당일에만 유지하며 자정 또는 두 참여자 모두 퇴장 시 물리 삭제한다. | 테이블 정의서 6차 §19-20 / API 명세 상세2차 R279-R285 / 사용자 확정 2026-10-11 |
+| `CHAT-002` | **확정** | 방 단일 선택지 제거 | A1+B1 방이므로 `chat_rooms.selected_option`을 두지 않고 각 참여자의 선택은 `vote_answers.selected_option`에서 판별한다. | 테이블 정의서 6차 §19 / 사용자 확정 2026-10-11 |
+| `CHAT-003` | **현재 설계** | 참가자 선등록 | 매칭 완료 시 두 명의 `chat_room_participants`를 먼저 생성한다. | 테이블 정의서 6차 §20 / 사용자 확정 2026-10-11 |
 | `CHAT-004` | **현재 설계** | 최초 입장 | 실제 최초 채팅방 입장 시 `joined_at`을 기록한다. | API 명세 상세2차 R256-R262 |
 | `CHAT-005` | **현재 설계** | 재입장 금지 | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없고 403 `CHAT_REENTRY_FORBIDDEN`이다. | API 명세 상세2차 R259,R262 |
 | `CHAT-006` | **현재 설계** | 참가자 접근 은닉 | 삭제된 방 또는 비참가자의 접근은 동일한 404 `CHAT_ROOM_NOT_FOUND`로 처리한다. | API 명세 상세2차 R262,R268,R278,R285 |
@@ -313,16 +315,19 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `NOTI-001` | **현재 설계** | 알림 유형 | 알림 유형은 MONTHLY_REPORT_CREATED, AI_PLAYLIST, MATCH_COMPLETED, FRIEND_REQUEST, FRIEND_ACCEPTED의 5종이다. | 테이블 정의서 6차 §22 |
-| `NOTI-002` | **현재 설계** | 알림 목록 | 현재 사용자 알림을 최신순 Cursor 기반으로 조회하며 기본 20, 최대 100이다. | API 명세 상세2차 R287-R294 |
-| `NOTI-003` | **현재 설계** | 알림 GET read-only | GET `/api/notifications` 자체는 `read_at`을 변경하지 않는다. | API 명세 상세2차 R287,R294 |
-| `NOTI-004` | **현재 설계** | 읽음 일괄 처리 | 개별 읽음 API 없이 `notificationIds` 배열을 받는 batch read API만 제공한다. | API 명세 상세2차 R295-R300 |
-| `NOTI-005` | **현재 설계** | batch read 원자성 | 배열 중 하나라도 미존재 또는 타인 소유 알림이면 전체 요청을 404로 실패시키고 일부만 읽음 처리하지 않는다. | API 명세 상세2차 R300 |
+| `NOTI-001` | **확정** | 알림 유형 | 첫 알림 구현의 신규 유형은 MONTHLY_REPORT_CREATED, MATCH_COMPLETED, FRIEND_REQUEST, FRIEND_ACCEPTED의 4종이다. AI_PLAYLIST 유형은 V7에서 제거한다. | MULO V2 알림 통합 프롬프트 §4 / `V7__prepare_notification_outbox_schema.sql` |
+| `NOTI-002` | **구현됨** | 알림 목록 | 현재 사용자 알림을 최신순 Cursor 기반으로 조회하며 기본 20, 최대 100이다. | `NotificationService:40-64` / OpenAPI v2.8 |
+| `NOTI-003` | **구현됨** | 알림 GET read-only | GET `/api/notifications` 자체는 `read_at`을 변경하지 않는다. | `NotificationService:40-42` |
+| `NOTI-004` | **구현됨** | 읽음 일괄 처리 | 개별 읽음 API 없이 `notificationIds` 배열을 받는 batch read API만 제공한다. | `NotificationController:37-44` |
+| `NOTI-005` | **구현됨** | batch read 원자성 | 배열 중 하나라도 미존재 또는 타인 소유 알림이면 전체 요청을 404로 실패시키고 일부만 읽음 처리하지 않는다. | `NotificationService:66-80` |
 | `NOTI-006` | **현재 설계** | 자동 읽음 UI 흐름 | 프론트는 알림 페이지를 받은 뒤 해당 페이지의 unread IDs를 모아 batch read API를 별도 호출한다. | API 명세 상세2차 R287,R294 |
-| `NOTI-007` | **현재 설계** | Target 삭제 후 알림 유지 | 연결 Target이 삭제되어도 알림은 과거 이력으로 유지하고 Target FK만 NULL로 만든다. | API 명세 상세2차 정책 요약 R32 / 테이블 정의서 §22 |
+| `NOTI-007` | **현재 설계** | Target 삭제 후 알림 유지 | 연결 Target이 삭제되어도 알림은 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. 별도 Chat DB의 `chat_room_id`는 FK가 없으므로 알림 구현에서 삭제 시점의 정합성을 별도로 처리해야 한다. | API 명세 상세2차 정책 요약 R32 / Flyway V6 / 테이블 정의서 §22 |
 | `NOTI-008` | **현재 설계** | Target 없는 알림 UI | `targetId=null`인 과거 알림은 표시하되 해당 Target으로 이동/처리하는 기능은 비활성화한다. | API 명세 상세2차 정책 요약 R32 |
-| `NOTI-009` | **현재 설계** | 알림 삭제 범위 | 알림 삭제는 알림 자체만 삭제하고 연결된 Target 리소스는 삭제하지 않는다. | API 명세 상세2차 R301-R306 |
-| `NOTI-010` | **현재 설계** | 알림 소유권 은닉 | 읽음/삭제 시 미존재 또는 타인 소유 알림은 404 `NOTIFICATION_NOT_FOUND`로 처리한다. | API 명세 상세2차 R298,R304,R306 |
+| `NOTI-009` | **구현됨** | 알림 삭제 범위 | 알림 삭제는 알림 자체만 삭제하고 연결된 Target 리소스는 삭제하지 않는다. | `NotificationService:82-90` |
+| `NOTI-010` | **구현됨** | 알림 소유권 은닉 | 읽음/삭제 시 미존재 또는 타인 소유 알림은 404 `NOTIFICATION_NOT_FOUND`로 처리한다. | `NotificationService:66-90` |
+| `NOTI-011` | **확정** | 매칭 완료 알림 | 동일 `vote_question_id`에서 A/B 선택 사용자 각 1명으로 구성된 1:1 매칭이다. Chat DB에서 두 참가자의 선등록 완료가 확인된 뒤 매칭당 `MATCH_COMPLETED` Outbox 이벤트 1건을 발행한다. Payload v1은 `matchParticipantCount=2`와 중복 없는 `recipientUserIds` 두 개를 포함하고, 이벤트 처리 시 수신자별 알림 1건씩 총 2건을 생성한다. | 사용자 확정 2026-10-11 / MULO V2 알림 통합 프롬프트 §3.1·§5.2 / Flyway V6 |
+| `NOTI-012` | **확인 필요** | 매칭 발행 전제 | `MATCH_COMPLETED` 발행은 모든 환경에서 기존 4인 매칭 이력이 0건임을 확인하고, Chat DB에서 두 참가자의 선등록 완료를 검증할 수 있을 때까지 보류한다. 확인되지 않은 이력을 1:1 Payload로 재해석하지 않는다. | 사용자 확정 2026-10-11 / 로컬 Backend DB 점검 결과 / 외부 환경 확인 미완료 |
+| `NOTI-013` | **구현됨** | Outbox 재시도 | 최초 처리는 원본 COMMIT 후 즉시 시도한다. 자동 추가 재시도는 최대 5회이며 간격은 1·2·4·8·16분에 사용자 확정 지터 0~30초를 더한다. Scheduler는 1분마다 최대 20건을 조회한다. | MULO V2 알림 통합 프롬프트 §8·§10 / 사용자 확정 지터 2026-10-11 |
 
 
 ## 목록·페이지네이션
@@ -365,7 +370,7 @@
 | ID | 대상 | 수정 필요 내용 |
 |---|---|---|
 | `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
-| `SYNC-002` | `chat_rooms.selected_option` | A2+B2 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
+| `SYNC-002` | `chat_rooms.selected_option` | A1+B1 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
 | `SYNC-003` | `record_drafts` | 정책상 V1 제외지만 Flyway V1에 실제 테이블이 존재한다. 기능에서 사용하지 않으며 삭제 여부는 별도 migration 결정으로 남긴다. |
 | `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
 | `SYNC-005` | AI 오류 코드 | 기존 `AI_API_ERROR` 표기는 `AI_SERVICE_ERROR`로 통일한다. 최소 기억 검색 API와 AI 추천 API 문구를 함께 점검한다. |
@@ -474,4 +479,4 @@
 - 최신 자료에서 근거가 없는 사항은 자동으로 확정하지 않았다.
 - `미확정 / 추가 결정 필요`와 `보류` 항목은 구현 단계에서 임의 확정하지 않는다.
 - DB 컬럼 사전이 아니라 서비스 동작 판단을 위한 정책 문서이므로, 세부 타입·인덱스·제약조건은 테이블 정의서/ERD/SQL에서 관리하되 정책과 충돌해서는 안 된다.
-- API 전수 대조는 OpenAPI v2.8의 45개 경로·49개 작업을 기준으로 한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V4의 실제 25개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
+- API 전수 대조는 OpenAPI v2.8의 45개 경로·49개 작업을 기준으로 한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V8의 실제 26개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
