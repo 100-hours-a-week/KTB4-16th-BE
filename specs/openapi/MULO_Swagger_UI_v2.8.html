@@ -6381,7 +6381,7 @@ const spec = {
         ],
         "summary": "매칭 요청 생성",
         "operationId": "postApiMatchRequests",
-        "description": "필수\nvoteAnswerId: Long\n\n사용자의 당일 투표 답변 기반 매칭.\n- KST 기준 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다.\n- 동일 vote_question_id를 기준으로 매칭한다.\n- 동일 질문에서 A 선택 사용자 2명 + B 선택 사용자 2명이 모이면 4인 채팅방을 생성한다.\n- 필요한 인원보다 WAITING 요청이 많으면 created_at ASC, 동률은 match_request_id ASC FIFO로 선택한다.\n- KST 23:00 시점에 남아 있는 모든 WAITING 요청은 EXPIRED로 변경하고 이후 추가 매칭하지 않는다.",
+        "description": "필수\nvoteAnswerId: Long\n\n사용자의 당일 투표 답변 기반 매칭.\n- KST 기준 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다.\n- 동일 vote_question_id를 기준으로 매칭한다.\n- 동일 질문에서 A 선택 사용자 1명 + B 선택 사용자 1명이 모이면 1:1 채팅방을 생성한다.\n- 필요한 인원보다 WAITING 요청이 많으면 created_at ASC, 동률은 match_request_id ASC FIFO로 선택한다.\n- KST 23:00 시점에 남아 있는 모든 WAITING 요청은 EXPIRED로 변경하고 이후 추가 매칭하지 않는다.",
         "responses": {
           "201": {
             "description": "새 매칭 요청 자원이 생성되므로 201.",
@@ -6585,7 +6585,7 @@ const spec = {
         ],
         "summary": "매칭 상태 조회",
         "operationId": "getApiMatchRequestsMatchRequestId",
-        "description": "필수\nmatchRequestId: Long\n\n프론트 polling으로 WAITING/MATCHED/EXPIRED 상태를 조회한다. 요청 소유자만 조회 가능.\n\n정책 및 설명\n- 현재 로그인한 사용자의 매칭 요청 상태를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 프론트는 polling 방식으로 상태를 조회한다.\n- 매칭 상태는 WAITING, MATCHED, EXPIRED 중 하나이다.\n- WAITING이면 아직 매칭이 완료되지 않은 상태이다.\n- MATCHED이면 4인 매칭이 완료된 상태이며 chatRoomId를 반환한다.\n- EXPIRED이면 당일 매칭이 성사되지 않아 만료된 상태이다.\n- 요청 소유자만 조회할 수 있다.\n- 존재하지 않는 요청 또는 현재 사용자 소유가 아닌 요청은 동일하게 404 처리한다.",
+        "description": "필수\nmatchRequestId: Long\n\n프론트 polling으로 WAITING/MATCHED/EXPIRED 상태를 조회한다. 요청 소유자만 조회 가능.\n\n정책 및 설명\n- 현재 로그인한 사용자의 매칭 요청 상태를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 프론트는 polling 방식으로 상태를 조회한다.\n- 매칭 상태는 WAITING, MATCHED, EXPIRED 중 하나이다.\n- WAITING이면 아직 매칭이 완료되지 않은 상태이다.\n- MATCHED이면 1:1 매칭이 완료된 상태이며 chatRoomId를 반환한다.\n- EXPIRED이면 당일 매칭이 성사되지 않아 만료된 상태이다.\n- 요청 소유자만 조회할 수 있다.\n- 존재하지 않는 요청 또는 현재 사용자 소유가 아닌 요청은 동일하게 404 처리한다.",
         "responses": {
           "200": {
             "description": "현재 WAITING 상태를 정상 조회하므로 200.\n\n추가 케이스: 매칭 완료 상태와 채팅방 식별자를 정상 반환하므로 200.\n\n추가 케이스: 만료된 매칭 요청도 존재하는 자원의 현재 상태 조회이므로 200.",
@@ -6947,14 +6947,6 @@ const spec = {
                       {
                         "userId": 34,
                         "nickname": "나다라"
-                      },
-                      {
-                        "userId": 56,
-                        "nickname": "다라마"
-                      },
-                      {
-                        "userId": 78,
-                        "nickname": "라마바"
                       }
                     ]
                   }
@@ -7314,7 +7306,7 @@ const spec = {
         ],
         "summary": "채팅방 퇴장",
         "operationId": "postApiChatRoomsChatRoomIdLeave",
-        "description": "필수\nchatRoomId: Long\n\nparticipant.left_at을 기록하고 남은 참가자에게 퇴장 사실을 알린다. 4명 모두 퇴장하면 방을 물리 삭제할 수 있다. 자정에도 방을 물리 삭제하는 정책.",
+        "description": "필수\nchatRoomId: Long\n\nparticipant.left_at을 기록하고 남은 참가자에게 퇴장 사실을 알린다. 두 참가자 모두 퇴장하면 방을 물리 삭제할 수 있다. 자정에도 방을 물리 삭제하는 정책.",
         "responses": {
           "200": {
             "description": "참가자의 퇴장 상태 변경이 정상 완료되었으므로 200.",

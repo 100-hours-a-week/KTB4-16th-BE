@@ -4515,7 +4515,7 @@ paths:
         사용자의 당일 투표 답변 기반 매칭.
         - KST 기준 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다.
         - 동일 vote_question_id를 기준으로 매칭한다.
-        - 동일 질문에서 A 선택 사용자 2명 + B 선택 사용자 2명이 모이면 4인 채팅방을 생성한다.
+        - 동일 질문에서 A 선택 사용자 1명 + B 선택 사용자 1명이 모이면 1:1 채팅방을 생성한다.
         - 필요한 인원보다 WAITING 요청이 많으면 created_at ASC, 동률은 match_request_id ASC FIFO로 선택한다.
         - KST 23:00 시점에 남아 있는 모든 WAITING 요청은 EXPIRED로 변경하고 이후 추가 매칭하지 않는다.
       responses:
@@ -4667,7 +4667,7 @@ paths:
         - 프론트는 polling 방식으로 상태를 조회한다.
         - 매칭 상태는 WAITING, MATCHED, EXPIRED 중 하나이다.
         - WAITING이면 아직 매칭이 완료되지 않은 상태이다.
-        - MATCHED이면 4인 매칭이 완료된 상태이며 chatRoomId를 반환한다.
+        - MATCHED이면 1:1 매칭이 완료된 상태이며 chatRoomId를 반환한다.
         - EXPIRED이면 당일 매칭이 성사되지 않아 만료된 상태이다.
         - 요청 소유자만 조회할 수 있다.
         - 존재하지 않는 요청 또는 현재 사용자 소유가 아닌 요청은 동일하게 404 처리한다.
@@ -4917,10 +4917,6 @@ paths:
                     nickname: 가나다
                   - userId: 34
                     nickname: 나다라
-                  - userId: 56
-                    nickname: 다라마
-                  - userId: 78
-                    nickname: 라마바
         '400':
           description: chatRoomId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.
           content:
@@ -5165,7 +5161,7 @@ paths:
         필수
         chatRoomId: Long
 
-        participant.left_at을 기록하고 남은 참가자에게 퇴장 사실을 알린다. 4명 모두 퇴장하면 방을 물리 삭제할 수 있다. 자정에도 방을 물리 삭제하는 정책.
+        participant.left_at을 기록하고 남은 참가자에게 퇴장 사실을 알린다. 두 참가자 모두 퇴장하면 방을 물리 삭제할 수 있다. 자정에도 방을 물리 삭제하는 정책.
       responses:
         '200':
           description: 참가자의 퇴장 상태 변경이 정상 완료되었으므로 200.
