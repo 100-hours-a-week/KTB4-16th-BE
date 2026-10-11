@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -389,6 +390,33 @@ class SecurityIntegrationTests {
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
     }
 
+    @Test
+    void localPreflightAllowsPutAndKeepsExistingMethods() throws Exception {
+        var result = mvc.perform(options("/api/users/me/preferences/genres")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "PUT")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andReturn();
+
+        String allowedMethods = result.getResponse().getHeader("Access-Control-Allow-Methods");
+        assertThat(allowedMethods).contains("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
+    }
+
+    @Test
+    void genrePreferencesPutStillRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(put("/api/users/me/preferences/genres"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(put("/api/users/me/preferences/genres")
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
     private Cookie csrfCookie() throws Exception {
         var result = mvc.perform(get("/api/csrf")).andExpect(status().isNoContent()).andReturn();
         Cookie cookie = result.getResponse().getCookie("XSRF-TOKEN");
@@ -423,6 +451,9 @@ class SecurityIntegrationTests {
         @PostMapping("/api/uploads")
         @ResponseStatus(HttpStatus.CREATED)
         void upload() { }
+
+        @org.springframework.web.bind.annotation.PutMapping("/api/users/me/preferences/genres")
+        String updatePreferredGenres() { return "updated"; }
 
         @GetMapping("/api/uploads/{uploadId}/signed-url")
         String uploadSignedUrl() { return "signed url"; }

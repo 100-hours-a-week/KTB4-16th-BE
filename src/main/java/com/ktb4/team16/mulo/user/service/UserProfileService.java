@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
@@ -12,6 +13,7 @@ import com.ktb4.team16.mulo.user.message.UserMessage;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -68,6 +70,14 @@ public class UserProfileService {
         String newPasswordHash = passwordEncoder.encode(newPassword);
         user.updatePassword(newPasswordHash, currentKstDateTime());
         return new UpdatePasswordResponse(UserMessage.PASSWORD_UPDATED.message());
+    }
+
+    @Transactional
+    public UpdatePreferredGenresResponse updatePreferredGenres(
+            Long userId, List<String> preferredGenres) {
+        User user = findActiveUser(userId);
+        user.updatePreferredGenres(preferredGenres);
+        return UpdatePreferredGenresResponse.from(user);
     }
 
     private User findActiveUser(Long userId) {
