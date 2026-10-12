@@ -246,7 +246,7 @@ jobs:
       pull-requests: write
 
     env:
-      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
 
     steps:
       - name: Checkout code
@@ -351,8 +351,8 @@ jobs:
       - run: |
           cat > backend.env <<ENVEOF
           DB_URL=${{ secrets.DB_URL_Develop }}
-          DB_USERNAME=${{ secrets.DB_USERNAME_Develop }}
-          DB_PASSWORD=${{ secrets.DB_PASSWORD_Develop }}
+          DB_USERNAME=${{ secrets.DB_USERNAME }}
+          DB_PASSWORD=${{ secrets.DB_PASSWORD }}
           JWT_SECRET=${{ secrets.JWT_SECRET }}
           GCS_BUCKET_NAME=${{ secrets.GCS_BUCKET_NAME_Develop }}
           GCS_PROJECT_ID=${{ secrets.GCP_PROJECT_ID}}
