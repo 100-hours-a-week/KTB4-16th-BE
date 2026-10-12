@@ -76,7 +76,7 @@ jobs:
           SPOTIFY_CLIENT_SECRET=${{ secrets.SPOTIFY_CLIENT_SECRET }}
           AI_BASE_URL=${{ secrets.AI_BASE_URL }}
           AI_INTERNAL_TOKEN=${{ secrets.AI_INTERNAL_TOKEN }}
-          MULO_SECURITY_ALLOWED_ORIGINS=${{ secrets.MULO_SECURITY_ALLOWED_ORIGINS }}
+          MULO_SECURITY_ALLOWED_ORIGINS=${{ secrets.MULO_SECURITY_ALLOWED_ORIGINS_Develop }}
           REPORT_OPERATION_TOKEN=${{ secrets.REPORT_OPERATION_TOKEN }}
           # 컨테이너 JVM 기본 시간대가 UTC라, java.sql.Timestamp -> LocalDateTime 변환 시
           # (Timestamp가 상속하는 java.util.Date의 레거시 getter가 JVM 기본시간대를 씀)
