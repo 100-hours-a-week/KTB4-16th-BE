@@ -1,7 +1,8 @@
 # MULO 테이블 정의서 v8.1
 
 > 작성일: 2026-09-21 (KST)  
-> 실제 스키마 기준: Flyway V1~V6
+> 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
+> 실제 스키마 기준: 현재 백엔드 작업 트리의 Flyway V1~V8
 > 설계·정책 기준: 서비스 정책 정의서 v2.1, OpenAPI v2.8, 현재 구현 문서
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
@@ -9,20 +10,21 @@
 
 | 상태 | 의미 |
 | --- | --- |
-| `구현됨` | Flyway V1~V6에 실제 적용되는 구조 |
+| `구현됨` | Flyway V1~V8에 실제 적용되는 구조 |
 | `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
 | `V1 제외·실제 테이블 존재` | V1 기능 범위에서는 제외됐지만 현재 Flyway에는 테이블이 존재함 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
 
 ### 현재 스키마 기준 및 변경 사항
 
-- Flyway V1~V6을 순서대로 적용한 Backend 실제 테이블 23개를 기준으로 정리
+- Flyway V1~V8을 순서대로 적용한 Backend 실제 테이블 26개를 기준으로 정리
 - V6에서 `matches`를 추가하고 Backend의 `chat_rooms`, `chat_room_participants`, `chat_messages`를 제거
 - Chat Server가 소유하는 채팅 schema는 별도 DB에 있으며 이 문서에서 Backend 테이블로 정의하지 않음
 - V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
 - V4의 `places` 컬럼 변경, 법정동 쌍 CHECK, 좌표 UNIQUE를 실제 구조로 반영
 - `record_drafts`는 정책상 V1 제외이지만 Flyway V1에 존재함을 명시
 - 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
+- V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
 - 설계 문서와 Flyway 사이의 차이는 문서 끝의 정합성 표에서 원본과 현재 상태를 함께 표시
 
 ### v7.6에서 승계한 핵심 변경 사항
@@ -819,7 +821,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- |
 | `rule_match_pair` | 같은 질문에 답한 반대 선택지 사용자 2명을 FIFO로 골라 Match 하나에 연결한다. |
 | `rule_match_state` | WAITING→MATCHING→MATCHED, WAITING→EXPIRED 상태 전이를 사용한다. WAITING/EXPIRED는 match_id NULL, MATCHING/MATCHED는 match_id 존재다. |
-| `rule_match_cutoff` | KST 23:00부터 신규 요청을 막고 남은 WAITING을 EXPIRED 처리한다. 이미 MATCHING인 pair는 만료하지 않는다. 정책은 확정됐으나 현재 Scheduler/cutoff 코드는 미구현이다. |
+| `rule_match_cutoff` | KST 23:00부터 신규 요청을 막고 남은 WAITING을 EXPIRED 처리한다. 이미 MATCHING인 pair는 만료하지 않는다. 현재 서비스와 Scheduler에서 구현한다. |
 
 #### 4. 관계
 
@@ -851,15 +853,15 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 
 #### 1. 테이블 설명
 
-동일한 `vote_question_id`의 매칭 요청 중 A 선택 사용자 2명과 B 선택 사용자 2명이 모였을 때 생성되는 4인 채팅방을 저장하는 테이블이다. 채팅방 생성 시 매칭된 4명의 사용자가 배정되며, 이후 채팅 참여자와 메시지를 관리하는 기준이 된다. 채팅방은 생성 당일에만 유지되며, 자정이 되거나 참여자 4명이 모두 퇴장하면 삭제된다.
+동일한 `vote_question_id`의 매칭 요청 중 A 선택 사용자 1명과 B 선택 사용자 1명이 모였을 때 생성되는 1:1 채팅방을 저장하는 테이블이다. 채팅방 생성 시 매칭된 두 사용자가 배정되며, 이후 채팅 참여자와 메시지를 관리하는 기준이 된다. 채팅방은 생성 당일에만 유지되며, 자정이 되거나 두 참여자 모두 퇴장하면 삭제된다.
 
 #### 2. 컬럼 정의
 
 | 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `chat_room_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 채팅방 고유 ID | 각 채팅방을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 채팅 참여자와 메시지가 특정 채팅방을 참조할 때 기준 ID로 사용한다. |
-| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방 매칭의 기준이 된 취향 투표 질문 ID | 동일한 질문에서 A 선택 사용자 2명과 B 선택 사용자 2명을 한 채팅방으로 구성하므로 `vote_questions.vote_question_id`를 참조한다. | 어떤 취향 투표 질문을 기준으로 생성된 채팅방인지 식별한다. |
-| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 채팅방 생성 시각 | 4명의 사용자가 모여 채팅방이 실제 생성된 시점을 기록한다. | 채팅방 생성 시점을 확인한다. |
+| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방 매칭의 기준이 된 취향 투표 질문 ID | 동일한 질문에서 A 선택 사용자 1명과 B 선택 사용자 1명을 한 채팅방으로 구성하므로 `vote_questions.vote_question_id`를 참조한다. | 어떤 투표 질문을 기준으로 생성된 채팅방인지 식별한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 채팅방 생성 시각 | 두 사용자가 모여 채팅방이 실제 생성된 시점을 기록한다. | 채팅방 생성 시점을 확인한다. |
 
 #### 3. 제약조건
 
@@ -872,14 +874,14 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_chat_room_match_composition` | 하나의 채팅방은 동일한 `vote_question_id`에서 A 선택 사용자 2명과 B 선택 사용자 2명으로 구성한다. 선택지는 참여자의 `vote_answers.selected_option`에서 판별하며 `chat_rooms`에 단일 선택지 컬럼을 중복 저장하지 않는다. |
+| `rule_chat_room_match_composition` | 하나의 채팅방은 동일한 `vote_question_id`에서 A 선택 사용자 1명과 B 선택 사용자 1명으로 구성한다. 선택지는 참여자의 `vote_answers.selected_option`에서 판별하며 `chat_rooms`에 단일 선택지 컬럼을 중복 저장하지 않는다. |
 
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
 | `vote_questions` | `chat_rooms.vote_question_id` → `vote_questions.vote_question_id` | N:1 | 하나의 취향 투표 질문을 기준으로 여러 개의 채팅방이 생성될 수 있으며, 각 채팅방은 하나의 질문을 기준으로 한다. |
-| `chat_room_participants` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 매칭이 완료된 4명의 참여자 정보가 생성되며, 각 참여자는 하나의 채팅방에 속한다. |
+| `chat_room_participants` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여자는 하나의 채팅방에 속한다. |
 | `chat_messages` | `chat_messages.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 여러 개의 메시지가 존재할 수 있으며, 각 메시지는 하나의 채팅방에 속한다. |
 
 ---
@@ -913,15 +915,15 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_chat_room_join` | 매칭 완료 시 4명의 참여자 정보를 먼저 생성하고, 사용자가 실제 채팅방에 입장하면 `joined_at`을 기록한다. |
+| `rule_chat_room_join` | 매칭 완료 시 두 참여자의 정보를 먼저 생성하고, 사용자가 실제 채팅방에 입장하면 `joined_at`을 기록한다. |
 | `rule_chat_room_reentry` | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없다. |
-| `rule_chat_room_delete` | 채팅방 참여자 4명이 모두 퇴장했거나 자정이 되면 채팅방을 삭제한다. |
+| `rule_chat_room_delete` | 채팅방 두 참여자가 모두 퇴장했거나 자정이 되면 채팅방을 삭제한다. |
 
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
-| `chat_rooms` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 매칭이 완료된 4명의 참여자 정보가 생성되며, 각 참여 정보는 하나의 채팅방에 속한다. 채팅방이 삭제되면 해당 참여자 정보도 함께 삭제된다. |
+| `chat_rooms` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여 정보는 하나의 채팅방에 속한다. 채팅방이 삭제되면 해당 참여자 정보도 함께 삭제된다. |
 | `users` | `chat_room_participants.user_id` → `users.user_id` | N:1 | 한 사용자는 서로 다른 여러 채팅방에 참여할 수 있으며, 각 참여 정보는 한 명의 사용자에게 속한다. |
 
 ---
@@ -969,7 +971,7 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 
 #### 1. 테이블 설명
 
-사용자에게 전달할 서비스 알림 정보를 저장하는 테이블이다. 알림의 대상 사용자, 알림 유형, 내용, 발생 시점과 읽음 여부를 관리하며 사용자가 자신의 알림 목록을 조회할 때 사용한다.
+사용자에게 전달할 서비스 알림 정보를 저장하는 테이블이다. 알림의 대상 사용자, 알림 유형, 내용, 발생 시점과 읽음 여부를 관리하며 사용자가 자신의 알림 목록을 조회할 때 사용한다. V7부터 알림 유형은 4종이며 `source_event_id`는 Outbox 이벤트 식별자 스냅샷으로 저장하고 실제 Outbox FK는 두지 않는다.
 
 #### 2. 컬럼 정의
 
@@ -979,15 +981,14 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 알림 수신 사용자 ID | `users.user_id`를 참조한다. | 누구에게 전달되는 알림인지 식별한다. |
 | `type` | `ENUM` | - | NOT NULL | - | - | 알림 유형
 `MONTHLY_REPORT_CREATED`, 
-`AI_PLAYLIST`, 
 `MATCH_COMPLETED`, 
 `FRIEND_REQUEST`, 
-`FRIEND_ACCEPTED` | 발생 원인과 알림 클릭 시 처리할 동작을 구분하기 위해 사용한다. | 월별 리포트, AI 플리, 매칭 완료, 친구 요청/수락 알림을 구분한다. |
+`FRIEND_ACCEPTED` | 발생 원인과 알림 클릭 시 처리할 동작을 구분하기 위해 사용한다. | 월별 리포트, 매칭 완료, 친구 요청/수락 알림을 구분한다. |
 | `monthly_report_id` | `BIGINT` | - | NULL | NULL | FK | 생성된 월별 리포트 ID | `MONTHLY_REPORT_CREATED` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 해당 월별 리포트와 연결한다. |
-| `recommendation_playlist_id` | `BIGINT` | - | NULL | NULL | FK | 생성된 AI 추천 플레이리스트 ID | `AI_PLAYLIST` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 생성된 AI 플레이리스트와 연결한다. |
-| `chat_room_id` | `BIGINT` | - | NULL | NULL | 논리 참조 | Chat Server가 발급한 채팅방 ID | 별도 Chat DB 소유 ID이므로 Backend FK가 없으며 NULL을 허용한다. | 알림 클릭 시 매칭된 채팅방으로 이동하는 데 사용한다. |
+| `chat_room_id` | `BIGINT` | - | NULL | NULL | 논리 참조 | 매칭 완료로 생성된 채팅방 ID | V6 이후 채팅방은 별도 Chat DB 소유이므로 Backend DB FK 없이 ID만 저장한다. | 알림 클릭 시 매칭된 채팅방으로 이동하는 데 사용한다. |
 | `friendship_id` | `BIGINT` | - | NULL | NULL | FK | 친구 관계 ID | `FRIEND_ACCEPTED` 알림에서 사용하며 `friendships.friendship_id`를 참조한다. | 수락 결과 생성된 친구 관계를 식별한다. |
 | `friend_request_id` | `BIGINT` | - | NULL | NULL | FK | 친구 요청 ID | 친구 요청 알림에서 사용하며 `friend_requests.friend_request_id`를 참조한다. | 어떤 친구 요청으로 발생한 알림인지 식별하고, 수락·거절 처리 시 해당 친구 요청을 참조하는 데 사용한다. |
+| `source_event_id` | `CHAR` | 36 | NULL | NULL | UNIQUE 구성 | 원본 Outbox 이벤트 UUID | 기존 알림은 `NULL`을 허용하고 신규 알림은 애플리케이션에서 값을 기록한다. Outbox FK는 두지 않는다. | 이벤트당 사용자 알림 중복을 방지한다. |
 | `title` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 제목 | 알림 목록에서 주요 내용을 간단히 보여준다. | 사용자에게 알림 종류와 핵심 내용을 표시한다. |
 | `content` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 내용 | 사용자에게 전달할 구체적인 알림 문구를 저장한다. | 알림 상세 내용을 표시한다. |
 | `read_at` | `DATETIME` | - | NULL | NULL | - | 알림을 읽은 시각 | 읽기 전에는 값이 없으므로 `NULL`을 허용한다. | `NULL`이면 읽지 않은 알림, 값이 있으면 읽은 알림으로 판단한다. |
@@ -1000,16 +1001,16 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | `pk_notifications` | PRIMARY KEY | `notification_id` | - | 각 알림을 고유하게 식별한다. |
 | `fk_notifications_user` | FOREIGN KEY | `user_id` | `users.user_id` | 알림 수신자가 실제 사용자 데이터를 참조하도록 한다. |
 | `fk_notifications_monthly_report` | FOREIGN KEY, UNIQUE | `monthly_report_id` | `monthly_reports.monthly_report_id` | `MONTHLY_REPORT_CREATED` 알림이 실제 생성된 리포트를 참조하도록 하며, 리포트가 삭제되면 알림은 유지하고 `monthly_report_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `fk_notifications_playlist` | FOREIGN KEY, UNIQUE | `recommendation_playlist_id` | `recommendation_playlists.recommendation_playlist_id` | `AI_PLAYLIST` 알림이 실제 생성된 플레이리스트를 참조하도록 하며, 플레이리스트가 삭제되면 알림은 유지하고 `recommendation_playlist_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `fk_notifications_friendship` | FOREIGN KEY, UNIQUE | `friendship_id` | `friendships.friendship_id` | `FRIEND_ACCEPTED` 알림이 실제로 생성된 친구 관계를 참조하도록 하며, 친구 관계가 삭제되면 알림은 유지하고 `friendship_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
-| `chk_notifications_type` | CHECK | `type` | - | 알림 유형을 `MONTHLY_REPORT_CREATED`, `AI_PLAYLIST`, `MATCH_COMPLETED`, `FRIEND_REQUEST`, `FRIEND_ACCEPTED`로 제한한다. |
+| `fk_notifications_friendship` | FOREIGN KEY | `friendship_id` | `friendships.friendship_id` | 친구 관계가 삭제되면 알림은 유지하고 `friendship_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. 같은 관계에 여러 수신자의 알림을 연결할 수 있다. |
 | `fk_notifications_friend_request` | FOREIGN KEY, UNIQUE | `friend_request_id` | `friend_requests.friend_request_id` | `FRIEND_REQUEST` 알림이 실제 친구 요청 데이터를 참조하도록 하며, 친구 요청이 삭제되면 알림은 유지하고 `friend_request_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
+| `uk_notifications_source_event_user` | UNIQUE | `source_event_id`, `user_id` | - | 같은 이벤트가 한 사용자에게 알림을 중복 생성하지 못하게 한다. `source_event_id`가 `NULL`인 기존 이력은 허용한다. |
+| `idx_notifications_friendship` | INDEX | `friendship_id` | - | UNIQUE를 제거해 여러 수신자의 알림을 허용하면서 친구 관계 FK를 지원한다. |
 
 #### 3-1. 비즈니스 규칙
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_notification_target_delete` | 알림이 참조하는 Target Resource가 삭제되어도 알림 자체는 과거 이력으로 유지한다. 해당 Target FK만 `NULL`로 변경한다. |
+| `rule_notification_target_delete` | 알림이 참조하는 Target Resource가 삭제되어도 알림 자체는 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. Chat DB의 채팅방 삭제는 Backend FK가 처리하지 않으므로 후속 알림 코드에서 처리한다. |
 | `rule_notification_target_action` | Target FK가 `NULL`인 과거 알림은 화면에 표시할 수 있으나 해당 리소스로 이동하는 액션은 비활성화한다. |
 
 #### 4. 관계
@@ -1018,15 +1019,14 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | --- | --- | --- | --- |
 | `users` | `notifications.user_id` → `users.user_id` | N:1 | 한 사용자는 여러 알림을 받을 수 있으며 각 알림은 한 명의 수신자에게 전달된다. |
 | `monthly_reports` | `notifications.monthly_report_id` → `monthly_reports.monthly_report_id` | 0..1:1 | 월별 리포트 생성 알림인 경우 해당 리포트와 연결된다. 리포트 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| `recommendation_playlists` | `notifications.recommendation_playlist_id` → `recommendation_playlists.recommendation_playlist_id` | 0..1:1 | AI 플레이리스트 생성 알림인 경우 생성된 플레이리스트와 연결된다. 플레이리스트 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| Chat DB | `notifications.chat_room_id` | 논리 참조 | 매칭 완료 알림이 Chat Server의 채팅방을 가리킨다. Backend DB FK는 없다. |
+| `chat_rooms` (별도 Chat DB) | `notifications.chat_room_id` → 채팅방 ID | N:0..1 논리 참조 | Backend DB FK는 없다. 알림 생성 또는 클릭 시 채팅방 존재 여부를 별도 도메인에서 확인해야 한다. |
 | `friend_requests` | `notifications.friend_request_id` → `friend_requests.friend_request_id` | 0..1:1 | 하나의 친구 요청에는 하나의 `FRIEND_REQUEST` 알림이 연결될 수 있다. 친구 요청 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
-| `friendships` | `notifications.friendship_id` → `friendships.friendship_id` | 0..1:1 | 하나의 친구 관계에는 하나의 `FRIEND_ACCEPTED` 알림이 연결될 수 있다. 친구 관계 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+| `friendships` | `notifications.friendship_id` → `friendships.friendship_id` | 0..N:1 | 하나의 친구 관계에 서로 다른 수신자의 `FRIEND_ACCEPTED` 알림을 연결할 수 있다. 친구 관계 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
 ---
 
 ## 구현·설계 정합성 표
 
-| 대상 | 원본/목표 설계 | Flyway V1~V6 및 현재 코드 | 문서 처리 |
+| 대상 | 원본/목표 설계 | Flyway V1~V8 및 현재 코드 | 문서 처리 |
 | --- | --- | --- | --- |
 | `places` | 법정동 코드·이름 nullable 쌍, 좌표 기반 장소 | V4에서 `external_place_id`, `place_name` 제거, `legal_dong_code`, `legal_dong_name`, 좌표 UNIQUE, 법정동 쌍 CHECK 적용 | V4 실제 구조를 본문에 반영 |
 | `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
@@ -1039,6 +1039,7 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | `match_requests`, `matches` | 1:1 매칭 상태와 ChatRoom 논리 참조 | V6에서 `MATCHING`, `match_id`, `matches`를 추가하고 상태 CHECK를 적용 | 현재 Backend schema로 반영. `matches.chat_room_id`는 Chat DB 논리 ID이며 FK가 아님 |
 | `notifications.chat_room_id` | Chat Server ChatRoom 논리 ID | V6에서 `fk_notifications_chat_room` 제거, 컬럼 유지 | 현재 Backend schema에는 FK가 없음 |
 | `chat_rooms`, `chat_room_participants`, `chat_messages` | Chat Server가 소유 | V6에서 Backend DB 테이블 삭제 | 본문은 V1 당시 역사 자료이며 현재 schema에 포함하지 않음 |
+| `notifications`, `outbox_events` | 사용자 알림 이력과 비즈니스 이벤트를 원본 트랜잭션에 함께 보존 | `notifications`는 V7, `outbox_events`는 V8에서 생성되며 현재 알림 API 및 친구·리포트 이벤트 처리가 구현됨 | MATCH_COMPLETED 발행은 배포 환경별 4인 이력 및 Chat DB 참가자 등록 근거 확인 전까지 보류 |
 
 ## Open Questions
 
@@ -1165,5 +1166,46 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | 2 | 강수 없음 + `SKY=1` | `CLEAR` |
 | 2 | 강수 없음 + `SKY=2` 또는 `3` | `CLOUDY` |
 | 2 | 강수 없음 + `SKY=4` | `OVERCAST` |
+
+---
+
+## 26. outbox_events - 알림 Outbox 이벤트 테이블
+
+#### 1. 테이블 설명
+
+원본 비즈니스 트랜잭션에서 알림 이벤트를 기록하고, COMMIT 이후 별도 트랜잭션의 Processor가 알림 이력을 생성하도록 V8에서 추가했다. 이벤트 payload와 처리 상태를 보존하며 `aggregate_id`는 원본 도메인 ID 스냅샷이다. 원본 리소스와 FK를 두지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `event_id` | `CHAR(36)` | NOT NULL | - | PK | Outbox 이벤트 UUID |
+| `event_type` | `ENUM` | NOT NULL | - | UK(복합) | `MONTHLY_REPORT_CREATED`, `MATCH_COMPLETED`, `FRIEND_REQUEST`, `FRIEND_ACCEPTED` 중 하나 |
+| `aggregate_id` | `BIGINT` | NOT NULL | - | UK(복합) | 이벤트 유형에 해당하는 원본 리소스 ID 스냅샷. 원본 테이블 FK는 두지 않는다. |
+| `payload` | `JSON` | NOT NULL | - | - | 수신자 및 이벤트 처리에 필요한 payload v1 |
+| `status` | `ENUM('PENDING','COMPLETED','FAILED')` | NOT NULL | `PENDING` | INDEX | 처리 상태 |
+| `retry_count` | `INT` | NOT NULL | `0` | - | 최초 처리를 제외한 추가 재시도 횟수 |
+| `next_retry_at` | `DATETIME(6)` | NULL | NULL | INDEX | 다음 재시도 예정 시각. NULL이면 최초 처리를 기다리는 이벤트다. |
+| `last_error_code` | `VARCHAR(100)` | NULL | NULL | - | 마지막 처리 실패의 안전한 오류 코드 |
+| `last_error_at` | `DATETIME(6)` | NULL | NULL | - | 마지막 처리 실패 시각 |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | INDEX | 원본 트랜잭션에서 이벤트를 기록한 시각 |
+| `processed_at` | `DATETIME(6)` | NULL | NULL | - | 모든 알림 생성이 성공한 시각. FAILED에서는 NULL을 유지한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_outbox_events` | PRIMARY KEY | `event_id` | - | Outbox 이벤트 UUID를 고유하게 식별한다. |
+| `uk_outbox_events_type_aggregate` | UNIQUE | `event_type`, `aggregate_id` | - | 같은 원본 리소스·이벤트 유형의 중복 발행을 방지한다. |
+| `idx_outbox_events_schedule` | INDEX | `status`, `next_retry_at`, `created_at` | - | Scheduler가 처리 가능한 이벤트를 상태·예정 시각·생성 시각 순으로 찾는다. |
+
+#### 3-1. 처리 규칙
+
+- 원본 변경과 Outbox INSERT는 같은 트랜잭션에 기록한다. 원본 COMMIT 후 Processor가 독립 트랜잭션에서 즉시 처리를 시도한다.
+- 한 이벤트의 모든 `notifications` INSERT와 Outbox `COMPLETED` 변경은 원자적으로 처리한다. 일부 수신자만 알림을 받는 상태는 허용하지 않는다.
+- 최초 실패 뒤 최대 5회 추가 재시도한다. 간격은 1, 2, 4, 8, 16분에 사용자 확정 지터 0~30초를 더하며 Scheduler는 1분 주기로 한 번에 최대 20건을 조회한다.
+- 재시도 후보는 `FOR UPDATE SKIP LOCKED` 방식으로 잠가 여러 Worker가 같은 이벤트를 처리하지 않게 한다.
+- 최대 횟수 초과 또는 영구 오류는 `FAILED`로 기록한다. `COMPLETED`에만 `processed_at`을 기록한다.
+- `MATCH_COMPLETED` 발행은 배포 환경별 기존 4인 매칭 이력 0건 확인과 Chat DB 참가자 등록 근거가 확인될 때까지 보류한다.
 
 ---

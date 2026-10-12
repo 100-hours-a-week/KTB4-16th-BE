@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.user.dto.response;
 
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.message.UserMessage;
+import java.time.LocalDateTime;
 import java.util.List;
 
 public record UserProfileResponse(String message, UserProfileData data) {
@@ -15,7 +16,8 @@ public record UserProfileResponse(String message, UserProfileData data) {
                         user.getEmail(),
                         user.getPreferredGenres() == null
                                 ? null : List.copyOf(user.getPreferredGenres()),
-                        user.isGenreOnboardingDone()));
+                        user.isGenreOnboardingDone(),
+                        user.getCreatedAt()));
     }
 
     public record UserProfileData(
@@ -23,7 +25,8 @@ public record UserProfileResponse(String message, UserProfileData data) {
             String nickname,
             String email,
             List<String> preferredGenres,
-            boolean genreOnboardingDone
+            boolean genreOnboardingDone,
+            LocalDateTime createdAt
     ) {
     }
 }

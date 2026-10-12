@@ -71,6 +71,9 @@ fi
 export MULO_WEATHER_IT_DB_URL="jdbc:mysql://127.0.0.1:${DB_PORT}/${DB_NAME}?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul"
 export MULO_WEATHER_IT_DB_USERNAME="${DB_USER}"
 export MULO_WEATHER_IT_DB_PASSWORD="${DB_PASSWORD}"
+export MULO_NOTIFICATION_IT_DB_URL="jdbc:mysql://127.0.0.1:${DB_PORT}/"
+export MULO_NOTIFICATION_IT_DB_USERNAME="root"
+export MULO_NOTIFICATION_IT_DB_PASSWORD="${ROOT_PASSWORD}"
 
 # Harmless test-only placeholders for any application properties not overridden by
 # application-weather-it.yaml. No external client in this integration test is real.

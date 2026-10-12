@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.user.repository;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.entity.User;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -40,6 +41,9 @@ class UserPreferredGenresMysqlIntegrationTest {
         User reloadedUnanswered = userRepository.findById(unansweredId).orElseThrow();
         assertThat(reloadedUnanswered.getPreferredGenres()).isNull();
         assertThat(reloadedUnanswered.isGenreOnboardingDone()).isFalse();
+        assertThat(reloadedUnanswered.getCreatedAt()).isNotNull();
+        assertThat(UserProfileResponse.from(reloadedUnanswered).data().createdAt())
+                .isEqualTo(reloadedUnanswered.getCreatedAt());
 
         User reloadedSelected = userRepository.findById(selectedId).orElseThrow();
         assertThat(reloadedSelected.getPreferredGenres())

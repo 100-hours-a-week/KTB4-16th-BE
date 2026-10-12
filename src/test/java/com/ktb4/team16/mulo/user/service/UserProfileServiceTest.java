@@ -53,6 +53,8 @@ class UserProfileServiceTest {
     void getMyProfileReturnsCurrentUserData() {
         User user = User.signup("user@example.com", "password-hash", "뮤로16");
         ReflectionTestUtils.setField(user, "userId", 1L);
+        LocalDateTime createdAt = LocalDateTime.of(2026, 10, 1, 12, 34, 56);
+        ReflectionTestUtils.setField(user, "createdAt", createdAt);
         when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
                 .thenReturn(Optional.of(user));
 
@@ -64,6 +66,7 @@ class UserProfileServiceTest {
         assertThat(response.data().email()).isEqualTo("user@example.com");
         assertThat(response.data().preferredGenres()).isNull();
         assertThat(response.data().genreOnboardingDone()).isFalse();
+        assertThat(response.data().createdAt()).isEqualTo(createdAt);
     }
 
     @Test

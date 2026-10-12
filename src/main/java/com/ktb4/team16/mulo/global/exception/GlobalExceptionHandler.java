@@ -18,6 +18,8 @@ import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
+import com.ktb4.team16.mulo.notification.exception.NotificationDomainException;
+import com.ktb4.team16.mulo.notification.exception.NotificationInputException;
 import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportAiCallbackException;
@@ -63,6 +65,23 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleMatchDomain(MatchDomainException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(NotificationDomainException.class)
+    // 알림 소유권과 입력 상태 오류를 알림 API의 공개 오류 코드로 반환한다.
+    public ResponseEntity<ErrorResponse> handleNotificationDomain(
+            NotificationDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(NotificationInputException.class)
+    // cursor·size·ID 오류를 기존 OpenAPI의 field error 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleNotificationInput(
+            NotificationInputException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        exception.fieldName(), exception.fieldErrorCode())));
     }
 
     @ExceptionHandler(KakaoRegionLookupException.class)

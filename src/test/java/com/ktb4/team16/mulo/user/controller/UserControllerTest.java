@@ -250,7 +250,8 @@ class UserControllerTest {
         UserProfileResponse response = new UserProfileResponse(
                 "회원 정보 조회 성공",
                 new UserProfileResponse.UserProfileData(
-                        1L, "뮤로16", "user@example.com", null, false));
+                        1L, "뮤로16", "user@example.com", null, false,
+                        LocalDateTime.of(2026, 10, 1, 12, 34, 56)));
         when(profileService.getMyProfile(1L)).thenReturn(response);
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
@@ -262,7 +263,8 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.nickname").value("뮤로16"))
                 .andExpect(jsonPath("$.data.email").value("user@example.com"))
                 .andExpect(jsonPath("$.data.preferredGenres").value(org.hamcrest.Matchers.nullValue()))
-                .andExpect(jsonPath("$.data.genreOnboardingDone").value(false));
+                .andExpect(jsonPath("$.data.genreOnboardingDone").value(false))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-01T12:34:56"));
     }
 
     @Test

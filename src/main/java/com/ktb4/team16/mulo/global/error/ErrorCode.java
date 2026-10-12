@@ -38,6 +38,8 @@ public enum ErrorCode {
     PLACE_IDS_COUNT_EXCEEDED(HttpStatus.BAD_REQUEST,
             "한 번의 요청에는 장소 ID를 최대 100개까지 전달할 수 있습니다."),
     INVALID_PLACE_ID(HttpStatus.BAD_REQUEST, "장소 ID는 1 이상의 값이어야 합니다."),
+    NOTIFICATION_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "읽음 처리할 알림 ID가 필요합니다."),
+    INVALID_NOTIFICATION_ID(HttpStatus.BAD_REQUEST, "올바른 알림 ID를 입력해주세요."),
     INVALID_WEATHER_REQUEST_TIME(HttpStatus.BAD_REQUEST, "지난 시간대의 날씨는 조회할 수 없습니다."),
     NICKNAME_REQUIRED(HttpStatus.BAD_REQUEST, "닉네임을 입력해주세요."),
     INVALID_NICKNAME_FORMAT(HttpStatus.BAD_REQUEST, "닉네임은 띄어쓰기와 특수문자 없이 2~10자로 입력해주세요."),
@@ -68,6 +70,7 @@ public enum ErrorCode {
     FRIENDSHIP_NOT_FOUND(HttpStatus.NOT_FOUND, "친구 관계를 찾을 수 없습니다."),
     MATCH_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "매칭 요청을 찾을 수 없습니다."),
     MONTHLY_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "월간 리포트를 찾을 수 없습니다."),
+    NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
 
     WEATHER_API_ERROR(HttpStatus.BAD_GATEWAY,
             "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."),
