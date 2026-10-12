@@ -22,10 +22,10 @@ public final class IntegrationTestDatabaseGuard {
             assertThat(url).isEqualTo(System.getenv("MULO_INTEGRATION_TEST_DB_URL"));
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isGreaterThanOrEqualTo(6);
+                    .isGreaterThanOrEqualTo(8);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT MAX(version) FROM flyway_schema_history WHERE success = 1", String.class))
-                    .isEqualTo("6");
+                    .isEqualTo("8");
         }
     }
 }

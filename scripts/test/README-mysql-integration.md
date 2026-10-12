@@ -18,6 +18,10 @@
 
 ## 매칭 동시성 테스트
 
-`MatchConcurrencyMysqlIntegrationTest`는 실제 MySQL 8.4에서 서로 다른 트랜잭션의 동시 매칭 요청을 실행해 하나의 WAITING 후보가 두 Match에 중복 배정되지 않는지 검증합니다. 현재 재현에서는 후보 잠금 조회 중 MySQL 오류 1213(deadlock)이 발생합니다. 이는 해결된 동작이 아니라 현재 확인된 실패이므로, 테스트 통과 또는 동시성 보장이 완료된 것으로 해석하지 않습니다.
+초기에는 동시 요청에서 같은 WAITING 후보가 둘 이상의 Match에 배정되는 일을 막기 위해 후보 MatchRequest에 비관적 쓰기 잠금을 적용했습니다. 실제 MySQL 동시성 검증에서는 각 요청이 자기 MatchRequest를 저장한 뒤 상대 후보를 잠그려는 순서가 엇갈려 MySQL 1213 deadlock이 발생했습니다.
 
-원인과 수정 방안은 검토 중입니다. FIFO 순서를 바꾸는 `SKIP LOCKED` 적용 여부도 확정되지 않았으며, deadlock retry나 다른 잠금 전략은 아직 구현되지 않았습니다.
+이를 개선하기 위해 후보 조회 전에 동일 VoteQuestion 행을 `PESSIMISTIC_WRITE`로 잠가 같은 질문의 매칭 요청이 잠금을 획득하는 순서를 통일했습니다. 그 뒤 FIFO 순서로 WAITING 후보를 조회하고 후보 MatchRequest에도 비관적 쓰기 잠금을 적용합니다.
+
+2026-10-12에 MySQL 8.4 및 Flyway V8까지 적용된 격리 DB에서 `./scripts/test/run-mysql-integration.sh`를 실행했습니다. 전체 integration suite 23개가 통과했습니다. `MatchConcurrencyMysqlIntegrationTest`는 동시 요청 시나리오를 10회 반복했고 10회 모두 통과했습니다. 실행 중 MySQL 1213 deadlock이나 중복 매칭은 재현되지 않았으며, 각 반복에서 Match 1개, 동일 Match에 연결된 두 요청자, 남은 요청자의 WAITING 및 `match_id = NULL` 조건이 확인됐습니다. Repository 테스트에서는 동일 질문·반대 선택지·WAITING 조건과 `created_at ASC`, 동률 시 `match_request_id ASC` FIFO가 확인됐고, 만료 통합 테스트에서는 WAITING 만료와 MATCHING/MATCHED 보존 및 진행 중인 매칭과 만료 작업의 경합을 검증했습니다.
+
+이 결과는 현재 테스트 시나리오에서의 관찰 결과이며 deadlock이 모든 가능한 실행에서 발생하지 않는다는 보장은 아닙니다. V8 반영 이후 테스트 환경 guard는 성공한 Flyway migration이 V8까지 적용됐는지 확인합니다.
