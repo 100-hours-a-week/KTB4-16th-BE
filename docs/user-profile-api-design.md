@@ -4,7 +4,7 @@
 
 이 문서는 MULO V1 사용자 프로필 API의 개발 순서와 설계 기준을 설명한다. 처음 코드를 확인하는 개발자와 AI도 인증 정보가 프로필 조회로 전달되는 과정, 계층별 책임, 응답 및 오류 계약을 이해할 수 있도록 작성한다.
 
-현재 구현 범위는 `GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`이다. 회원탈퇴는 사용자 연관 데이터의 처리 정책과 구현이 준비될 때까지 제외한다.
+현재 구현 범위는 `GET /api/users/me`, `PATCH /api/users/me/nickname`, `PATCH /api/users/me/password`, `DELETE /api/users/me`이다. 탈퇴 시 활성 자물쇠 기록도 일괄 soft delete한다.
 
 ## 2. 개발 순서
 
@@ -13,7 +13,7 @@
 1. 내 정보 조회: `GET /api/users/me`
 2. 닉네임 변경: `PATCH /api/users/me/nickname`
 3. 비밀번호 변경: `PATCH /api/users/me/password`
-4. 회원탈퇴: 현재 범위에서 제외
+4. 회원탈퇴: `DELETE /api/users/me`; 비밀번호 확인, 사용자·활성 기록 soft delete, Refresh Token 폐기 및 Cookie 만료
 
 내 정보 조회를 먼저 구현하는 이유는 JWT로 인증된 사용자 ID가 Controller와 Service를 거쳐 Repository 조회로 연결되는 공통 흐름을 먼저 확립하기 위해서다. 닉네임 변경은 이 인증 및 사용자 조회 흐름을 재사용한다.
 
@@ -26,7 +26,8 @@ UserController
 ├── POST  /api/users/signup          기존 회원가입
 ├── GET   /api/users/me              내 정보 조회
 ├── PATCH /api/users/me/nickname     닉네임 변경
-└── PATCH /api/users/me/password     비밀번호 변경
+├── PATCH /api/users/me/password     비밀번호 변경
+└── DELETE /api/users/me              회원 탈퇴
 ```
 
 기존 `UserSignupController`는 `UserController`로 이름을 변경하고 기존 회원가입 메서드를 그대로 유지한다. Controller는 HTTP 요청과 응답의 연결만 담당한다. 비즈니스 로직은 기능별 Service에 분리하여 Controller 통합으로 인해 책임이 섞이지 않도록 한다.
@@ -233,7 +234,7 @@ Content-Type: application/json
 
 Service는 다음 순서로 처리한다.
 
-1. JWT에서 식별된 `userId`로 탈퇴하지 않은 사용자를 조회한다.
+1. JWT에서 식별된 `userId`로 탈퇴하지 않은 사용자 행을 잠금 조회한다.
 2. `PasswordEncoder.matches`로 현재 비밀번호와 저장된 bcrypt 해시를 대조한다.
 3. 새 비밀번호가 현재 비밀번호와 같지 않은지 다시 `matches`로 확인한다.
 4. 새 비밀번호를 `PasswordEncoder.encode`로 bcrypt 해시한 뒤 저장한다.
@@ -249,6 +250,12 @@ bcrypt는 복호화하는 암호화가 아니라 salt가 포함된 단방향 해
 
 성공 후 현재 Access Token과 Refresh Token은 정책에 따라 유지한다. 비밀번호 변경은 로그아웃이나 토큰 재발급을 수행하지 않는다.
 
+### 6.10 회원 탈퇴
+
+`DELETE /api/users/me`는 인증된 `userId`와 요청 본문의 `password`를 받는다. 서비스는 사용자 행을 잠근 뒤 BCrypt 해시로 비밀번호를 확인한다. 이후 한 DB 트랜잭션에서 활성 기록의 `deleted_at`, 사용자 `deleted_at`, 보유 중인 Refresh Token의 `revoked_at`을 같은 시각으로 설정한다. 기존에 삭제된 기록의 삭제 시각, 사진 메타데이터 및 GCS 객체는 유지한다. 응답에서는 로그인 때 사용한 `Path=/api/auth`의 Refresh Cookie를 만료한다.
+
+성공은 200 `{"message":"회원 탈퇴가 완료되었습니다."}`이다. 누락·공백 비밀번호는 400 `PASSWORD_REQUIRED`, 불일치는 400 `CURRENT_PASSWORD_MISMATCH`, 인증 실패·중복 탈퇴는 401이다. 기존 Signed URL은 각 만료 시각까지 유효할 수 있다. 탈퇴 도중 새 기록 생성(CT-05)과 향후 매칭·채팅 기능은 별도 과제다.
+
 ### 6.9 비밀번호 변경 오류
 
 | 상황 | HTTP | 오류 코드 |
@@ -262,7 +269,7 @@ bcrypt는 복호화하는 암호화가 아니라 salt가 포함된 단방향 해
 
 ## 7. SecurityConfig 영향
 
-새로운 보안 설정은 필요하지 않다. 기존 `requestMatchers("/api/**").authenticated()` 규칙에 따라 프로필 API는 자동으로 인증 요청이 된다. 상태를 변경하는 `PATCH` 요청은 기존 CSRF 설정도 적용받는다.
+새로운 보안 설정은 필요하지 않다. 기존 `requestMatchers("/api/**").authenticated()` 규칙에 따라 프로필 API는 자동으로 인증 요청이 된다. 상태를 변경하는 `PATCH`와 `DELETE` 요청은 기존 CSRF 설정도 적용받는다.
 
 회원가입, 로그인, 토큰 재발급, 로그아웃에 적용된 공개 접근 규칙은 변경하지 않는다. CI 설정, Flyway 파일, 데이터베이스 스키마도 이번 기능에서 수정하지 않는다.
 

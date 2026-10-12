@@ -588,7 +588,11 @@ paths:
       - USER / 사용자
       summary: 회원 탈퇴
       operationId: deleteApiUsersMe
-      description: 비밀번호 확인 후 users.deleted_at을 설정하고 Refresh Token을 revoke한다. soft delete 정책.
+      description: |-
+        현재 비밀번호 확인 후 users.deleted_at과 소유한 활성 records.deleted_at을 같은 시각으로 설정하고
+        기존 Refresh Token을 폐기한다. 이미 삭제된 기록의 삭제 시각, 사진 메타데이터와 GCS 이미지는 유지한다.
+        기존에 발급된 사진 Signed URL은 원래 만료 시각까지 유효할 수 있다.
+        탈퇴와 동시에 진행 중인 기록 생성(CT-05)의 완료 순서는 별도 이슈에서 다룬다.
       responses:
         '200':
           description: |-
@@ -610,7 +614,7 @@ paths:
 
             회원 탈퇴에 필요한 필수 입력값인 비밀번호가 누락되어 유효성 검증에 실패했으므로 400.
 
-            추가 케이스: 현재 사용자 확인을 위한 입력 검증 실패이므로 400.
+            비밀번호 불일치도 기존 CURRENT_PASSWORD_MISMATCH 코드로 400.
           content:
             application/json:
               schema:
@@ -631,13 +635,21 @@ paths:
                           type: string
                         message:
                           type: string
-              example:
-                code: INVALID_INPUT_VALUE
-                message: 입력값을 확인해주세요.
-                errors:
-                - field: password
-                  code: PASSWORD_REQUIRED
-                  message: 비밀번호를 입력해주세요.
+              examples:
+                passwordRequired:
+                  summary: 비밀번호 누락 또는 공백
+                  value:
+                    code: INVALID_INPUT_VALUE
+                    message: 입력값을 확인해주세요.
+                    errors:
+                    - field: password
+                      code: PASSWORD_REQUIRED
+                      message: 비밀번호를 입력해주세요.
+                currentPasswordMismatch:
+                  summary: 비밀번호 불일치
+                  value:
+                    code: CURRENT_PASSWORD_MISMATCH
+                    message: 현재 비밀번호가 일치하지 않습니다.
         '401':
           description: 탈퇴 대상 사용자 식별에 인증이 필요하므로 401.
           content:
@@ -672,12 +684,16 @@ paths:
           application/json:
             schema:
               type: object
+              required:
+              - password
               properties:
                 password:
                   type: string
             example:
               password: "..."
-      x-implementation-status: contract-only
+      security:
+      - bearerAuth: []
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/users/me/nickname":
     patch:

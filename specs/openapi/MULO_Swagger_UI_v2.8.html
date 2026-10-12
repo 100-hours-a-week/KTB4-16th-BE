@@ -882,7 +882,7 @@ const spec = {
         ],
         "summary": "회원 탈퇴",
         "operationId": "deleteApiUsersMe",
-        "description": "비밀번호 확인 후 users.deleted_at을 설정하고 Refresh Token을 revoke한다. soft delete 정책.",
+        "description": "현재 비밀번호 확인 후 users.deleted_at과 소유한 활성 records.deleted_at을 같은 시각으로 설정하고\n기존 Refresh Token을 폐기한다. 이미 삭제된 기록의 삭제 시각, 사진 메타데이터와 GCS 이미지는 유지한다.\n기존에 발급된 사진 Signed URL은 원래 만료 시각까지 유효할 수 있다.\n탈퇴와 동시에 진행 중인 기록 생성(CT-05)의 완료 순서는 별도 이슈에서 다룬다.",
         "responses": {
           "200": {
             "description": "회원 탈퇴 처리가 완료되었고 별도 반환 리소스가 필요하지 않으므로 200.\n\n기존 사용자 리소스를 소프트 딜리트 방식으로 정상적으로 탈퇴 처리했으므로 200.",
@@ -903,7 +903,7 @@ const spec = {
             }
           },
           "400": {
-            "description": "필수값 누락은 400.\n\n회원 탈퇴에 필요한 필수 입력값인 비밀번호가 누락되어 유효성 검증에 실패했으므로 400.\n\n추가 케이스: 현재 사용자 확인을 위한 입력 검증 실패이므로 400.",
+            "description": "필수값 누락은 400.\n\n회원 탈퇴에 필요한 필수 입력값인 비밀번호가 누락되어 유효성 검증에 실패했으므로 400.\n\n비밀번호 불일치도 기존 CURRENT_PASSWORD_MISMATCH 코드로 400.",
             "content": {
               "application/json": {
                 "schema": {
@@ -934,16 +934,28 @@ const spec = {
                     }
                   }
                 },
-                "example": {
-                  "code": "INVALID_INPUT_VALUE",
-                  "message": "입력값을 확인해주세요.",
-                  "errors": [
-                    {
-                      "field": "password",
-                      "code": "PASSWORD_REQUIRED",
-                      "message": "비밀번호를 입력해주세요."
+                "examples": {
+                  "passwordRequired": {
+                    "summary": "비밀번호 누락 또는 공백",
+                    "value": {
+                      "code": "INVALID_INPUT_VALUE",
+                      "message": "입력값을 확인해주세요.",
+                      "errors": [
+                        {
+                          "field": "password",
+                          "code": "PASSWORD_REQUIRED",
+                          "message": "비밀번호를 입력해주세요."
+                        }
+                      ]
                     }
-                  ]
+                  },
+                  "currentPasswordMismatch": {
+                    "summary": "비밀번호 불일치",
+                    "value": {
+                      "code": "CURRENT_PASSWORD_MISMATCH",
+                      "message": "현재 비밀번호가 일치하지 않습니다."
+                    }
+                  }
                 }
               }
             }
@@ -999,6 +1011,9 @@ const spec = {
             "application/json": {
               "schema": {
                 "type": "object",
+                "required": [
+                  "password"
+                ],
                 "properties": {
                   "password": {
                     "type": "string"
@@ -1011,7 +1026,12 @@ const spec = {
             }
           }
         },
-        "x-implementation-status": "contract-only",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented",
         "x-csrf-required": true
       }
     },
@@ -6327,7 +6347,8 @@ const spec = {
                   "selectedOption": {
                     "type": "string"
                   },
-                  "voteQuestionId": {}
+                  "voteQuestionId": {
+                  }
                 },
                 "required": [
                   "selectedOption",
@@ -6356,7 +6377,6 @@ const spec = {
         ],
         "summary": "매칭 요청 생성",
         "operationId": "postApiMatchRequests",
-        "description": "필수\nvoteAnswerId: Long\n\n같은 VoteQuestion에 답한 서로 반대 선택지(A/B)의 사용자 2명을 1:1로 매칭한다.\nWAITING 후보는 created_at ASC, 동률이면 match_request_id ASC FIFO로 선택한다.\n성공 응답의 status는 WAITING 또는 MATCHING이다. 201은 MatchRequest 자원 생성 성공이며 실제 ChatRoom 생성 완료를 뜻하지 않는다.\n\n확정 정책: KST 23:00:00부터 신규 요청을 차단한다. 23:00에 당일 남은 WAITING만 EXPIRED 처리하며 이미 MATCHING인 pair는 만료하지 않는다.\n현재 구현은 23:00 cutoff 검증, 당일 WAITING 요청의 23:00 EXPIRED 전환, 후보 선택·Match 연결·두 요청 MATCHING 전이까지다. 매칭 상태 조회 및 Chat Server 호출은 미구현이다.",
         "description": "필수\nvoteAnswerId: Long\n\n같은 VoteQuestion에 답한 서로 반대 선택지(A/B)의 사용자 2명을 1:1로 매칭한다.\nWAITING 후보는 created_at ASC, 동률이면 match_request_id ASC FIFO로 선택한다.\n성공 응답의 status는 WAITING 또는 MATCHING이다. 201은 MatchRequest 자원 생성 성공이며 실제 ChatRoom 생성 완료를 뜻하지 않는다.\n\n확정 정책: KST 23:00:00부터 신규 요청을 차단한다. 23:00에 당일 남은 WAITING만 EXPIRED 처리하며 이미 MATCHING인 pair는 만료하지 않는다.\n현재 구현은 cutoff 검증, 당일 WAITING 만료, FIFO 후보 선택, Match 연결 및 두 요청의 MATCHING 전이까지다. ChatRoomClient는 있으나 MatchService 연동, MATCHED 전이와 Chat Server 호출은 미구현이다.",
         "responses": {
           "201": {
@@ -7443,6 +7463,11 @@ const spec = {
         ],
         "summary": "알림 목록",
         "operationId": "getApiNotifications",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "description": "필수\n없음\n\n선택\ncursor: String\nsize: Integer (기본값 20, 최대 100)\n\n최신순 Cursor 페이지네이션, 페이지 크기 20. GET 자체는 read-only이며 프론트가 페이지를 받은 뒤 해당 페이지 unread IDs로 batch read API를 자동 호출한다.",
         "responses": {
           "200": {
@@ -7651,12 +7676,7 @@ const spec = {
             }
           }
         ],
-        "x-implementation-status": "implemented",
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        "x-implementation-status": "implemented"
       }
     },
     "/api/notifications/read": {
@@ -7666,6 +7686,11 @@ const spec = {
         ],
         "summary": "알림 일괄 읽음 처리",
         "operationId": "patchApiNotificationsRead",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "description": "필수\nnotificationIds: Array<Long>\n\n개별 읽음 API 없이 batch read만 제공한다.",
         "responses": {
           "200": {
@@ -7808,12 +7833,12 @@ const spec = {
                 "properties": {
                   "notificationIds": {
                     "type": "array",
+                    "minItems": 1,
                     "items": {
                       "type": "integer",
                       "format": "int64",
                       "minimum": 1
-                    },
-                    "minItems": 1
+                    }
                   }
                 },
                 "required": [
@@ -7831,12 +7856,7 @@ const spec = {
           }
         },
         "x-implementation-status": "implemented",
-        "x-csrf-required": true,
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        "x-csrf-required": true
       }
     },
     "/api/notifications/{notificationId}": {
@@ -7846,6 +7866,11 @@ const spec = {
         ],
         "summary": "알림 삭제",
         "operationId": "deleteApiNotificationsNotificationId",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
         "description": "필수\nnotificationId: Long\n\n알림만 삭제하며 연결된 target 자원은 삭제하지 않는다.",
         "responses": {
           "200": {
@@ -7992,12 +8017,7 @@ const spec = {
           }
         ],
         "x-implementation-status": "implemented",
-        "x-csrf-required": true,
-        "security": [
-          {
-            "bearerAuth": []
-          }
-        ]
+        "x-csrf-required": true
       }
     },
     "/api/memories/search": {

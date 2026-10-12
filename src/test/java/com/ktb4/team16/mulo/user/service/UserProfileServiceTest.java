@@ -211,7 +211,7 @@ class UserProfileServiceTest {
         String currentPassword = "Test1234!";
         String currentPasswordHash = passwordEncoder.encode(currentPassword);
         User user = User.signup("user@example.com", currentPasswordHash, "뮤로16");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
         LocalDateTime beforeUpdate = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
 
@@ -228,7 +228,7 @@ class UserProfileServiceTest {
     void updatePasswordRejectsMismatchedCurrentPassword() {
         String currentPasswordHash = passwordEncoder.encode("Test1234!");
         User user = User.signup("user@example.com", currentPasswordHash, "뮤로16");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.updatePassword(
@@ -245,7 +245,7 @@ class UserProfileServiceTest {
         String currentPassword = "Test1234!";
         String currentPasswordHash = passwordEncoder.encode(currentPassword);
         User user = User.signup("user@example.com", currentPasswordHash, "뮤로16");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.updatePassword(

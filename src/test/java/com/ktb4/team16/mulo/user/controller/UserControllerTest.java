@@ -14,6 +14,10 @@ import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+import com.ktb4.team16.mulo.user.service.UserWithdrawalService;
+import com.ktb4.team16.mulo.global.config.SecurityProperties;
+import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
+import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
@@ -39,6 +43,8 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -52,12 +58,14 @@ class UserControllerTest {
     @Mock UserProfileService profileService;
     @Mock PlaceService placeService;
     @Mock RecordService recordService;
+    @Mock UserWithdrawalService withdrawalService;
     MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(signupService, profileService, placeService, recordService))
+                        new UserController(signupService, profileService, placeService, recordService,
+                                withdrawalService, new SecurityProperties(List.of(), false)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -66,6 +74,60 @@ class UserControllerTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    /** 성공 응답과 기존 경로의 Refresh Cookie 만료를 확인한다. */
+    @Test
+    void withdrawReturnsSuccessAndExpiresRefreshCookie() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("회원 탈퇴가 완료되었습니다."))
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("refreshToken="),
+                        org.hamcrest.Matchers.containsString("Max-Age=0"),
+                        org.hamcrest.Matchers.containsString("Path=/api/auth"),
+                        org.hamcrest.Matchers.containsString("HttpOnly"))));
+        verify(withdrawalService).withdraw(1L, "correct");
+    }
+
+    /** 공백 비밀번호를 공통 필드 오류로 반환한다. */
+    @Test
+    void blankWithdrawalPasswordIsRejected() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\" \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors[0].code").value("PASSWORD_REQUIRED"));
+    }
+
+    /** 비밀번호 불일치에 기존 오류 코드를 재사용한다. */
+    @Test
+    void wrongWithdrawalPasswordUsesExistingError() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        doThrow(new UserWithdrawalException(ErrorCode.CURRENT_PASSWORD_MISMATCH))
+                .when(withdrawalService).withdraw(1L, "wrong");
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"wrong\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_MISMATCH"));
+    }
+
+    /** 중복 탈퇴 요청은 401로 응답한다. */
+    @Test
+    void alreadyWithdrawnUserIsUnauthorized() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        doThrow(new UnauthenticatedUserException()).when(withdrawalService)
+                .withdraw(1L, "correct");
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test

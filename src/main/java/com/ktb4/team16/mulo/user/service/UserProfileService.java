@@ -60,7 +60,9 @@ public class UserProfileService {
     @Transactional
     public UpdatePasswordResponse updatePassword(
             Long userId, String currentPassword, String newPassword) {
-        User user = findActiveUser(userId);
+        // 탈퇴와 비밀번호 변경이 같은 해시를 동시에 검사하지 않도록 직렬화한다.
+        User user = userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)
+                .orElseThrow(UnauthenticatedUserException::new);
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new PasswordChangeException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }

@@ -324,6 +324,23 @@ class SecurityIntegrationTests {
                 .andExpect(content().string("record deleted"));
     }
 
+    /** 탈퇴 API가 기존 CSRF와 Bearer 인증 규칙을 그대로 따르는지 확인한다. */
+    @Test
+    void memberWithdrawalRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(delete("/api/users/me").contentType("application/json")
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(delete("/api/users/me").cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
     @Test
     void friendDashboardAndWriteRoutesRequireAuthenticationAndWritesRequireCsrf() throws Exception {
         mvc.perform(get("/api/users/me/friends"))

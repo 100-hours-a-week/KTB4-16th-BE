@@ -16,10 +16,18 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RecordRepository extends JpaRepository<Record, Long> {
+
+    /** 탈퇴 사용자의 활성 기록만 일괄 소프트 삭제해 기존 삭제 시각을 보존한다. */
+    @Modifying
+    @Query("update Record r set r.deletedAt = :deletedAt "
+            + "where r.user.userId = :userId and r.deletedAt is null")
+    int softDeleteActiveByUserId(@Param("userId") Long userId,
+            @Param("deletedAt") LocalDateTime deletedAt);
 
     // 기간 내 활성 기록이 있는 사용자만 월간 리포트 생성 대상으로 조회한다.
     @Query("""
