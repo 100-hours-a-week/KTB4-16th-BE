@@ -56,7 +56,10 @@ public class AuthService {
 
     @Transactional
     public LoginResult login(String email, String password) {
-        User user = userRepository.findByEmailAndDeletedAtIsNull(email)
+        // 보조 인덱스는 읽기만 하고 기본 키로 잠가 탈퇴와 잠금 순서를 맞춘다.
+        User candidate = userRepository.findByActiveEmail(email)
+                .orElseThrow(InvalidCredentialsException::new);
+        User user = userRepository.findByUserIdAndDeletedAtIsNullForUpdate(candidate.getUserId())
                 .orElseThrow(InvalidCredentialsException::new);
         if (!passwordEncoder.matches(password, user.getPasswordHash())) {
             // 이메일 존재 여부와 비밀번호 오류를 같은 401로 처리해 계정 열거를 막는다.

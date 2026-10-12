@@ -48,7 +48,9 @@ class MyPlacesControllerTest {
                                 signupService,
                                 profileService,
                                 placeService,
-                                recordService
+                                recordService,
+                                null,
+                                new com.ktb4.team16.mulo.global.config.SecurityProperties(List.of(), false)
                         ))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())

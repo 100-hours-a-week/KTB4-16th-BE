@@ -86,4 +86,9 @@ public class User {
         this.preferredGenres = preferredGenres.isEmpty() ? null : List.copyOf(preferredGenres);
         this.genreOnboardingDone = true;
     }
+
+    /** 탈퇴 시각을 보존해 계정을 소프트 삭제한다. */
+    public void softDelete(LocalDateTime deletedAt) {
+        this.deletedAt = deletedAt;
+    }
 }

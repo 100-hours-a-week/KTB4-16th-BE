@@ -32,6 +32,7 @@ import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
+import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
@@ -126,6 +127,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PasswordChangeException.class)
     public ResponseEntity<ErrorResponse> handlePasswordChange(
             PasswordChangeException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status())
+                .body(ErrorResponse.of(errorCode));
+    }
+
+    /** 탈퇴 비밀번호 불일치를 기존 400 오류 응답으로 변환한다. */
+    @ExceptionHandler(UserWithdrawalException.class)
+    public ResponseEntity<ErrorResponse> handleUserWithdrawal(
+            UserWithdrawalException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status())
                 .body(ErrorResponse.of(errorCode));
