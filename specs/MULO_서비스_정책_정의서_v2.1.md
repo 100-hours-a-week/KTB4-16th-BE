@@ -54,7 +54,9 @@
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
 | 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
 | 알림 | 목록·일괄 읽음·삭제 API 및 친구·월간 리포트 Outbox 처리 구현 | MATCH_COMPLETED 발행은 배포 환경의 기존 이력 확인과 Chat DB 참가자 등록 근거 확인 전까지 보류 |
-| 투표·매칭·채팅 | OpenAPI 계약은 보존하되 현재 저장소 Controller 없음 | contract-only |
+| 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정, KST 23:00 신규 요청 차단 및 당일 WAITING 만료 구현 | 구현됨 |
+| 매칭 상태 조회 | 인증된 요청 소유자의 현재 상태를 polling으로 조회 | 구현됨 |
+| Chat Server 연동·채팅 | ChatRoomClient는 구현됐으나 MatchService 연동·방 생성 완료 전이는 미구현 | 일부 구현 / contract-only |
 | AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
 
 
@@ -280,36 +282,32 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `MATCH-001` | **확정** | 매칭 구성 | 동일 `vote_question_id`에서 A 선택 사용자 1명 + B 선택 사용자 1명이 모이면 1:1 채팅방을 생성하고 두 매칭 요청을 `MATCHED`로 변경한다. | 사용자 확정 2026-10-11 / 테이블 정의서 §18-19 |
-| `MATCH-002` | **확정** | 매칭 운영 종료 | 당일 23:00 이후에는 신규 매칭 요청을 생성하지 않는다. | 사용자 확정 / API 명세 상세2차 R238,R246 |
-| `MATCH-003` | **확정** | 23시 대기 요청 만료 | 당일 23:00 시점에 남아 있는 모든 WAITING 요청을 EXPIRED로 변경하고 이후 추가 매칭하지 않는다. | 사용자 확정 / API 명세 상세2차 정책 요약 R23 |
-| `MATCH-004` | **현재 설계** | 매칭 요청 기준 답변 | 매칭 요청은 현재 사용자가 소유한 오늘 날짜의 유효한 투표 답변을 기준으로 한다. | API 명세 상세2차 R238-R246 |
-| `MATCH-005` | **확정** | 잘못된 voteAnswerId 통합 | voteAnswerId가 미존재·타인 소유·과거 날짜이면 모두 404 `VOTE_ANSWER_NOT_FOUND`로 처리한다. | API 명세 상세2차 R242,R246 |
-| `MATCH-006` | **현재 설계** | 답변당 요청 1회 | 하나의 `vote_answer`에는 하나의 `match_request`만 생성할 수 있다. | 테이블 정의서 §18 / API 명세 상세2차 R243,R246 |
-| `MATCH-007` | **현재 설계** | 요청 초기 상태 | 매칭 요청 생성 직후 상태는 WAITING이다. | API 명세 상세2차 R238,R246 |
-| `MATCH-008` | **현재 설계** | 상태 집합 | 매칭 상태는 WAITING/MATCHED/EXPIRED 세 가지다. | 테이블 정의서 §18 / API 명세 상세2차 R247 |
-| `MATCH-009` | **현재 설계** | 매칭 상태 조회 | 프론트는 polling으로 상태를 조회하며 MATCHED이면 `chatRoomId`, WAITING/EXPIRED이면 NULL을 반환한다. | API 명세 상세2차 R247-R253 |
-| `MATCH-010` | **현재 설계** | 상태 조회 소유권 | 매칭 요청 소유자만 상태를 조회할 수 있고 미존재/타인 소유는 동일한 404다. | API 명세 상세2차 R247,R251,R253 |
-| `MATCH-011` | **현재 설계** | 채팅방 삭제 연계 | 채팅방 삭제 시 해당 방을 참조하는 MATCHED `match_requests`는 FK 정책상 CASCADE 삭제된다. | 테이블 정의서 6차 §18 |
-| `MATCH-012` | **확정** | 매칭 후보 FIFO | 동일 질문에서 매칭 가능한 WAITING 사용자가 필요한 인원보다 많으면 먼저 생성된 매칭 요청부터 선택하는 FIFO 방식을 사용한다. 구현 정렬 기준은 `created_at ASC`, 동일 시각이면 `match_request_id ASC`로 결정성을 확보한다. | 사용자 확정 |
+| `MATCH-001` | **확정** | 매칭 구성 | 같은 `VoteQuestion`에 답한 서로 반대 선택지(A/B)의 사용자 2명을 1:1로 매칭한다. | 최신 사용자 확정 |
+| `MATCH-002` | **확정** | 매칭 후보 순서 | 같은 질문의 반대 선택지 WAITING 후보 중 `created_at ASC`, 동률이면 `match_request_id ASC` 순서로 FIFO 선택한다. | 최신 사용자 확정 |
+| `MATCH-003` | **확정·구현** | 매칭 운영 종료 | KST 22:59:59까지 신규 요청을 허용하고 23:00부터 차단한다. 23:00에 당일 남은 WAITING만 EXPIRED 처리하며 이미 MATCHING인 pair는 만료하지 않는다. | 최신 사용자 확정 / `MatchService.createMatchRequest`, `MatchRequestExpirationScheduler` |
+| `MATCH-004` | **현재 설계** | 매칭 요청 기준 답변 | 매칭 요청은 현재 사용자가 소유한 오늘 날짜의 유효한 투표 답변을 기준으로 한다. | 현재 `MatchService.createMatchRequest` |
+| `MATCH-005` | **확정** | 잘못된 voteAnswerId | 미존재·오늘 질문 아님은 400, 타인 소유는 403으로 구분한다. 오류 코드는 각각 `MATCH_VOTE_ANSWER_NOT_FOUND`, `MATCH_VOTE_ANSWER_NOT_TODAY`, `MATCH_VOTE_ANSWER_NOT_OWNED`다. | 최신 사용자 확정 및 현재 ErrorCode |
+| `MATCH-006` | **현재 설계** | 답변당 요청 1회 | 하나의 `vote_answer`에는 하나의 `match_request`만 생성할 수 있으며 중복은 409 `MATCH_REQUEST_ALREADY_EXISTS`다. | Flyway V1 UNIQUE / 현재 서비스 |
+| `MATCH-007` | **현재 구현** | 요청 초기 상태 | 매칭 요청 생성 직후 상태는 WAITING이다. | 현재 `MatchRequest.waiting` |
+| `MATCH-008` | **확정** | 상태 집합 | 매칭 요청 상태는 WAITING, MATCHING, MATCHED, EXPIRED다. | 최신 사용자 확정 / Flyway V6 |
+| `MATCH-009` | **확정·부분 구현** | 매칭 상태 의미 | WAITING은 상대 미결정이며 `match_id=NULL`; MATCHING은 두 요청이 같은 Match에 연결됐지만 ChatRoom은 아직 없을 수 있고 `chat_room_id=NULL`; MATCHED는 Chat Server 생성 완료 후 Match에 논리적 `chat_room_id`가 있다; EXPIRED는 매칭되지 않은 당일 요청이며 `match_id=NULL`이다. | 최신 사용자 확정 |
+| `MATCH-010` | **확정·구현** | 매칭 상태 조회 | `GET /api/match-requests/{matchRequestId}`는 인증된 요청 소유자만 조회하며 WAITING/MATCHING/MATCHED/EXPIRED를 반환한다. MATCHED에서만 `chatRoomId`를 제공하고, 미존재 또는 타인 소유 요청은 동일하게 404 처리한다. | 최신 정책 / 현재 Controller·Service / OpenAPI |
+| `MATCH-011` | **확정·미구현** | Chat Server 소유권 | ChatRoom은 별도 Chat DB의 자원이다. Backend는 `matches.chat_room_id`에 논리 ID만 저장하며 cross-database FK를 두지 않는다. | Flyway V6 / 최신 사용자 확정 |
+| `MATCH-012` | **구현·검증됨** | 후보 잠금 동시성 | VoteQuestion PK row lock을 MatchRequest 생성 전에 획득해 동시 매칭 시 lock 순서를 직렬화한다. MySQL 8.4 통합 테스트에서 10회 반복 검증했다. V8 병합 후 실제 MySQL 재검증은 후속 작업이다. | `MatchService`, `VoteQuestionRepository`, `MatchConcurrencyMysqlIntegrationTest` |
+
+현재 `POST /api/match-requests` 구현은 VoteAnswer 조회·소유자/오늘 질문 검증·중복 확인 후 WAITING 요청을 저장하고, 같은 질문의 반대 선택지 WAITING 후보를 FIFO로 최대 1개 조회한다. 후보가 없으면 WAITING으로 응답하고, 후보가 있으면 Match를 생성해 두 요청을 같은 Match에 연결하고 MATCHING으로 변경한다. API의 201은 실제 ChatRoom 생성 완료가 아니라 MatchRequest 자원 생성 성공을 의미한다.
+
 
 ## 채팅
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `CHAT-001` | **현재 설계** | 채팅방 수명 | 채팅방은 생성 당일에만 유지하며 자정 또는 두 참여자 모두 퇴장 시 물리 삭제한다. | 테이블 정의서 6차 §19-20 / API 명세 상세2차 R279-R285 / 사용자 확정 2026-10-11 |
-| `CHAT-002` | **확정** | 방 단일 선택지 제거 | A1+B1 방이므로 `chat_rooms.selected_option`을 두지 않고 각 참여자의 선택은 `vote_answers.selected_option`에서 판별한다. | 테이블 정의서 6차 §19 / 사용자 확정 2026-10-11 |
-| `CHAT-003` | **현재 설계** | 참가자 선등록 | 매칭 완료 시 두 명의 `chat_room_participants`를 먼저 생성한다. | 테이블 정의서 6차 §20 / 사용자 확정 2026-10-11 |
-| `CHAT-004` | **현재 설계** | 최초 입장 | 실제 최초 채팅방 입장 시 `joined_at`을 기록한다. | API 명세 상세2차 R256-R262 |
-| `CHAT-005` | **현재 설계** | 재입장 금지 | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없고 403 `CHAT_REENTRY_FORBIDDEN`이다. | API 명세 상세2차 R259,R262 |
-| `CHAT-006` | **현재 설계** | 참가자 접근 은닉 | 삭제된 방 또는 비참가자의 접근은 동일한 404 `CHAT_ROOM_NOT_FOUND`로 처리한다. | API 명세 상세2차 R262,R268,R278,R285 |
-| `CHAT-007` | **현재 설계** | 채팅방 정보 노출 | 채팅방 정보 조회는 참가자에게 참여자의 `userId`, `nickname`을 반환한다. | API 명세 상세2차 R263-R268 |
-| `CHAT-008` | **현재 설계** | 메시지 발신 권한 | `joined_at`이 존재하고 `left_at`이 NULL인 현재 참가자만 메시지를 보낼 수 있다. | 테이블 정의서 6차 §21 |
-| `CHAT-009` | **현재 설계** | 메시지 길이 | 텍스트 채팅 메시지 최대 길이는 500자이다. | 테이블 정의서 6차 §21 |
-| `CHAT-010` | **확정** | 메시지 내역 페이지 | 메시지 내역은 Cursor 기반, 기본 30·최대 100이며 API 반환 순서는 최신→과거다. 전체 목록 기본값 20 정책의 명시적 예외다. | 사용자 확정 2026-09-21 / API 명세 상세2차 R269-R278 |
-| `CHAT-011` | **현재 설계** | 방 삭제와 메시지 | 채팅방 물리 삭제 시 참여자와 메시지는 CASCADE 삭제되며 메시지 이력도 조회할 수 없다. | 테이블 정의서 6차 §20-21 / API 명세 상세2차 R278 |
-| `CHAT-012` | **현재 설계** | 퇴장 처리 | 퇴장 시 `left_at`을 기록하고 남은 참가자에게 퇴장 사실을 전달하며 이미 퇴장한 사용자의 반복 퇴장은 409다. | API 명세 상세2차 R279-R285 |
-| `CHAT-013` | **보류** | WebSocket 상세 | WebSocket Access Token 전달 방식과 실시간 메시지 상세 명세는 후속 설계로 보류한다. | API 명세 상세2차 정책 요약 R28 |
+| `CHAT-001` | **확정·미구현** | Chat Server 소유권 | 채팅방·참여자·메시지는 별도 Chat Server/Chat DB가 소유하며 현재 Backend에는 해당 테이블이 없다. | Flyway V6 / 최신 사용자 확정 |
+| `CHAT-002` | **확정·미구현** | 1:1 참가자 구성 | ChatRoom은 매칭된 두 사용자로 구성한다. 기존 4인 정책은 폐기한다. | 최신 사용자 확정 |
+| `CHAT-003` | **확정·미구현** | 한 명 퇴장 | 해당 사용자의 `left_at`을 기록하고 재입장을 허용하지 않는다. 남은 사용자는 기존 메시지 이력을 조회할 수 있지만 새 메시지를 보낼 수 없다. | 최신 사용자 확정 |
+| `CHAT-004` | **확정·미구현** | 양쪽 퇴장 | 두 참가자 모두 명시적으로 퇴장하면 ChatRoom을 물리 삭제하고 종속 participant/message도 삭제한다. | 최신 사용자 확정 |
+| `CHAT-005` | **확정·미구현** | 일자 종료 | KST 00:00에 해당 날짜의 방을 종료하고 ROOM_CLOSED 이벤트를 전달한 뒤 ChatRoom과 종속 participant/message를 물리 삭제한다. | 최신 사용자 확정 |
+| `CHAT-006` | **확정·미구현** | 삭제 방식 | soft delete가 아닌 물리 삭제를 사용한다. 위 lifecycle은 향후 별도 Chat DB 정책이며 현재 Backend 기능 구현을 의미하지 않는다. | 최신 사용자 확정 |
 
 ## 알림
 
@@ -370,11 +368,11 @@
 | ID | 대상 | 수정 필요 내용 |
 |---|---|---|
 | `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
-| `SYNC-002` | `chat_rooms.selected_option` | A1+B1 정책에 따라 `chat_rooms.selected_option`을 제거한다. 선택 정보는 `vote_answers.selected_option`으로 판별한다. |
+| `SYNC-002` | 매칭·Chat Server | 1:1 매칭, MATCHING/MATCHED 분리, Chat Server 소유권 및 최신 Chat lifecycle을 API·테이블·구현 상태와 동기화한다. |
 | `SYNC-003` | `record_drafts` | 정책상 V1 제외지만 Flyway V1에 실제 테이블이 존재한다. 기능에서 사용하지 않으며 삭제 여부는 별도 migration 결정으로 남긴다. |
 | `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
 | `SYNC-005` | AI 오류 코드 | 기존 `AI_API_ERROR` 표기는 `AI_SERVICE_ERROR`로 통일한다. 최소 기억 검색 API와 AI 추천 API 문구를 함께 점검한다. |
-| `SYNC-007` | 매칭 정책 | 매칭 후보 선택은 FIFO(`created_at ASC`, 동률 `match_request_id ASC`)로 명시한다. |
+| `SYNC-007` | 매칭 동시성 | FIFO(`created_at ASC`, 동률 `match_request_id ASC`)를 유지한다. VoteQuestion 선행 row lock으로 lock 순서를 직렬화하며 V8 적용 후 실제 MySQL 통합 테스트를 재검증한다. |
 | `SYNC-008` | 서비스 시간 | 오늘/23:00/자정/월말 판단 기준을 `Asia/Seoul`로 명시한다. |
 | `SYNC-009` | 회원 탈퇴/사진 | 사용자 soft delete 후 연결 서비스 데이터와 최종 GCS 사진을 보존하는 정책을 API/테이블 정의서에 반영한다. |
 | `SYNC-010` | 월간 리포트 | 대표 장소/대표 아티스트 동률 시 가장 최근 기록이 존재하는 후보를 선택하도록 명시한다. |
@@ -422,10 +420,10 @@
 | VOTE | 227 | 투표 답변 | `POST` | `/api/vote-questions/{voteQuestionId}/answers` |
 | MATCH | 238 | 매칭 요청 생성 | `POST` | `/api/match-requests` |
 | MATCH | 247 | 매칭 상태 조회 | `GET` | `/api/match-requests/{matchRequestId}` |
-| CHAT | 256 | 채팅방 입장 | `POST` | `/api/chat-rooms/{chatRoomId}/members` |
-| CHAT | 263 | 채팅방 정보 조회 | `GET` | `/api/chat-rooms/{chatRoomId}` |
-| CHAT | 269 | 채팅 메시지 내역 조회 | `GET` | `/api/chat-rooms/{chatRoomId}/messages` |
-| CHAT | 279 | 채팅방 퇴장 | `POST` | `/api/chat-rooms/{chatRoomId}/leave` |
+| CHAT SERVER (contract-only) | 256 | 채팅방 입장 | `POST` | `/api/chat-rooms/{chatRoomId}/members` |
+| CHAT SERVER (contract-only) | 263 | 채팅방 정보 조회 | `GET` | `/api/chat-rooms/{chatRoomId}` |
+| CHAT SERVER (contract-only) | 269 | 채팅 메시지 내역 조회 | `GET` | `/api/chat-rooms/{chatRoomId}/messages` |
+| CHAT SERVER (contract-only) | 279 | 채팅방 퇴장 | `POST` | `/api/chat-rooms/{chatRoomId}/leave` |
 | NOTIFICATION | 287 | 알림 목록 | `GET` | `/api/notifications` |
 | NOTIFICATION | 295 | 알림 일괄 읽음 처리 | `PATCH` | `/api/notifications/read` |
 | NOTIFICATION | 301 | 알림 삭제 | `DELETE` | `/api/notifications/{notificationId}` |
@@ -457,13 +455,13 @@
 - [x] 16. `vote_questions - 취향 투표 질문 테이블`
 - [x] 17. `vote_answers - 취향 투표 답변 테이블`
 - [x] 18. `match_requests - 매칭 요청 테이블`
-- [x] 19. `chat_rooms - 채팅방 테이블`
-- [x] 20. `chat_room_participants - 채팅방 참여자 테이블`
-- [x] 21. `chat_messages - 채팅 메시지 테이블`
-- [x] 22. `notifications - 알림 테이블`
-- [x] 23. `weather - 도시 단위 레거시 날씨 테이블`
-- [x] 24. `weather_grids - 기상청 격자 테이블`
-- [x] 25. `weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블`
+- [x] 19. `matches - 매칭 결과 테이블`
+- [x] 20. `notifications - 알림 테이블`
+- [x] 21. `weather - 도시 단위 레거시 날씨 테이블`
+- [x] 22. `weather_grids - 기상청 격자 테이블`
+- [x] 23. `weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블`
+
+V1 당시 `chat_rooms`, `chat_room_participants`, `chat_messages` 정의는 테이블 정의서의 역사 자료이며 현재 Backend 테이블 목록에 포함하지 않는다.
 
 ## 정책 변경 관리 원칙
 

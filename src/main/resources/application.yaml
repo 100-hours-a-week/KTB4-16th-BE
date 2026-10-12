@@ -91,3 +91,9 @@ ai:
   connect-timeout: PT5S
   read-timeout: PT30S
   mock-enabled: ${AI_MOCK_ENABLED:false}
+
+chat-server:
+  base-url: ${CHAT_SERVER_BASE_URL:http://localhost:8090}
+  internal-api-key: ${CHAT_INTERNAL_API_KEY:}
+  connect-timeout: ${CHAT_SERVER_CONNECT_TIMEOUT:PT2S}
+  read-timeout: ${CHAT_SERVER_READ_TIMEOUT:PT3S}

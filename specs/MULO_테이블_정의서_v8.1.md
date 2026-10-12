@@ -3,7 +3,7 @@
 > 작성일: 2026-09-21 (KST)  
 > 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
 > 실제 스키마 기준: 현재 백엔드 작업 트리의 Flyway V1~V8
-> 설계·정책 기준: 테이블 정의서 v7.6, 서비스 정책 정의서 v1.9, OpenAPI v2.6, 현재 구현 문서  
+> 설계·정책 기준: 서비스 정책 정의서 v2.1, OpenAPI v2.8, 현재 구현 문서
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
 ### 문서 상태 표기
@@ -15,9 +15,11 @@
 | `V1 제외·실제 테이블 존재` | V1 기능 범위에서는 제외됐지만 현재 Flyway에는 테이블이 존재함 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
 
-### v8.1 핵심 변경 사항
+### 현재 스키마 기준 및 변경 사항
 
-- Flyway V1~V8을 순서대로 적용한 실제 테이블 26개를 기준으로 재정리
+- Flyway V1~V8을 순서대로 적용한 Backend 실제 테이블 26개를 기준으로 정리
+- V6에서 `matches`를 추가하고 Backend의 `chat_rooms`, `chat_room_participants`, `chat_messages`를 제거
+- Chat Server가 소유하는 채팅 schema는 별도 DB에 있으며 이 문서에서 Backend 테이블로 정의하지 않음
 - V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
 - V4의 `places` 컬럼 변경, 법정동 쌍 CHECK, 좌표 UNIQUE를 실제 구조로 반영
 - `record_drafts`는 정책상 V1 제외이지만 Flyway V1에 존재함을 명시
@@ -45,8 +47,9 @@
 - `records.weather_condition`은 7개 상태 `CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER`만 저장
 - `record_drafts`는 기존 설계 내용을 보존하고 `[V1 제외]`로 표시
 - AI 기억 검색 및 Spotify 계정 저장 기능은 V1 범위에서 제외
-- `chat_rooms.selected_option`은 두지 않음(A 2명 + B 2명 구성)
-- 기존 사진/업로드/친구/리포트/투표/매칭/채팅/알림 구조는 동기화 설계서와 충돌하지 않는 범위에서 유지
+- 1:1 매칭은 같은 질문의 반대 선택지 사용자를 FIFO로 연결한다
+- `matches.chat_room_id`와 `notifications.chat_room_id`는 Chat DB의 논리 ID이며 Backend FK가 아니다
+- V1 당시 채팅 테이블 정의는 문서 하단에 역사 자료로만 남기며 현재 Backend schema로 취급하지 않는다
 
 ---
 
@@ -99,8 +102,6 @@
 | `monthly_reports` | `users.user_id` ↔ `monthly_reports.user_id` | 1:N | 한 사용자는 월별로 여러 리포트를 가질 수 있으며, 각 월간 리포트는 한 사용자의 기록을 기준으로 생성된다. |
 | `vote_answers` | `users.user_id` ↔ `vote_answers.user_id` | 1:N | 한 사용자는 여러 취향 투표에 참여할 수 있으며 각 투표 답변의 작성자를 식별한다. |
 | `match_requests` | `users.user_id` ↔ `match_requests.user_id` | 1:N | 한 사용자는 서로 다른 날짜에 여러 매칭 요청을 생성할 수 있으며, 각 매칭 요청은 한 사용자에게 속한다. |
-| `chat_room_participants` | `users.user_id` ↔ `chat_room_participants.user_id` | 1:N | 사용자가 참여한 채팅방과 참여 상태를 관리하기 위해 연결한다. |
-| `chat_messages` | `users.user_id` ↔ `chat_messages.user_id` | 1:N | 한 사용자는 채팅방에서 여러 메시지를 전송할 수 있으며 메시지의 발신자를 식별한다. |
 | `notifications` | `users.user_id` ↔ `notifications.user_id` | 1:N | 한 사용자는 친구 요청, 매칭 완료 등 서비스에서 발생하는 여러 알림을 받을 수 있다. |
 | `refresh_tokens` | `users.user_id` ↔ `refresh_tokens.user_id` | 1:1 | 각 Refresh Token은 한 사용자에게 속하며, 한 사용자는 로그인 세션에서 한 Refresh Token을 발급받을 수 있다. |
 | `uploads` | `users.user_id` ↔ `uploads.user_id` | 1:N | 한 사용자는 자물쇠 생성 과정에서 여러 임시 이미지를 업로드할 수 있으며, 각 임시 업로드는 한 명의 소유 사용자에게 속한다. |
@@ -748,7 +749,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
 | `vote_answers` | `vote_questions.vote_question_id` ↔ `vote_answers.vote_question_id` | 1:N | 하나의 취향 투표 질문에 여러 사용자의 답변이 존재할 수 있다. |
-| `chat_rooms` | `vote_questions.vote_question_id` ↔ `chat_rooms.vote_question_id` | 1:N | 하나의 취향 투표 질문을 기준으로 여러 매칭 채팅방이 생성될 수 있다. |
+| `matches` | `matches.vote_question_id` → `vote_questions.vote_question_id` | 1:N | 하나의 질문으로 여러 Match를 만들 수 있으며, 별도 Chat DB 방은 `matches.chat_room_id` 논리 ID로 연결한다. |
 
 ---
 
@@ -756,7 +757,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자가 취향 투표 질문에서 선택한 답변을 저장하는 테이블이다. 어떤 사용자가 어떤 질문에서 어떤 선택지를 선택했는지 기록하며, 이후 동일 질문에서 A 선택 1명과 B 선택 1명을 구성하는 매칭의 기준 데이터로 사용한다.
+사용자가 취향 투표 질문에서 선택한 답변을 저장하는 테이블이다. 어떤 사용자가 어떤 질문에서 어떤 선택지를 선택했는지 기록하며, 이후 같은 질문에서 서로 반대 선택지를 고른 두 사용자를 1:1로 매칭하는 기준 데이터로 사용한다.
 
 #### 2. 컬럼 정의
 
@@ -765,7 +766,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `vote_answer_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 취향 투표 답변 고유 ID | 각각의 투표 답변을 고유하게 식별하기 위해 사용하며 데이터 증가 가능성을 고려해 `BIGINT`를 사용한다. | 개별 투표 답변을 식별하고 매칭 등의 다른 데이터에서 특정 답변을 참조할 수 있게 한다. |
 | `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 사용자가 답변한 취향 투표 질문 ID | `vote_questions.vote_question_id`를 참조한다. | 어떤 질문에 대한 답변인지 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 취향 투표에 참여한 사용자 ID | `users.user_id`를 참조한다. | 누가 해당 답변을 선택했는지 식별한다. |
-| `selected_option` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자가 선택한 선택지 | 두 개의 선택지 중 어떤 것을 선택했는지 실제 선택지 텍스트로 저장한다. | 동일 질문의 매칭 대상에서 A/B 선택 인원을 판별하여 A 1명 + B 1명 구성을 만드는 데 사용한다. |
+| `selected_option` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자가 선택한 선택지 | 두 개의 선택지 중 어떤 것을 선택했는지 실제 선택지 텍스트로 저장한다. | 같은 질문에서 서로 반대 선택지를 고른 WAITING 사용자를 찾아 1:1 매칭하는 데 사용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사용자가 투표한 시각 | 사용자가 실제로 답변을 제출한 시점을 기록한다. | 투표 참여 시점을 확인하고 답변 이력을 관리한다. |
 
 #### 3. 제약조건
@@ -790,8 +791,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자가 취향 투표 답변을 기준으로 랜덤 채팅 매칭을 요청한 정보를 저장하는 테이블이다.
-매칭 요청의 대기, 완료, 만료 상태를 관리한다. 동일 질문에서 A 선택 사용자 1명과 B 선택 사용자 1명이 23:00 이전에 모이면 매칭이 완료되어 생성된 채팅방을 해당 요청과 연결한다. 23:00 시점까지 매칭되지 않은 요청은 `EXPIRED`로 변경한다.
+사용자가 오늘의 취향 투표 답변을 기준으로 1:1 매칭을 요청한 정보를 저장한다. 같은 질문의 반대 선택지(A/B) 사용자를 FIFO로 연결하며, Chat Server 채팅방 생성 전후를 구분해 요청 상태를 관리한다.
 
 #### 2. 컬럼 정의
 
@@ -799,13 +799,10 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `match_request_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 매칭 요청 고유 ID | 각 매칭 요청을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 개별 매칭 요청을 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭을 요청한 사용자 ID | `users.user_id`를 참조하여 요청자를 식별한다. | 누가 매칭을 요청했는지 확인한다. |
-| `vote_answer_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭 기준이 되는 취향 투표 답변 ID | `vote_answers.vote_answer_id`를 참조하여 사용자가 어떤 질문에서 어떤 답변을 선택했는지 연결한다. | 동일한 `vote_question_id`를 기준으로 A 선택 1명과 B 선택 1명을 구성하는 매칭에 사용한다. |
-| `status` | `ENUM('WAITING', 'MATCHED', 'EXPIRED')` | - | NOT NULL | `WAITING` | - | 매칭 요청 상태
-( `WAITING`, `MATCHED`, `EXPIRED`) | 매칭 요청 상태가 `WAITING`, `MATCHED`, `EXPIRED` 세 가지로 확정되어 있으므로 허용 가능한 상태값을 제한하기 위해 `ENUM`을 사용한다. | 매칭 요청이 대기 중인지, 매칭 완료되어 채팅방에 배정되었는지, 정책상 만료된 상태인지를 구분한다. |
+| `vote_answer_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 매칭 기준이 되는 취향 투표 답변 ID | `vote_answers.vote_answer_id`를 참조하며 하나의 답변당 요청은 하나만 허용한다. | 동일 질문의 반대 선택지 WAITING 후보를 찾는 기준이다. |
+| `status` | `ENUM('WAITING', 'MATCHING', 'MATCHED', 'EXPIRED')` | - | NOT NULL | `WAITING` | - | 요청 상태 | Flyway V6에서 MATCHING을 추가했다. | 요청 대기, 상대 결정/ChatRoom 생성 대기, ChatRoom 생성 완료, 만료를 구분한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 매칭 요청 생성 시각 | 실제 매칭 요청이 발생한 시점을 기록한다. | 매칭 요청 시점 기록, 대기 순서 확인 및 일자별 요청 조회 등에 활용한다. |
-| `chat_room_id` | `BIGINT` | - | NULL | NULL | FK | `MATCHED` 상태가 되었을 때 배정된 채팅방 ID
- | `chat_rooms.chat_room_id`를 참조한다. 매칭 대기 중이거나 만료된 요청에는 채팅방이 존재하지 않으므로 `NULL`을 허용한다.
- | 해당 매칭 요청의 결과로 사용자가 어느 채팅방에 배정되었는지 확인한다. |
+| `match_id` | `BIGINT` | - | NULL | NULL | FK | 이 요청이 연결된 Match ID | `matches.match_id`를 참조한다. | MATCHING/MATCHED pair를 연결한다. WAITING/EXPIRED에서는 NULL이다. |
 
 #### 3. 제약조건
 
@@ -814,17 +811,17 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `pk_match_requests` | PRIMARY KEY | `match_request_id` | - | 각 매칭 요청을 고유하게 식별한다. |
 | `fk_match_requests_user` | FOREIGN KEY | `user_id` | `users.user_id` | 존재하는 사용자만 매칭을 요청할 수 있도록 한다. |
 | `fk_match_requests_vote_answer` | FOREIGN KEY | `vote_answer_id` | `vote_answers.vote_answer_id` | 존재하는 취향 투표 답변을 기준으로만 매칭을 요청할 수 있도록 한다. |
-| `fk_match_requests_chat_room` | FOREIGN KEY | `chat_room_id` | `chat_rooms.chat_room_id` | 채팅방에 배정된 경우 실제 존재하는 채팅방만 참조하도록 하며, 채팅방 삭제 시 해당 채팅방에 연결된 매칭 요청도 함께 삭제되도록 `ON DELETE CASCADE`를 적용한다. |
-| `uk_match_requests_vote_answer` | UNIQUE | `vote_answer_id` | - | 하나의 취향 투표 답변으로 매칭 요청이 중복 생성되는 것을 방지한다. 하루 하나의 질문에 대해 사용자당 하나의 답변만 생성되는 정책과 함께 사용되어, 사용자가 해당 일자의 매칭 요청을 한 번만 생성하도록 제한한다. |
-| `chk_match_requests_room_by_status`  | CHECK | `status` , `chat_room_id` | - | `MATCHED` 상태에서는 `chat_room_id`가 반드시 존재하고, `WAITING` 또는 `EXPIRED` 상태에서는 `chat_room_id`가 `NULL`이 되도록 하여 매칭 상태와 채팅방 배정 정보의 일관성을 보장한다. |
+| `uk_match_requests_vote_answer` | UNIQUE | `vote_answer_id` | - | 하나의 투표 답변으로 매칭 요청이 중복 생성되는 것을 방지한다. |
+| `fk_match_requests_match` | FOREIGN KEY | `match_id` | `matches.match_id` | 연결된 Backend Match를 참조한다. |
+| `chk_match_requests_match_by_status` | CHECK | `status`, `match_id` | - | WAITING/EXPIRED는 `match_id IS NULL`, MATCHING/MATCHED는 `match_id IS NOT NULL`이어야 한다. |
 
 #### 3-1. 비즈니스 규칙
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_match_complete` | 동일한 `vote_question_id`의 `WAITING` 요청 중 A 선택 사용자 1명과 B 선택 사용자 1명이 23:00 이전에 모이면 1:1 채팅방을 생성하고 해당 2개 요청을 `MATCHED`로 변경한다. |
-| `rule_match_request_cutoff` | 당일 23:00 이후에는 새로운 매칭 요청을 생성하지 않는다. |
-| `rule_match_expire` | 당일 23:00 시점에 아직 `WAITING` 상태인 매칭 요청은 모두 `EXPIRED`로 변경한다. 23:00 이후에는 기존 `WAITING` 요청을 대상으로 추가 매칭을 진행하지 않는다. |
+| `rule_match_pair` | 같은 질문에 답한 반대 선택지 사용자 2명을 FIFO로 골라 Match 하나에 연결한다. |
+| `rule_match_state` | WAITING→MATCHING→MATCHED, WAITING→EXPIRED 상태 전이를 사용한다. WAITING/EXPIRED는 match_id NULL, MATCHING/MATCHED는 match_id 존재다. |
+| `rule_match_cutoff` | KST 23:00부터 신규 요청을 막고 남은 WAITING을 EXPIRED 처리한다. 이미 MATCHING인 pair는 만료하지 않는다. 현재 서비스와 Scheduler에서 구현한다. |
 
 #### 4. 관계
 
@@ -832,11 +829,27 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- |
 | `users` | `match_requests.user_id` → `users.user_id` | N:1 | 한 사용자는 날짜별로 여러 매칭 요청을 가질 수 있으며 각 매칭 요청은 한 사용자에게 속한다. |
 | `vote_answers` | `match_requests.vote_answer_id` → `vote_answers.vote_answer_id` | 1:0..1 | 하나의 투표 답변으로 최대 한 번의 매칭 요청을 할 수 있으며, 매칭 요청은 하나의 투표 답변을 기준으로 한다. |
-| `chat_rooms` | `match_requests.chat_room_id` → `chat_rooms.chat_room_id` | N:0..1 | 여러 매칭 요청이 하나의 채팅방에 배정될 수 있으며, 각 매칭 요청은 최대 하나의 채팅방에 배정된다. |
+| `matches` | `match_requests.match_id` → `matches.match_id` | N:0..1 | 한 Match에 두 반대 선택지의 MatchRequest가 연결된다. |
+
+## 19. matches - 매칭 결과 테이블
+
+V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 발급한 ChatRoom 논리 ID를 연결하며 자체 status는 없다. 매칭 lifecycle은 `match_requests.status`가 표현한다.
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `match_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | Backend Match 식별자 |
+| `vote_question_id` | `BIGINT` | NOT NULL | - | FK | 매칭 기준 질문 |
+| `chat_room_id` | `BIGINT` | NULL | NULL | 논리 참조 | Chat Server가 소유하는 ChatRoom ID. Backend FK 없음 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | Match 생성 시각 |
+| `matched_at` | `DATETIME` | NULL | NULL | - | ChatRoom 연결 완료 시각 |
+
+제약조건: `pk_matches`, `fk_matches_vote_question`. `chat_room_id`에는 FK가 없고 `status` 컬럼도 없다.
 
 ---
 
-## 19. chat_rooms - 채팅방 테이블
+## V1 역사 자료: chat_rooms - V6 이전 Backend schema
+
+> **현재 Backend schema가 아니다.** 아래 chat_rooms/chat_room_participants/chat_messages 정의는 Flyway V1 당시 구조를 보존한 역사 자료다. Flyway V6에서 세 테이블을 Backend DB에서 제거했으며, 별도 Chat DB의 schema는 이 문서에서 정의하지 않는다.
 
 #### 1. 테이블 설명
 
@@ -873,7 +886,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 20. chat_room_participants - 채팅방 참여자 테이블
+## V1 역사 자료: chat_room_participants - V6 이전 Backend schema
 
 #### 1. 테이블 설명
 
@@ -915,7 +928,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 21. chat_messages - 채팅 메시지 테이블
+## V1 역사 자료: chat_messages - V6 이전 Backend schema
 
 #### 1. 테이블 설명
 
@@ -954,7 +967,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 22. notifications - 알림 테이블
+## 20. notifications - 알림 테이블
 
 #### 1. 테이블 설명
 
@@ -1023,6 +1036,9 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
 | `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
 | `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | Flyway V1과 현재 작업 트리에 엔티티·생성·목록·상세 조회 구현 | DB와 공개 조회 API는 구현됨, 내부 생성·AI 콜백은 정책서에서 분리 기록 |
+| `match_requests`, `matches` | 1:1 매칭 상태와 ChatRoom 논리 참조 | V6에서 `MATCHING`, `match_id`, `matches`를 추가하고 상태 CHECK를 적용 | 현재 Backend schema로 반영. `matches.chat_room_id`는 Chat DB 논리 ID이며 FK가 아님 |
+| `notifications.chat_room_id` | Chat Server ChatRoom 논리 ID | V6에서 `fk_notifications_chat_room` 제거, 컬럼 유지 | 현재 Backend schema에는 FK가 없음 |
+| `chat_rooms`, `chat_room_participants`, `chat_messages` | Chat Server가 소유 | V6에서 Backend DB 테이블 삭제 | 본문은 V1 당시 역사 자료이며 현재 schema에 포함하지 않음 |
 | `notifications`, `outbox_events` | 사용자 알림 이력과 비즈니스 이벤트를 원본 트랜잭션에 함께 보존 | `notifications`는 V7, `outbox_events`는 V8에서 생성되며 현재 알림 API 및 친구·리포트 이벤트 처리가 구현됨 | MATCH_COMPLETED 발행은 배포 환경별 4인 이력 및 Chat DB 참가자 등록 근거 확인 전까지 보류 |
 
 ## Open Questions
@@ -1036,7 +1052,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 23. weather - 도시 단위 레거시 날씨 테이블
+## 21. weather - 도시 단위 레거시 날씨 테이블
 
 #### 1. 테이블 설명
 
@@ -1067,7 +1083,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 24. weather_grids - 기상청 격자 테이블
+## 22. weather_grids - 기상청 격자 테이블
 
 #### 1. 테이블 설명
 
@@ -1093,7 +1109,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 25. weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블
+## 23. weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블
 
 #### 1. 테이블 설명
 

@@ -9,6 +9,11 @@ public enum ErrorCode {
     INVALID_CREDENTIALS(HttpStatus.UNAUTHORIZED, "이메일 또는 비밀번호가 올바르지 않습니다."),
     INVALID_REFRESH_TOKEN(HttpStatus.UNAUTHORIZED, "유효한 Refresh Token이 없습니다."),
 
+    MATCH_VOTE_ANSWER_NOT_FOUND(HttpStatus.BAD_REQUEST, "투표 답변을 찾을 수 없습니다."),
+    MATCH_VOTE_ANSWER_NOT_OWNED(HttpStatus.FORBIDDEN, "해당 투표 답변에 접근할 권한이 없습니다."),
+    MATCH_VOTE_ANSWER_NOT_TODAY(HttpStatus.BAD_REQUEST, "오늘의 투표 답변이 아닙니다."),
+    MATCH_REQUEST_CLOSED(HttpStatus.CONFLICT, "오늘 매칭 요청 가능 시간이 종료되었습니다."),
+
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
     LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
     LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
@@ -56,12 +61,14 @@ public enum ErrorCode {
             "자기 자신에게 친구 요청을 보낼 수 없습니다."),
     FRIEND_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 보낸 친구 요청이 있습니다."),
     FRIENDSHIP_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 친구 관계입니다."),
+    MATCH_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 매칭 요청이 존재합니다."),
 
     UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "업로드를 찾을 수 없습니다."),
     RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "자물쇠를 찾을 수 없습니다."),
     USER_NOT_FOUND(HttpStatus.NOT_FOUND, "사용자를 찾을 수 없습니다."),
     FRIEND_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "친구 요청을 찾을 수 없습니다."),
     FRIENDSHIP_NOT_FOUND(HttpStatus.NOT_FOUND, "친구 관계를 찾을 수 없습니다."),
+    MATCH_REQUEST_NOT_FOUND(HttpStatus.NOT_FOUND, "매칭 요청을 찾을 수 없습니다."),
     MONTHLY_REPORT_NOT_FOUND(HttpStatus.NOT_FOUND, "월간 리포트를 찾을 수 없습니다."),
     NOTIFICATION_NOT_FOUND(HttpStatus.NOT_FOUND, "알림을 찾을 수 없습니다."),
 
