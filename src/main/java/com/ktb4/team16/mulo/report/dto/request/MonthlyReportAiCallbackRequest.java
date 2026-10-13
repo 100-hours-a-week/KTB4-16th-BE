@@ -10,7 +10,8 @@ import jakarta.validation.constraints.Positive;
 import java.time.OffsetDateTime;
 import java.util.List;
 
-public record MonthlyReportAiCallbackRequest(@NotBlank String jobId, @Min(2026) int year,
+public record MonthlyReportAiCallbackRequest(String batchRequestId, @NotBlank String jobId,
+        @Min(2026) int year,
         @Min(1) @Max(12) int month, @NotNull OffsetDateTime generatedAt,
         @NotEmpty List<@Valid Result> results) {
     public record Result(@Positive Long userId, @NotNull Status status, @Valid AiRecap aiRecap,

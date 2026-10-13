@@ -117,7 +117,7 @@ class NotificationMysqlIntegrationTest {
                 SELECT monthly_report_id FROM monthly_reports WHERE user_id = ?
                 """, Long.class, owner.id());
 
-        reportCallbackService.apply(new MonthlyReportAiCallbackRequest("job-1", 2026, 9,
+        reportCallbackService.apply(new MonthlyReportAiCallbackRequest(null, "job-1", 2026, 9,
                 OffsetDateTime.parse("2026-10-01T00:00:00+09:00"),
                 List.of(new MonthlyReportAiCallbackRequest.Result(owner.id(),
                         MonthlyReportAiCallbackRequest.Status.COMPLETED,

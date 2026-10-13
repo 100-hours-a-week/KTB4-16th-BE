@@ -11,11 +11,12 @@ import com.ktb4.team16.mulo.notification.event.NotificationEventType;
 import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxEventPublisher;
 import java.util.HashSet;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
-import java.util.function.Function;
+import java.util.Objects;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -35,12 +36,23 @@ public class MonthlyReportAiCallbackTransactionalService {
     @Transactional
     public List<UUID> apply(MonthlyReportAiCallbackRequest callback) {
         List<UUID> eventIds = new ArrayList<>();
-        Map<Long, com.ktb4.team16.mulo.report.entity.MonthlyReport> found = reports
-                .findByReportYearAndReportMonth((short) callback.year(), (short) callback.month()).stream()
-                .collect(java.util.stream.Collectors.toMap(report -> report.getUser().getUserId(), Function.identity()));
         Set<Long> ids = new HashSet<>();
         for (var result : callback.results()) {
-            if (!ids.add(result.userId()) || !found.containsKey(result.userId())) {
+            if (result.userId() == null || !ids.add(result.userId())) {
+                throw new InvalidMonthlyReportAiCallbackException();
+            }
+        }
+        // 사용자 ID 순서로 행을 잠가 ID 예약과 콜백 저장의 경합을 직렬화한다.
+        Map<Long, com.ktb4.team16.mulo.report.entity.MonthlyReport> found = new HashMap<>();
+        for (Long userId : ids.stream().sorted().toList()) {
+            found.put(userId, reports.findForUpdate(userId, (short) callback.year(),
+                    (short) callback.month())
+                    .orElseThrow(InvalidMonthlyReportAiCallbackException::new));
+        }
+        for (var result : callback.results()) {
+            // 저장된 시도 ID가 없는 기존 리포트는 기존 콜백만 허용한다.
+            if (!Objects.equals(found.get(result.userId()).getBatchRequestId(),
+                    callback.batchRequestId())) {
                 throw new InvalidMonthlyReportAiCallbackException();
             }
             if (result.status() == MonthlyReportAiCallbackRequest.Status.COMPLETED) {

@@ -1,8 +1,10 @@
 package com.ktb4.team16.mulo.report.repository;
 import com.ktb4.team16.mulo.report.entity.MonthlyReport;
+import jakarta.persistence.LockModeType;
 import java.util.List;
 import java.util.Optional;
 import org.springframework.data.jpa.repository.EntityGraph;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -22,6 +24,13 @@ public interface MonthlyReportRepository extends JpaRepository<MonthlyReport, Lo
 
     Optional<MonthlyReport> findByUser_UserIdAndReportYearAndReportMonth(Long userId, short year,
             short month);
+
+    // 요청 ID 교체와 콜백 적용이 같은 리포트 행에서 직렬화되도록 잠근다.
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("SELECT r FROM MonthlyReport r WHERE r.user.userId = :userId "
+            + "AND r.reportYear = :year AND r.reportMonth = :month")
+    Optional<MonthlyReport> findForUpdate(@Param("userId") Long userId,
+            @Param("year") short year, @Param("month") short month);
 
     List<MonthlyReport> findByReportYearAndReportMonth(short year, short month);
 }
