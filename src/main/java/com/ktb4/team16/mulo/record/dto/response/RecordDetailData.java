@@ -7,6 +7,7 @@ import java.time.LocalDateTime;
 public record RecordDetailData(
         Long recordId,
         Long userId,
+        boolean isOwner,
         Place place,
         Music music,
         Record.WeatherCondition weatherCondition,

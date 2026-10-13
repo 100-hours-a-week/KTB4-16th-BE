@@ -38,6 +38,7 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.options;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
@@ -323,6 +324,67 @@ class SecurityIntegrationTests {
                 .andExpect(content().string("record deleted"));
     }
 
+    /** 탈퇴 API가 기존 CSRF와 Bearer 인증 규칙을 그대로 따르는지 확인한다. */
+    @Test
+    void memberWithdrawalRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(delete("/api/users/me").contentType("application/json")
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(delete("/api/users/me").cookie(cookie)
+                        .header("X-XSRF-TOKEN", cookie.getValue())
+                        .contentType("application/json")
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void friendDashboardAndWriteRoutesRequireAuthenticationAndWritesRequireCsrf() throws Exception {
+        mvc.perform(get("/api/users/me/friends"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+        mvc.perform(get("/api/users/2/records/regions"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(post("/api/users/me/friend-requests"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(post("/api/friend-requests/5/accept"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(delete("/api/friend-requests/5"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+        mvc.perform(delete("/api/friendships/7"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(post("/api/users/me/friend-requests")
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized());
+        mvc.perform(post("/api/users/me/friend-requests")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isCreated());
+        mvc.perform(post("/api/friend-requests/5/accept")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/api/friend-requests/5")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+        mvc.perform(delete("/api/friendships/7")
+                        .with(user("friend-user"))
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isOk());
+    }
+
     @Test
     void csrfDoesNotReplaceAuthenticationAndSignupIsOnlyPublicForPost() throws Exception {
         Cookie cookie = csrfCookie();
@@ -343,6 +405,33 @@ class SecurityIntegrationTests {
                         .header("Access-Control-Request-Method", "POST"))
                 .andExpect(status().isForbidden())
                 .andExpect(header().doesNotExist("Access-Control-Allow-Origin"));
+    }
+
+    @Test
+    void localPreflightAllowsPutAndKeepsExistingMethods() throws Exception {
+        var result = mvc.perform(options("/api/users/me/preferences/genres")
+                        .header("Origin", "http://localhost:3000")
+                        .header("Access-Control-Request-Method", "PUT")
+                        .header("Access-Control-Request-Headers", "content-type,x-xsrf-token"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Access-Control-Allow-Origin", "http://localhost:3000"))
+                .andReturn();
+
+        String allowedMethods = result.getResponse().getHeader("Access-Control-Allow-Methods");
+        assertThat(allowedMethods).contains("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS");
+    }
+
+    @Test
+    void genrePreferencesPutStillRequiresCsrfAndAuthentication() throws Exception {
+        mvc.perform(put("/api/users/me/preferences/genres"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("CSRF_TOKEN_INVALID"));
+
+        Cookie cookie = csrfCookie();
+        mvc.perform(put("/api/users/me/preferences/genres")
+                        .cookie(cookie).header("X-XSRF-TOKEN", cookie.getValue()))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
     }
 
     private Cookie csrfCookie() throws Exception {
@@ -380,6 +469,9 @@ class SecurityIntegrationTests {
         @ResponseStatus(HttpStatus.CREATED)
         void upload() { }
 
+        @org.springframework.web.bind.annotation.PutMapping("/api/users/me/preferences/genres")
+        String updatePreferredGenres() { return "updated"; }
+
         @GetMapping("/api/uploads/{uploadId}/signed-url")
         String uploadSignedUrl() { return "signed url"; }
 
@@ -408,5 +500,24 @@ class SecurityIntegrationTests {
 
         @DeleteMapping("/api/records/{recordId}")
         String deleteRecord() { return "record deleted"; }
+
+        @GetMapping("/api/users/me/friends")
+        String friendList() { return "friends"; }
+
+        @GetMapping("/api/users/{userId}/records/regions")
+        String friendRecordRegions() { return "friend regions"; }
+
+        @PostMapping("/api/users/me/friend-requests")
+        @ResponseStatus(HttpStatus.CREATED)
+        String sendFriendRequest() { return "friend request created"; }
+
+        @PostMapping("/api/friend-requests/{friendRequestId}/accept")
+        String acceptFriendRequest() { return "friend request accepted"; }
+
+        @DeleteMapping("/api/friend-requests/{friendRequestId}")
+        String deleteFriendRequest() { return "friend request deleted"; }
+
+        @DeleteMapping("/api/friendships/{friendshipId}")
+        String deleteFriendship() { return "friendship deleted"; }
     }
 }

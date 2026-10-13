@@ -8,6 +8,7 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.argThat;
 
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiClient;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
@@ -52,9 +53,7 @@ class RecommendationPlaylistCommandServiceTest {
         when(placeContextService.findLegalDongName(BigDecimal.valueOf(37.5665), BigDecimal.valueOf(126.9780)))
                 .thenReturn(java.util.Optional.of("태평로1가"));
         when(recommendationAiClient.recommend(any())).thenReturn(new RecommendationAiClient.RecommendationResult(
-                List.of(new RecommendationAiClient.RecommendedTrack("6mzF8HvHdVrzJNd8M1uFCS",
-                        "Beautiful", "Crush", "https://image.example/album.jpg",
-                        "https://open.spotify.com/track/6mzF8HvHdVrzJNd8M1uFCS")), false));
+                recommendedTracks(5), false));
         when(writer.replace(eq(7L), any())).thenReturn(created);
 
         var result = service.create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
@@ -66,17 +65,17 @@ class RecommendationPlaylistCommandServiceTest {
                 WeatherCondition.CLEAR, BigDecimal.valueOf(20),
                 OffsetDateTime.ofInstant(clock.instant(), clock.getZone()),
                 List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가"));
-        verify(writer).replace(eq(7L), any());
+        verify(writer).replace(eq(7L), argThat(tracks -> tracks.size() == 5));
         assertThat(result.replaced()).isTrue();
         assertThat(result.playlist()).isEqualTo(created);
     }
 
-    // AI 장애 결과는 기존 플레이리스트를 유지하고 Writer를 호출하지 않는다.
+    // 정확히 5곡인 degraded 결과는 기존 플레이리스트를 유지하고 Writer를 호출하지 않는다.
     @Test
     void retainsCurrentPlaylistWhenRecommendationIsDegraded() {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(List.of(), true));
+                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), true));
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
 
         var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
@@ -86,19 +85,29 @@ class RecommendationPlaylistCommandServiceTest {
         assertThat(result.playlist()).isEqualTo(playlist(3L));
     }
 
-    // 정상 응답이지만 추천 곡이 없으면 빈 플레이리스트를 새로 만들지 않는다.
+    // 추천 곡이 5개보다 적으면 기존 플레이리스트를 성공 응답으로 돌려주지 않고 실패 처리한다.
     @Test
-    void retainsCurrentPlaylistWhenRecommendationHasNoTracks() {
+    void failsWhenRecommendationHasNoTracks() {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
                 new RecommendationAiClient.RecommendationResult(List.of(), false));
-        when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
 
-        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        assertThatThrownBy(() -> service().create(7L,
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), any());
-        assertThat(result.replaced()).isFalse();
-        assertThat(result.playlist()).isEqualTo(playlist(3L));
+        verify(queryService, never()).getCurrentPlaylist(any());
+    }
+
+    @Test
+    void failsWhenRecommendationHasFourTracksWithoutSavingPartialPlaylist() {
+        assertInvalidTrackCountFailsBeforeWriter(4);
+    }
+
+    @Test
+    void failsWhenRecommendationHasSixTracksWithoutSavingPartialPlaylist() {
+        assertInvalidTrackCountFailsBeforeWriter(6);
     }
 
     // AI 연동 실패는 기존 데이터를 변경하지 않고 호출자에게 안전한 예외로 전달한다.
@@ -144,5 +153,25 @@ class RecommendationPlaylistCommandServiceTest {
     // 저장 또는 유지 결과를 검증할 최소 플레이리스트 데이터를 생성한다.
     private RecommendationPlaylistData.Playlist playlist(Long playlistId) {
         return new RecommendationPlaylistData.Playlist(playlistId, List.of());
+    }
+
+    private void assertInvalidTrackCountFailsBeforeWriter(int count) {
+        when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
+        when(recommendationAiClient.recommend(any())).thenReturn(
+                new RecommendationAiClient.RecommendationResult(recommendedTracks(count), false));
+
+        assertThatThrownBy(() -> service().create(7L,
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                .isInstanceOf(RecommendationAiException.class);
+
+        verify(writer, never()).replace(any(), any());
+    }
+
+    private List<RecommendationAiClient.RecommendedTrack> recommendedTracks(int count) {
+        return java.util.stream.IntStream.rangeClosed(1, count)
+                .mapToObj(index -> new RecommendationAiClient.RecommendedTrack(
+                        "track-" + index, "Track " + index, "Artist",
+                        "https://image.example/album.jpg", "https://open.spotify.com/track/track-" + index))
+                .toList();
     }
 }

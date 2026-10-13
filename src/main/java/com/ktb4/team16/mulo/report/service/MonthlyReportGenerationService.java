@@ -4,8 +4,10 @@ import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
 import com.ktb4.team16.mulo.report.client.MonthlyReportBatchAiClient;
 import java.time.Clock;
 import java.time.YearMonth;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
+@Slf4j
 @Service
 public class MonthlyReportGenerationService {
     private final MonthlyReportPreparationService preparationService;
@@ -30,11 +32,33 @@ public class MonthlyReportGenerationService {
         if (batch.userIds().isEmpty()) {
             return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
         }
+        MonthlyReportBatchAiClient.BatchAccepted accepted;
         try {
-            aiClient.requestBatch(month, batch.userIds());
-            preparationService.markProcessing(batch);
+            accepted = aiClient.requestBatch(month, batch.userIds());
         } catch (MonthlyReportAiException exception) {
-            preparationService.markFailed(batch);
+            String failureType = exception.getCause() == null
+                    ? exception.getClass().getSimpleName()
+                    : exception.getCause().getClass().getSimpleName();
+            log.error("월간 리포트 AI 배치 요청 실패: month={}, targetCount={}, failureType={}",
+                    month, batch.userIds().size(), failureType);
+            try {
+                preparationService.markFailed(batch);
+            } catch (RuntimeException | Error statusException) {
+                log.error("월간 리포트 FAILED 상태 저장 롤백: month={}, targetCount={}, failureType={}",
+                        month, batch.userIds().size(), statusException.getClass().getSimpleName(),
+                        statusException);
+                throw statusException;
+            }
+            return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
+        }
+
+        try {
+            preparationService.markProcessing(batch);
+        } catch (RuntimeException | Error statusException) {
+            log.error("AI 배치 접수 후 PROCESSING 상태 저장 롤백: month={}, targetCount={}, jobId={}, failureType={}",
+                    month, batch.userIds().size(), accepted.jobId(),
+                    statusException.getClass().getSimpleName(), statusException);
+            throw statusException;
         }
         return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
     }

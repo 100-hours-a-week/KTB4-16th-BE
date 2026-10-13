@@ -64,6 +64,7 @@ class RecordDetailControllerTest {
         when(recordService.getRecordDetail(35L, 10L)).thenReturn(new RecordDetailData(
                 10L,
                 35L,
+                true,
                 new RecordDetailData.Place(
                         20L,
                         "테스트동",
@@ -88,6 +89,7 @@ class RecordDetailControllerTest {
                 .andExpect(jsonPath("$.message").value("자물쇠 상세 조회 성공"))
                 .andExpect(jsonPath("$.data.recordId").value(10))
                 .andExpect(jsonPath("$.data.userId").value(35))
+                .andExpect(jsonPath("$.data.isOwner").value(true))
                 .andExpect(jsonPath("$.data.place.placeId").value(20))
                 .andExpect(jsonPath("$.data.music.musicTrackId").value(30))
                 .andExpect(jsonPath("$.data.photoUrl").value("https://signed.example/photo"));

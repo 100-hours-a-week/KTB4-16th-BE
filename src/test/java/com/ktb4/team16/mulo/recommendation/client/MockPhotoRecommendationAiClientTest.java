@@ -6,11 +6,11 @@ import org.junit.jupiter.api.Test;
 
 class MockPhotoRecommendationAiClientTest {
     @Test
-    void returnsThreeTracksWithAllRequiredFields() {
+    void returnsFiveTracksWithAllRequiredFields() {
         var response = new MockPhotoRecommendationAiClient().recommend("https://signed.example/photo");
 
         assertThat(response.degraded()).isFalse();
-        assertThat(response.tracks()).hasSize(3);
+        assertThat(response.tracks()).hasSize(5);
         assertThat(response.tracks()).allSatisfy(track -> {
             assertThat(track.externalTrackId()).isNotBlank();
             assertThat(track.title()).isNotBlank();

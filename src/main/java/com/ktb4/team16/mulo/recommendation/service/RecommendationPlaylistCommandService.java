@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.recommendation.service;
 
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiClient;
+import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.recommendation.dto.request.CreateRecommendationPlaylistRequest;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.weather.service.WeatherService;
@@ -13,6 +14,8 @@ import org.springframework.stereotype.Service;
 @Service
 @RequiredArgsConstructor
 public class RecommendationPlaylistCommandService {
+    private static final int REQUIRED_TRACK_COUNT = 5;
+
     private final WeatherService weatherService;
     private final RecommendationAiClient recommendationAiClient;
     private final RecommendationPlaylistWriter writer;
@@ -35,7 +38,10 @@ public class RecommendationPlaylistCommandService {
         var recommendation = recommendationAiClient.recommend(new RecommendationAiClient.RecommendationContext(
                 userId, weather.data().weatherCondition(), weather.data().temperature(), requestedAt,
                 nearbyTracks, placeName));
-        if (recommendation.degraded() || recommendation.tracks().isEmpty()) {
+        if (recommendation.tracks() == null || recommendation.tracks().size() != REQUIRED_TRACK_COUNT) {
+            throw new RecommendationAiException();
+        }
+        if (recommendation.degraded()) {
             return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false);
         }
         return new CreateResult(writer.replace(userId, recommendation.tracks()), true);

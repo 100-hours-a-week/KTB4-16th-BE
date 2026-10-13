@@ -16,10 +16,18 @@ import java.util.List;
 import java.util.Optional;
 import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
 public interface RecordRepository extends JpaRepository<Record, Long> {
+
+    /** 탈퇴 사용자의 활성 기록만 일괄 소프트 삭제해 기존 삭제 시각을 보존한다. */
+    @Modifying
+    @Query("update Record r set r.deletedAt = :deletedAt "
+            + "where r.user.userId = :userId and r.deletedAt is null")
+    int softDeleteActiveByUserId(@Param("userId") Long userId,
+            @Param("deletedAt") LocalDateTime deletedAt);
 
     // 기간 내 활성 기록이 있는 사용자만 월간 리포트 생성 대상으로 조회한다.
     @Query("""
@@ -117,6 +125,30 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     Optional<Record> findByRecordIdAndUser_UserIdAndDeletedAtIsNull(
             Long recordId,
             Long userId
+    );
+
+    /** 활성 기록과 소유자 또는 현재 친구 관계를 한 SQL 조건으로 확인해 상세 접근을 허용한다. */
+    @Query("""
+        SELECT record
+        FROM Record record
+        WHERE record.recordId = :recordId
+            AND record.deletedAt IS NULL
+            AND record.user.deletedAt IS NULL
+            AND (
+                record.user.userId = :viewerId
+                OR EXISTS (
+                    SELECT friendship.friendshipId
+                    FROM Friendship friendship
+                    WHERE (friendship.userLow.userId = :viewerId
+                            AND friendship.userHigh.userId = record.user.userId)
+                        OR (friendship.userHigh.userId = :viewerId
+                            AND friendship.userLow.userId = record.user.userId)
+                )
+            )
+        """)
+    Optional<Record> findActiveRecordVisibleToViewer(
+            @Param("viewerId") Long viewerId,
+            @Param("recordId") Long recordId
     );
 
     @Query("""

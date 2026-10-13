@@ -1,0 +1,44 @@
+spring:
+  datasource:
+    # Deliberately has no fallback: the test must be explicitly pointed at its isolated DB.
+    url: ${MULO_WEATHER_IT_DB_URL}
+    username: ${MULO_WEATHER_IT_DB_USERNAME}
+    password: ${MULO_WEATHER_IT_DB_PASSWORD}
+  jpa:
+    hibernate:
+      ddl-auto: validate
+
+gcs:
+  project-id: mulo-weather-it
+  bucket-name: mulo-weather-it
+
+mulo:
+  jwt:
+    secret: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+    access-token-ttl: PT1H
+    refresh-token-ttl: P7D
+
+kakao:
+  rest-api-key: integration-test-no-network
+
+kma:
+  base-url: http://127.0.0.1:9
+  service-key: integration-test-no-network
+
+spotify:
+  client-id: integration-test-no-network
+  client-secret: integration-test-no-network
+  accounts-base-url: http://127.0.0.1:9
+  api-base-url: http://127.0.0.1:9
+  connect-timeout: PT1S
+  read-timeout: PT1S
+  user-limit-30-seconds: 8
+  user-limit-60-seconds: 15
+  global-limit-30-seconds: 80
+
+ai:
+  base-url: http://127.0.0.1:9
+  internal-token: integration-test-no-network
+  connect-timeout: PT1S
+  read-timeout: PT1S
+  mock-enabled: true

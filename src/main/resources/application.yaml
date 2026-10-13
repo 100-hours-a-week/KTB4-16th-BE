@@ -9,6 +9,11 @@ spring:
     # 비밀번호 기본값을 두지 않는다. 실행 환경에서 반드시 주입한다.
     password: ${DB_PASSWORD}
     driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      # 부하 테스트에서 풀 10개와 처리량 차이가 작아 초기값 3개를 사용한다.
+      maximum-pool-size: 3
+      # 커넥션 획득 대기 상한이다. SQL 실행시간이나 API 전체 타임아웃은 제한하지 않는다.
+      connection-timeout: 5000
 
   jpa:
     hibernate:
@@ -28,6 +33,13 @@ spring:
       max-file-size: 10MB
       # photo 한 장과 multipart boundary/header overhead를 허용한다.
       max-request-size: 11MB
+
+# 상태 확인과 Prometheus 지표 엔드포인트를 HTTP로 노출한다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
 
 sentry:
   dsn: ${SENTRY_DSN:}
@@ -86,3 +98,9 @@ ai:
   connect-timeout: PT5S
   read-timeout: PT30S
   mock-enabled: ${AI_MOCK_ENABLED:false}
+
+chat-server:
+  base-url: ${CHAT_SERVER_BASE_URL:http://localhost:8090}
+  internal-api-key: ${CHAT_INTERNAL_API_KEY:}
+  connect-timeout: ${CHAT_SERVER_CONNECT_TIMEOUT:PT2S}
+  read-timeout: ${CHAT_SERVER_READ_TIMEOUT:PT3S}

@@ -30,6 +30,8 @@ dependencies {
     implementation 'io.sentry:sentry-spring-boot-4-starter:8.58.0'
     // Docker healthcheck에 사용할 /actuator/health endpoint 제공
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
+    // Prometheus가 수집할 지표를 Actuator 형식으로 제공하는 런타임 레지스트리
+    runtimeOnly 'io.micrometer:micrometer-registry-prometheus'
     // Swagger/OpenAPI 문서 및 Swagger UI 제공을 위한 의존성
     implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:3.1.1'
 
@@ -66,4 +68,28 @@ dependencies {
 
 tasks.named('test') {
     useJUnitPlatform()
+}
+
+sourceSets {
+    integrationTest {
+        compileClasspath += sourceSets.main.output + sourceSets.test.output
+        runtimeClasspath += sourceSets.main.output + sourceSets.test.output
+    }
+}
+
+configurations {
+    integrationTestImplementation.extendsFrom testImplementation
+    integrationTestCompileOnly.extendsFrom testCompileOnly
+    integrationTestAnnotationProcessor.extendsFrom testAnnotationProcessor
+    integrationTestRuntimeOnly.extendsFrom testRuntimeOnly
+}
+
+tasks.register('integrationTest', Test) {
+    description = 'Runs integration tests against a disposable MySQL database.'
+    group = 'verification'
+    dependsOn tasks.named('integrationTestClasses')
+    testClassesDirs = sourceSets.integrationTest.output.classesDirs
+    classpath = sourceSets.integrationTest.runtimeClasspath
+    useJUnitPlatform()
+    shouldRunAfter tasks.named('test')
 }

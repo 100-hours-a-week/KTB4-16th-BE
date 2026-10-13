@@ -19,7 +19,6 @@ import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
-import com.ktb4.team16.mulo.weather.service.WeatherService;
 import java.time.LocalDateTime;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
@@ -28,7 +27,6 @@ class RecordDeleteServiceTest {
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PlaceRepository placeRepository = mock(PlaceRepository.class);
-    private final WeatherService weatherService = mock(WeatherService.class);
     private final UploadService uploadService = mock(UploadService.class);
     private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
@@ -38,12 +36,10 @@ class RecordDeleteServiceTest {
             mock(RecordCursorCodec.class),
             userRepository,
             placeRepository,
-            weatherService,
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            gcsStorageService,
-            mock(com.ktb4.team16.mulo.place.client.KakaoRegionClient.class)
+            gcsStorageService
     );
 
     @Test
@@ -55,7 +51,7 @@ class RecordDeleteServiceTest {
         recordService.deleteRecord(7L, 125L);
 
         verify(record).softDelete(any(LocalDateTime.class));
-        verifyNoInteractions(userRepository, placeRepository, weatherService, uploadService,
+        verifyNoInteractions(userRepository, placeRepository, uploadService,
                 musicTrackService, recordPhotoRepository, gcsStorageService);
     }
 

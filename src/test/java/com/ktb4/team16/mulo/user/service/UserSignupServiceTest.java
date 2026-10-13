@@ -30,7 +30,8 @@ class UserSignupServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new UserSignupService(userRepository, passwordEncoder);
+        service = new UserSignupService(
+                userRepository, passwordEncoder, new UserSignupWriter(userRepository));
     }
 
     @Test

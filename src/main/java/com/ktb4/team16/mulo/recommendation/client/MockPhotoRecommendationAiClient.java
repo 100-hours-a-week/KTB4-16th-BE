@@ -15,7 +15,9 @@ public class MockPhotoRecommendationAiClient implements PhotoRecommendationAiGat
                 java.util.List.of(
                         track("mock-track-1", "MULO Mock Sunset", "MULO Mock Artist 1"),
                         track("mock-track-2", "MULO Mock Ocean", "MULO Mock Artist 2"),
-                        track("mock-track-3", "MULO Mock Night", "MULO Mock Artist 3")),
+                        track("mock-track-3", "MULO Mock Night", "MULO Mock Artist 3"),
+                        track("mock-track-4", "MULO Mock Dawn", "MULO Mock Artist 4"),
+                        track("mock-track-5", "MULO Mock Rain", "MULO Mock Artist 5")),
                 false);
     }
 

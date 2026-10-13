@@ -1,0 +1,21 @@
+ALTER TABLE record_drafts
+    DROP FOREIGN KEY fk_record_drafts_place,
+    DROP FOREIGN KEY fk_record_drafts_music_track,
+    DROP COLUMN place_id,
+    DROP COLUMN music_track_id,
+    DROP COLUMN photo_url,
+    DROP COLUMN expires_at,
+    MODIFY COLUMN mood_score TINYINT NULL DEFAULT NULL,
+    ADD COLUMN latitude DECIMAL(11, 7) NULL DEFAULT NULL,
+    ADD COLUMN longitude DECIMAL(10, 7) NULL DEFAULT NULL,
+    ADD COLUMN legal_dong_code VARCHAR(20) NULL DEFAULT NULL,
+    ADD COLUMN legal_dong_name VARCHAR(100) NULL DEFAULT NULL,
+    ADD COLUMN external_track_id VARCHAR(22) NULL DEFAULT NULL,
+    ADD COLUMN title VARCHAR(255) NULL DEFAULT NULL,
+    ADD COLUMN artist_name VARCHAR(255) NULL DEFAULT NULL,
+    ADD COLUMN album_image_url VARCHAR(255) NULL DEFAULT NULL,
+    ADD COLUMN external_url VARCHAR(255) NULL DEFAULT NULL,
+    ADD COLUMN upload_id BIGINT NULL DEFAULT NULL,
+    ADD CONSTRAINT uk_record_drafts_user UNIQUE (user_id),
+    ADD CONSTRAINT fk_record_drafts_upload
+        FOREIGN KEY (upload_id) REFERENCES uploads(upload_id);
