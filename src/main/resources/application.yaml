@@ -34,6 +34,13 @@ spring:
       # photo 한 장과 multipart boundary/header overhead를 허용한다.
       max-request-size: 11MB
 
+# 상태 확인과 Prometheus 지표 엔드포인트를 HTTP로 노출한다.
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,prometheus
+
 sentry:
   dsn: ${SENTRY_DSN:}
   send-default-pii: false
