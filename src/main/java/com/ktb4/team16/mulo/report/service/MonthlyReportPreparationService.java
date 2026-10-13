@@ -5,6 +5,7 @@ import com.ktb4.team16.mulo.report.repository.MonthlyReportRepository;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Objects;
 import java.util.function.Consumer;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
@@ -52,25 +53,42 @@ public class MonthlyReportPreparationService {
         return new PreparedBatch(month, List.copyOf(preparedUserIds), created, skipped);
     }
 
+    // 배치의 모든 리포트에 같은 시도 ID를 커밋한 뒤 AI 요청을 허용한다.
+    @Transactional
+    public void reserveBatchRequestId(PreparedBatch batch, String batchRequestId) {
+        short year = (short) batch.targetMonth().getYear();
+        short month = (short) batch.targetMonth().getMonthValue();
+        for (Long userId : batch.userIds().stream().sorted().toList()) {
+            MonthlyReport report = reports.findForUpdate(
+                    userId, year, month).orElseThrow();
+            report.assignBatchRequestId(batchRequestId);
+        }
+    }
+
     // AI가 배치 생성을 접수한 뒤 준비된 리포트만 PROCESSING으로 전환한다.
     @Transactional
-    public void markProcessing(PreparedBatch batch) {
-        changeStatus(batch, MonthlyReport::markProcessing);
+    public void markProcessing(PreparedBatch batch, String batchRequestId) {
+        changeStatus(batch, batchRequestId, MonthlyReport::markProcessing);
     }
 
     // AI 요청이 실패하면 준비된 리포트의 집계 스냅샷은 남기고 FAILED로 전환한다.
     @Transactional
-    public void markFailed(PreparedBatch batch) {
-        changeStatus(batch, MonthlyReport::markFailedUnlessCompleted);
+    public void markFailed(PreparedBatch batch, String batchRequestId) {
+        changeStatus(batch, batchRequestId, MonthlyReport::markFailedUnlessCompleted);
     }
 
     // 배치 대상 사용자 리포트를 조회해 전달받은 상태 변경을 적용한다.
-    private void changeStatus(PreparedBatch batch, Consumer<MonthlyReport> change) {
+    private void changeStatus(PreparedBatch batch, String batchRequestId,
+            Consumer<MonthlyReport> change) {
         short year = (short) batch.targetMonth().getYear();
         short month = (short) batch.targetMonth().getMonthValue();
-        for (Long userId : batch.userIds()) {
-            reports.findByUser_UserIdAndReportYearAndReportMonth(userId, year, month)
-                    .ifPresent(change);
+        for (Long userId : batch.userIds().stream().sorted().toList()) {
+            reports.findForUpdate(userId, year, month).ifPresent(report -> {
+                // 이전 HTTP 요청의 늦은 응답은 새 시도의 상태를 변경하지 않는다.
+                if (Objects.equals(report.getBatchRequestId(), batchRequestId)) {
+                    change.accept(report);
+                }
+            });
         }
     }
 

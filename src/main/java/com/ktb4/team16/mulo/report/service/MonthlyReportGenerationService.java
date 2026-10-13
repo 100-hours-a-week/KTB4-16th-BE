@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
 import com.ktb4.team16.mulo.report.client.MonthlyReportBatchAiClient;
 import java.time.Clock;
 import java.time.YearMonth;
+import java.util.UUID;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
@@ -26,15 +27,17 @@ public class MonthlyReportGenerationService {
         return generate(YearMonth.now(clock).minusMonths(1));
     }
 
-    // 스냅샷 커밋 뒤에만 AI를 호출하고 접수·실패 결과를 별도 트랜잭션으로 반영한다.
+    // 스냅샷과 요청 ID를 각각 커밋한 뒤 AI를 호출하고 접수·실패 상태를 반영한다.
     public GenerationResult generate(YearMonth month) {
         var batch = preparationService.prepare(month);
         if (batch.userIds().isEmpty()) {
             return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
         }
+        String batchRequestId = UUID.randomUUID().toString();
+        preparationService.reserveBatchRequestId(batch, batchRequestId);
         MonthlyReportBatchAiClient.BatchAccepted accepted;
         try {
-            accepted = aiClient.requestBatch(month, batch.userIds());
+            accepted = aiClient.requestBatch(month, batch.userIds(), batchRequestId);
         } catch (MonthlyReportAiException exception) {
             String failureType = exception.getCause() == null
                     ? exception.getClass().getSimpleName()
@@ -42,7 +45,7 @@ public class MonthlyReportGenerationService {
             log.error("월간 리포트 AI 배치 요청 실패: month={}, targetCount={}, failureType={}",
                     month, batch.userIds().size(), failureType);
             try {
-                preparationService.markFailed(batch);
+                preparationService.markFailed(batch, batchRequestId);
             } catch (RuntimeException | Error statusException) {
                 log.error("월간 리포트 FAILED 상태 저장 롤백: month={}, targetCount={}, failureType={}",
                         month, batch.userIds().size(), statusException.getClass().getSimpleName(),
@@ -53,7 +56,7 @@ public class MonthlyReportGenerationService {
         }
 
         try {
-            preparationService.markProcessing(batch);
+            preparationService.markProcessing(batch, batchRequestId);
         } catch (RuntimeException | Error statusException) {
             log.error("AI 배치 접수 후 PROCESSING 상태 저장 롤백: month={}, targetCount={}, jobId={}, failureType={}",
                     month, batch.userIds().size(), accepted.jobId(),
