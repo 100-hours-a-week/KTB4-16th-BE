@@ -42,6 +42,7 @@ import static org.hamcrest.Matchers.hasItems;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
@@ -159,6 +160,54 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors.length()").value(3))
                 .andExpect(jsonPath("$.errors[*].code", hasItems(
                         "INVALID_NICKNAME_FORMAT", "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT")));
+    }
+
+    /** 깨진 JSON을 공통 400 오류로 반환하고 회원가입 서비스를 호출하지 않는다. */
+    @Test
+    void malformedSignupJsonReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"invalid_json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 요청 DTO 필드의 JSON 타입 불일치를 공통 400 오류로 반환한다. */
+    @Test
+    void wrongSignupFieldTypeReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":[\"test\"],\"email\":\"test@example.com\",\"password\":\"Password123!\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 비어 있는 필수 요청 본문을 공통 400 오류로 반환한다. */
+    @Test
+    void emptySignupBodyReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 지원하지 않는 요청 Content-Type을 공통 415 오류로 반환한다. */
+    @Test
+    void unsupportedSignupMediaTypeReturnsUnsupportedMediaType() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.TEXT_PLAIN)
+                        .content("nickname=test"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value("지원하지 않는 요청 형식입니다."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
     }
 
     @Test
