@@ -82,6 +82,12 @@ public class UploadService {
         return upload.orElseThrow(UploadNotFoundException::new);
     }
 
+    @Transactional(readOnly = true)
+    public Upload findOwnedUploadForDraft(Long userId, Long uploadId) {
+        return uploadRepository.findByUploadIdAndUser_UserId(uploadId, userId)
+                .orElseThrow(UploadNotFoundException::new);
+    }
+
     // Temporary diagnostics only; raw metadata must never determine upload validity.
     private void logUploadMetadataDiagnostic(Long uploadId) {
         try {
@@ -107,6 +113,12 @@ public class UploadService {
     @Transactional(readOnly = true)
     public String createReadSignedUrl(Long userId, Long uploadId) {
         return gcsStorageService.createReadSignedUrl(findValidUpload(userId, uploadId).getImageUrl());
+    }
+
+    @Transactional(readOnly = true)
+    public String createDraftReadSignedUrl(Long userId, Long uploadId) {
+        return gcsStorageService.createReadSignedUrl(
+                findOwnedUploadForDraft(userId, uploadId).getImageUrl());
     }
 
     // TODO: 만료 cleanup에서 transaction commit 실패로 남은 GCS object도 회수한다.

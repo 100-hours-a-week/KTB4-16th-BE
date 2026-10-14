@@ -15,6 +15,8 @@ import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.entity.Record;
+import com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository;
+import com.ktb4.team16.mulo.recorddraft.entity.RecordDraft;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
@@ -27,6 +29,7 @@ import java.math.BigDecimal;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
+import org.mockito.InOrder;
 import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.util.ReflectionTestUtils;
 
@@ -38,6 +41,7 @@ class RecordCreateServiceTest {
     private final UploadService uploadService = mock(UploadService.class);
     private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
+    private final RecordDraftRepository recordDraftRepository = mock(RecordDraftRepository.class);
     private final RecordService recordService = new RecordService(
             recordRepository,
             mock(com.ktb4.team16.mulo.record.cursor.RecordCursorCodec.class),
@@ -46,7 +50,9 @@ class RecordCreateServiceTest {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            mock(GcsStorageService.class)
+            mock(GcsStorageService.class),
+            recordDraftRepository,
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
     );
 
     @BeforeEach
@@ -68,12 +74,13 @@ class RecordCreateServiceTest {
         MusicTrack musicTrack = mock(MusicTrack.class);
         RecordCreateRequest request = request(uploadId);
 
-        when(userRepository.findByUserIdAndDeletedAtIsNull(userId)).thenReturn(Optional.of(user));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)).thenReturn(Optional.of(user));
         when(user.getUserId()).thenReturn(userId);
         when(placeRepository.findByLatitudeAndLongitude(
                 request.location().latitude(), request.location().longitude()))
                 .thenReturn(Optional.of(place));
         when(uploadService.findValidUpload(userId, uploadId)).thenReturn(upload);
+        when(recordDraftRepository.findByUser_UserId(userId)).thenReturn(Optional.empty());
         when(musicTrackService.findOrCreate(
                 "track-id", "title", "artist", "album-image", "external-url"))
                 .thenReturn(musicTrack);
@@ -98,7 +105,10 @@ class RecordCreateServiceTest {
         assertThat(response.comment()).isEqualTo("comment");
         assertThat(response.createdAt()).isNotNull();
         verify(recordPhotoRepository).save(any(RecordPhoto.class));
-        verify(uploadService).deleteMetadata(upload);
+        InOrder order = org.mockito.Mockito.inOrder(recordDraftRepository, uploadService);
+        order.verify(recordDraftRepository).deleteByUser_UserId(userId);
+        order.verify(recordDraftRepository).flush();
+        order.verify(uploadService).deleteMetadata(upload);
         verify(musicTrackService).findOrCreate(
                 eq("track-id"), eq("title"), eq("artist"), eq("album-image"), eq("external-url"));
         verify(placeRepository, org.mockito.Mockito.never()).save(any());
@@ -117,8 +127,9 @@ class RecordCreateServiceTest {
                         new BigDecimal("37.5000001"), new BigDecimal("127.0000000"),
                         "client-code", "client-name"),
                 request(11L).music(), 10, "comment", 11L);
-        when(userRepository.findByUserIdAndDeletedAtIsNull(7L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(7L))
                 .thenReturn(Optional.of(mock(User.class)));
+        when(recordDraftRepository.findByUser_UserId(7L)).thenReturn(Optional.empty());
         when(placeRepository.findByLatitudeAndLongitude(
                 request.location().latitude(), request.location().longitude()))
                 .thenReturn(Optional.empty());
@@ -149,6 +160,71 @@ class RecordCreateServiceTest {
         assertThat(recordCaptor.getValue().getPlace()).isSameAs(place);
         verify(recordPhotoRepository).save(any(RecordPhoto.class));
         verify(uploadService).deleteMetadata(upload);
+    }
+
+    @Test
+    void finalRecordCanUseActiveDraftUploadAfterOneHourAndRemovesDraftBeforeUploadMetadata() {
+        Long userId = 7L;
+        Long uploadId = 11L;
+        User user = mock(User.class);
+        Upload upload = mock(Upload.class);
+        RecordDraft draft = RecordDraft.create(user, null, null, null, null,
+                null, null, null, null, null, (byte) 0, null, upload,
+                java.time.LocalDateTime.now().minusDays(1));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId))
+                .thenReturn(Optional.of(user));
+        when(user.getUserId()).thenReturn(userId);
+        when(placeRepository.findByLatitudeAndLongitude(
+                request(uploadId).location().latitude(), request(uploadId).location().longitude()))
+                .thenReturn(Optional.of(mock(Place.class)));
+        when(recordDraftRepository.findByUser_UserId(userId)).thenReturn(Optional.of(draft));
+        when(upload.getUploadId()).thenReturn(uploadId);
+        when(uploadService.findOwnedUploadForDraft(userId, uploadId)).thenReturn(upload);
+        when(musicTrackService.findOrCreate(
+                "track-id", "title", "artist", "album-image", "external-url"))
+                .thenReturn(mock(MusicTrack.class));
+        when(upload.getImageUrl()).thenReturn("uploads/7/photo.jpg");
+        when(upload.getMimeType()).thenReturn("image/jpeg");
+        when(upload.getFileSize()).thenReturn(123L);
+
+        recordService.createRecord(userId, request(uploadId),
+                new KakaoRegionClient.LegalRegion("region-code", "region-name"),
+                PreparedWeather.withoutWeather());
+
+        verify(uploadService).findOwnedUploadForDraft(userId, uploadId);
+        InOrder order = org.mockito.Mockito.inOrder(recordDraftRepository, uploadService);
+        order.verify(recordDraftRepository).deleteByUser_UserId(userId);
+        order.verify(recordDraftRepository).flush();
+        order.verify(uploadService).deleteMetadata(upload);
+    }
+
+    @Test
+    void keepsDraftWhenRecordPhotoPersistenceFailsBeforeDraftDeletion() {
+        Long userId = 7L;
+        Long uploadId = 11L;
+        User user = mock(User.class);
+        Place place = mock(Place.class);
+        Upload upload = mock(Upload.class);
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId))
+                .thenReturn(Optional.of(user));
+        when(placeRepository.findByLatitudeAndLongitude(
+                request(uploadId).location().latitude(), request(uploadId).location().longitude()))
+                .thenReturn(Optional.of(place));
+        when(recordDraftRepository.findByUser_UserId(userId)).thenReturn(Optional.empty());
+        when(uploadService.findValidUpload(userId, uploadId)).thenReturn(upload);
+        when(musicTrackService.findOrCreate(any(), any(), any(), any(), any()))
+                .thenReturn(mock(MusicTrack.class));
+        org.mockito.Mockito.doThrow(new IllegalStateException("record photo failed"))
+                .when(recordPhotoRepository).save(any(RecordPhoto.class));
+
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> recordService.createRecord(
+                userId, request(uploadId),
+                new KakaoRegionClient.LegalRegion("region-code", "region-name"),
+                PreparedWeather.withoutWeather()))
+                .isInstanceOf(IllegalStateException.class);
+
+        verify(recordDraftRepository, org.mockito.Mockito.never()).deleteByUser_UserId(userId);
+        verify(uploadService, org.mockito.Mockito.never()).deleteMetadata(upload);
     }
 
     private RecordCreateRequest request(Long uploadId) {

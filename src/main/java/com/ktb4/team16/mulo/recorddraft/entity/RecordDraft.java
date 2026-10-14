@@ -23,7 +23,7 @@ import lombok.NoArgsConstructor;
 @Getter
 @NoArgsConstructor
 public class RecordDraft {
-    private static final int COORDINATE_SCALE = 7;
+    private static final int COORDINATE_SCALE = 7; // 위경도 소수점 7자리까지
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
