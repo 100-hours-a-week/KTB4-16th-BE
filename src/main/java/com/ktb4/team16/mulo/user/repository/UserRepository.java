@@ -18,6 +18,10 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByEmailAndDeletedAtIsNull(String email);
 
+    /** 활성 이메일 UNIQUE 인덱스로 로그인 대상 ID를 잠금 없이 식별한다. */
+    @Query("select u from User u where u.activeEmail = :email")
+    Optional<User> findByActiveEmail(@Param("email") String email);
+
     Optional<User> findByUserIdAndDeletedAtIsNull(Long userId);
 
     /** 탈퇴하지 않은 요청 대상을 닉네임으로 찾는다. */

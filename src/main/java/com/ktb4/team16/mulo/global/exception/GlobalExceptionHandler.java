@@ -5,6 +5,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.friend.exception.FriendDomainException;
+import com.ktb4.team16.mulo.match.exception.MatchDomainException;
 import io.sentry.Sentry;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
@@ -17,6 +18,8 @@ import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.MissingCommentFieldException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
+import com.ktb4.team16.mulo.notification.exception.NotificationDomainException;
+import com.ktb4.team16.mulo.notification.exception.NotificationInputException;
 import com.ktb4.team16.mulo.report.exception.MonthlyReportNotFoundException;
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
 import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportAiCallbackException;
@@ -29,6 +32,7 @@ import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
+import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
@@ -37,7 +41,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -56,6 +62,29 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleFriendDomain(FriendDomainException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(MatchDomainException.class)
+    public ResponseEntity<ErrorResponse> handleMatchDomain(MatchDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(NotificationDomainException.class)
+    // 알림 소유권과 입력 상태 오류를 알림 API의 공개 오류 코드로 반환한다.
+    public ResponseEntity<ErrorResponse> handleNotificationDomain(
+            NotificationDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(NotificationInputException.class)
+    // cursor·size·ID 오류를 기존 OpenAPI의 field error 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleNotificationInput(
+            NotificationInputException exception) {
+        return response(ErrorCode.INVALID_INPUT_VALUE,
+                List.of(com.ktb4.team16.mulo.global.error.FieldError.of(
+                        exception.fieldName(), exception.fieldErrorCode())));
     }
 
     @ExceptionHandler(KakaoRegionLookupException.class)
@@ -100,6 +129,15 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(PasswordChangeException.class)
     public ResponseEntity<ErrorResponse> handlePasswordChange(
             PasswordChangeException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status())
+                .body(ErrorResponse.of(errorCode));
+    }
+
+    /** 탈퇴 비밀번호 불일치를 기존 400 오류 응답으로 변환한다. */
+    @ExceptionHandler(UserWithdrawalException.class)
+    public ResponseEntity<ErrorResponse> handleUserWithdrawal(
+            UserWithdrawalException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status())
                 .body(ErrorResponse.of(errorCode));
@@ -237,10 +275,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class,
             ConstraintViolationException.class,
-            HandlerMethodValidationException.class})
+            HandlerMethodValidationException.class,
+            HttpMessageNotReadableException.class})
+    // 요청 파라미터 오류와 요청 본문 파싱 실패를 공통 400 응답으로 변환한다.
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    // 지원하지 않는 요청 Content-Type을 공통 415 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(ErrorCode.UNSUPPORTED_MEDIA_TYPE.status())
+                .body(ErrorResponse.of(ErrorCode.UNSUPPORTED_MEDIA_TYPE));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)

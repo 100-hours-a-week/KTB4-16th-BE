@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
@@ -12,6 +13,7 @@ import com.ktb4.team16.mulo.user.message.UserMessage;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
+import java.util.List;
 import lombok.RequiredArgsConstructor;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -58,7 +60,9 @@ public class UserProfileService {
     @Transactional
     public UpdatePasswordResponse updatePassword(
             Long userId, String currentPassword, String newPassword) {
-        User user = findActiveUser(userId);
+        // 탈퇴와 비밀번호 변경이 같은 해시를 동시에 검사하지 않도록 직렬화한다.
+        User user = userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)
+                .orElseThrow(UnauthenticatedUserException::new);
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new PasswordChangeException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
@@ -68,6 +72,14 @@ public class UserProfileService {
         String newPasswordHash = passwordEncoder.encode(newPassword);
         user.updatePassword(newPasswordHash, currentKstDateTime());
         return new UpdatePasswordResponse(UserMessage.PASSWORD_UPDATED.message());
+    }
+
+    @Transactional
+    public UpdatePreferredGenresResponse updatePreferredGenres(
+            Long userId, List<String> preferredGenres) {
+        User user = findActiveUser(userId);
+        user.updatePreferredGenres(preferredGenres);
+        return UpdatePreferredGenresResponse.from(user);
     }
 
     private User findActiveUser(Long userId) {

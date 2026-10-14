@@ -28,13 +28,15 @@ public class MonthlyReportBatchAiClient {
     }
 
     // AI에 월간 리포트 배치 생성을 요청하고 접수된 작업 식별 정보를 반환한다.
-    public BatchAccepted requestBatch(YearMonth targetMonth, List<Long> userIds) {
+    public BatchAccepted requestBatch(YearMonth targetMonth, List<Long> userIds,
+            String batchRequestId) {
         try {
             BatchResponse response = restClient.post()
                     .uri(properties.baseUrl() + "/api/reports/batch-generate")
                     .contentType(MediaType.APPLICATION_JSON)
                     .header("X-Internal-Token", properties.internalToken())
-                    .body(new BatchRequest(targetMonth.getYear(), targetMonth.getMonthValue(), userIds))
+                    .body(new BatchRequest(targetMonth.getYear(), targetMonth.getMonthValue(),
+                            userIds, batchRequestId))
                     .retrieve()
                     .body(BatchResponse.class);
             if (response == null || !"QUEUED".equals(response.status())
@@ -62,7 +64,8 @@ public class MonthlyReportBatchAiClient {
         return builder.requestFactory(factory);
     }
 
-    private record BatchRequest(int year, int month, List<Long> userIds) { }
+    private record BatchRequest(int year, int month, List<Long> userIds,
+            String batchRequestId) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
     private record BatchResponse(String status, String jobId, int targetCount) { }

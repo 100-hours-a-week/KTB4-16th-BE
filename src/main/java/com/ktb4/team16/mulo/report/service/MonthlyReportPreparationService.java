@@ -1,101 +1,94 @@
 package com.ktb4.team16.mulo.report.service;
 
-import com.ktb4.team16.mulo.place.repository.PlaceRepository;
-import com.ktb4.team16.mulo.record.repository.RecordRepository;
-import com.ktb4.team16.mulo.report.entity.MonthlyMoodStat;
 import com.ktb4.team16.mulo.report.entity.MonthlyReport;
-import com.ktb4.team16.mulo.report.repository.MonthlyMoodStatRepository;
 import com.ktb4.team16.mulo.report.repository.MonthlyReportRepository;
-import com.ktb4.team16.mulo.user.repository.UserRepository;
-import java.math.BigDecimal;
-import java.math.RoundingMode;
-import java.time.LocalDateTime;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.List;
-import org.springframework.data.domain.PageRequest;
+import java.util.Objects;
+import java.util.function.Consumer;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
+@Slf4j
 @Service
 public class MonthlyReportPreparationService {
-    private final RecordRepository records;
-    private final PlaceRepository places;
-    private final UserRepository users;
-    private final MonthlyReportRepository reports;
-    private final MonthlyMoodStatRepository moods;
+    // 롤백에 영향을 받는 최대 인원을 1,000명보다 낮추기 위해 선택한 사용자 기준이다.
+    private static final int USER_CHUNK_SIZE = 500;
 
-    public MonthlyReportPreparationService(RecordRepository records, PlaceRepository places,
-            UserRepository users, MonthlyReportRepository reports, MonthlyMoodStatRepository moods) {
-        this.records = records;
-        this.places = places;
-        this.users = users;
+    private final MonthlyReportRepository reports;
+    private final MonthlyReportPreparationChunkService chunkService;
+
+    public MonthlyReportPreparationService(MonthlyReportRepository reports,
+            MonthlyReportPreparationChunkService chunkService) {
         this.reports = reports;
-        this.moods = moods;
+        this.chunkService = chunkService;
     }
 
-    // AI 요청 전에 사용자별 월간 집계 스냅샷을 PENDING 상태로 저장한다.
-    @Transactional
+    // 활성 사용자 목록을 500명씩 분리해 각 묶음의 스냅샷 준비를 위임한다.
     public PreparedBatch prepare(YearMonth month) {
-        LocalDateTime start = month.atDay(1).atStartOfDay();
-        LocalDateTime end = month.plusMonths(1).atDay(1).atStartOfDay();
-        short year = (short) month.getYear();
-        short monthValue = (short) month.getMonthValue();
-        List<Long> userIds = new ArrayList<>();
+        List<Long> activeUserIds = chunkService.findActiveUserIds(month);
+        List<Long> preparedUserIds = new ArrayList<>();
         int created = 0;
         int skipped = 0;
-        for (Long userId : records.findUsersWithActiveRecordsInPeriod(start, end)) {
-            var existing = reports.findByUser_UserIdAndReportYearAndReportMonth(userId, year, monthValue);
-            if (existing.isPresent()) {
-                MonthlyReport report = existing.get();
-                if (report.getAiRecapStatus() == MonthlyReport.AiRecapStatus.FAILED) {
-                    // 기존 월간 집계를 보존하고 실패한 AI 회고만 다시 요청한다.
-                    report.retryFailedRecap();
-                    userIds.add(userId);
-                    continue;
-                }
-                skipped++;
-                continue;
+
+        for (int offset = 0; offset < activeUserIds.size(); offset += USER_CHUNK_SIZE) {
+            int limit = Math.min(offset + USER_CHUNK_SIZE, activeUserIds.size());
+            List<Long> userChunk = List.copyOf(activeUserIds.subList(offset, limit));
+            MonthlyReportPreparationChunkService.PreparedChunk chunk;
+            try {
+                chunk = chunkService.prepareChunk(month, userChunk);
+            } catch (RuntimeException | Error exception) {
+                // REQUIRES_NEW 트랜잭션이 롤백된 뒤 월과 청크 위치를 기록한다.
+                log.error("월간 리포트 집계 청크 실패: month={}, chunkIndex={}, chunkSize={}",
+                        month, offset / USER_CHUNK_SIZE + 1, userChunk.size(), exception);
+                throw exception;
             }
-            var summary = records.findMonthlyRecordSummary(userId, start, end).orElseThrow();
-            var topPlace = records.findMonthlyTopPlaces(userId, start, end, PageRequest.of(0, 1));
-            var topArtist = records.findMonthlyTopArtists(userId, start, end, PageRequest.of(0, 1));
-            String artist = topArtist.isEmpty() ? null : topArtist.getFirst().artistName();
-            MonthlyReport report = MonthlyReport.prepare(users.getReferenceById(userId), year,
-                    monthValue, summary.recordCount().intValue(), artist);
-            if (!topPlace.isEmpty()) {
-                // 대표 법정동 안의 장소 행을 기존 top_place_id FK에 연결한다.
-                report.assignTopPlace(places.getReferenceById(topPlace.getFirst().placeId()));
-            }
-            MonthlyReport saved = reports.save(report);
-            // DB의 소수 첫째 자리 평균에 맞춰 중간값 이상은 올림으로 반올림한다.
-            moods.save(MonthlyMoodStat.create(saved,
-                    BigDecimal.valueOf(summary.averageMoodScore()).setScale(1, RoundingMode.HALF_UP)));
-            userIds.add(userId);
-            created++;
+            preparedUserIds.addAll(chunk.userIds());
+            created += chunk.createdCount();
+            skipped += chunk.skippedCount();
         }
-        return new PreparedBatch(month, List.copyOf(userIds), created, skipped);
+
+        return new PreparedBatch(month, List.copyOf(preparedUserIds), created, skipped);
+    }
+
+    // 배치의 모든 리포트에 같은 시도 ID를 커밋한 뒤 AI 요청을 허용한다.
+    @Transactional
+    public void reserveBatchRequestId(PreparedBatch batch, String batchRequestId) {
+        short year = (short) batch.targetMonth().getYear();
+        short month = (short) batch.targetMonth().getMonthValue();
+        for (Long userId : batch.userIds().stream().sorted().toList()) {
+            MonthlyReport report = reports.findForUpdate(
+                    userId, year, month).orElseThrow();
+            report.assignBatchRequestId(batchRequestId);
+        }
     }
 
     // AI가 배치 생성을 접수한 뒤 준비된 리포트만 PROCESSING으로 전환한다.
     @Transactional
-    public void markProcessing(PreparedBatch batch) {
-        changeStatus(batch, MonthlyReport::markProcessing);
+    public void markProcessing(PreparedBatch batch, String batchRequestId) {
+        changeStatus(batch, batchRequestId, MonthlyReport::markProcessing);
     }
 
     // AI 요청이 실패하면 준비된 리포트의 집계 스냅샷은 남기고 FAILED로 전환한다.
     @Transactional
-    public void markFailed(PreparedBatch batch) {
-        changeStatus(batch, MonthlyReport::markFailedUnlessCompleted);
+    public void markFailed(PreparedBatch batch, String batchRequestId) {
+        changeStatus(batch, batchRequestId, MonthlyReport::markFailedUnlessCompleted);
     }
 
-    // 배치의 사용자별 리포트를 조회해 상태 전이 책임을 엔티티에 위임한다.
-    private void changeStatus(PreparedBatch batch, java.util.function.Consumer<MonthlyReport> change) {
+    // 배치 대상 사용자 리포트를 조회해 전달받은 상태 변경을 적용한다.
+    private void changeStatus(PreparedBatch batch, String batchRequestId,
+            Consumer<MonthlyReport> change) {
         short year = (short) batch.targetMonth().getYear();
         short month = (short) batch.targetMonth().getMonthValue();
-        for (Long userId : batch.userIds()) {
-            reports.findByUser_UserIdAndReportYearAndReportMonth(userId, year, month)
-                    .ifPresent(change);
+        for (Long userId : batch.userIds().stream().sorted().toList()) {
+            reports.findForUpdate(userId, year, month).ifPresent(report -> {
+                // 이전 HTTP 요청의 늦은 응답은 새 시도의 상태를 변경하지 않는다.
+                if (Objects.equals(report.getBatchRequestId(), batchRequestId)) {
+                    change.accept(report);
+                }
+            });
         }
     }
 

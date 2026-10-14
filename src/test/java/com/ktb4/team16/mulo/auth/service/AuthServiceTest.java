@@ -30,6 +30,7 @@ import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.oauth2.jwt.JwtException;
+import org.springframework.test.util.ReflectionTestUtils;
 
 @ExtendWith(MockitoExtension.class)
 class AuthServiceTest {
@@ -66,7 +67,10 @@ class AuthServiceTest {
     @Test
     void loginStoresOnlyHashedRefreshTokenAndReturnsTokens() {
         User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
-        when(userRepository.findByEmailAndDeletedAtIsNull(TEST_EMAIL))
+        ReflectionTestUtils.setField(user, "userId", 42L);
+        when(userRepository.findByActiveEmail(TEST_EMAIL))
+                .thenReturn(Optional.of(user));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(42L))
                 .thenReturn(Optional.of(user));
         when(passwordEncoder.matches("plain-password", "encoded-password")).thenReturn(true);
         when(jwtTokenProvider.createAccessToken(any())).thenReturn("access-token");
@@ -86,12 +90,15 @@ class AuthServiceTest {
     @Test
     void loginReplacesExistingRefreshTokenForSameUser() {
         User user = User.signup(TEST_EMAIL, "encoded-password", "test-user");
+        ReflectionTestUtils.setField(user, "userId", 42L);
         RefreshToken existing = RefreshToken.create(
                 user,
                 "old-hash",
                 LocalDateTime.of(2026, 9, 19, 12, 0)
         );
-        when(userRepository.findByEmailAndDeletedAtIsNull(TEST_EMAIL))
+        when(userRepository.findByActiveEmail(TEST_EMAIL))
+                .thenReturn(Optional.of(user));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(42L))
                 .thenReturn(Optional.of(user));
         when(passwordEncoder.matches("plain-password", "encoded-password")).thenReturn(true);
         when(jwtTokenProvider.createAccessToken(any())).thenReturn("access-token");
@@ -106,11 +113,25 @@ class AuthServiceTest {
 
     @Test
     void loginUsesSameExceptionForUnknownEmailAndWrongPassword() {
-        when(userRepository.findByEmailAndDeletedAtIsNull(UNKNOWN_EMAIL))
+        when(userRepository.findByActiveEmail(UNKNOWN_EMAIL))
                 .thenReturn(Optional.empty());
 
         assertThatThrownBy(() -> authService.login(UNKNOWN_EMAIL, "plain-password"))
                 .isInstanceOf(InvalidCredentialsException.class);
+    }
+
+    /** 이메일 조회 뒤 탈퇴한 사용자는 잠금 재조회에서 거절한다. */
+    @Test
+    void loginRejectsUserWithdrawnAfterEmailLookup() {
+        User candidate = User.signup(TEST_EMAIL, "encoded-password", "test-user");
+        ReflectionTestUtils.setField(candidate, "userId", 42L);
+        when(userRepository.findByActiveEmail(TEST_EMAIL)).thenReturn(Optional.of(candidate));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(42L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> authService.login(TEST_EMAIL, "plain-password"))
+                .isInstanceOf(InvalidCredentialsException.class);
+        verifyNoInteractions(refreshTokenRepository);
     }
 
     @Test

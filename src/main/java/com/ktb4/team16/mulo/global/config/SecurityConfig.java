@@ -3,6 +3,7 @@ package com.ktb4.team16.mulo.global.config;
 import com.ktb4.team16.mulo.global.security.ApiAccessDeniedHandler;
 import com.ktb4.team16.mulo.global.security.ApiAuthenticationEntryPoint;
 import com.ktb4.team16.mulo.global.security.AiInternalTokenFilter;
+import com.ktb4.team16.mulo.global.security.ChatAuthVerifyApiKeyFilter;
 import com.ktb4.team16.mulo.global.security.JwtAuthenticationFilter;
 import com.ktb4.team16.mulo.global.security.ReportOperationTokenFilter;
 import jakarta.servlet.DispatcherType;
@@ -17,6 +18,7 @@ import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.security.web.SecurityFilterChain;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.authentication.UsernamePasswordAuthenticationFilter;
 import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
@@ -24,14 +26,24 @@ import org.springframework.web.cors.CorsConfiguration;
 import org.springframework.web.cors.CorsConfigurationSource;
 import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 import org.springframework.beans.factory.ObjectProvider;
+import org.springframework.boot.web.servlet.FilterRegistrationBean;
 
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties({SecurityProperties.class, JwtProperties.class})
+@EnableConfigurationProperties({SecurityProperties.class, JwtProperties.class, ChatAuthProperties.class})
 public class SecurityConfig {
+    @Bean
+    FilterRegistrationBean<ChatAuthVerifyApiKeyFilter> chatAuthVerifyApiKeyFilterServletRegistration(
+            ChatAuthVerifyApiKeyFilter filter) {
+        var registration = new FilterRegistrationBean<>(filter);
+        registration.setEnabled(false);
+        return registration;
+    }
+
     @Bean
     SecurityFilterChain securityFilterChain(HttpSecurity http, SecurityProperties properties,
             ApiAuthenticationEntryPoint entryPoint, ApiAccessDeniedHandler deniedHandler,
             CorsConfigurationSource corsConfigurationSource,
+            ChatAuthVerifyApiKeyFilter chatAuthVerifyApiKeyFilter,
             JwtAuthenticationFilter jwtAuthenticationFilter,
             ObjectProvider<AiInternalTokenFilter> aiInternalTokenFilter,
             ObjectProvider<ReportOperationTokenFilter> reportOperationTokenFilter)
@@ -53,6 +65,8 @@ public class SecurityConfig {
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
                                 HttpMethod.POST, "/internal/ai/report-ready"))
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
+                                HttpMethod.POST, "/internal/auth/verify"))
+                        .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
                                 HttpMethod.POST, "/internal/ops/monthly-reports/generate")))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
@@ -63,6 +77,7 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 내부 오류 디스패치가 기존 404/500을 401로 바꾸지 않도록 한다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers(HttpMethod.POST, "/internal/auth/verify").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/ai/report-ready").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/ops/monthly-reports/generate")
                         .permitAll()
@@ -85,6 +100,7 @@ public class SecurityConfig {
                         .requestMatchers(HttpMethod.POST, "/api/auth/logout").permitAll()
                         .requestMatchers("/api/**").authenticated()
                         .anyRequest().denyAll())
+                .addFilterBefore(chatAuthVerifyApiKeyFilter, SecurityContextHolderFilter.class)
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         AiInternalTokenFilter filter = aiInternalTokenFilter.getIfAvailable();
         if (filter != null) {
@@ -110,7 +126,7 @@ public class SecurityConfig {
         var cors = new CorsConfiguration();
         cors.setAllowedOrigins(properties.allowedOrigins());
         cors.setAllowCredentials(true);
-        cors.setAllowedMethods(List.of("GET", "POST", "PATCH", "DELETE", "OPTIONS"));
+        cors.setAllowedMethods(List.of("GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"));
         cors.setAllowedHeaders(List.of("Content-Type", "Authorization", "X-XSRF-TOKEN"));
         source.registerCorsConfiguration("/api/**", cors);
         return source;

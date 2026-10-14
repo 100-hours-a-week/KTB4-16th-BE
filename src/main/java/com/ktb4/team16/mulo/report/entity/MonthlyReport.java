@@ -28,6 +28,7 @@ public class MonthlyReport {
     private String topArtistName;
     private String aiRecapText;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private AiRecapStatus aiRecapStatus;
+    @Column(name = "batch_request_id", length = 36) private String batchRequestId;
     @Column(insertable = false, updatable = false) private LocalDateTime createdAt;
 
     private MonthlyReport(User user, short year, short month, int count, String artist,
@@ -56,6 +57,15 @@ public class MonthlyReport {
         if (aiRecapStatus == AiRecapStatus.PENDING) {
             aiRecapStatus = AiRecapStatus.PROCESSING;
         }
+    }
+
+    // AI 호출 전에 현재 요청 시도 ID를 저장해 이전 시도의 콜백과 구별한다.
+    public void assignBatchRequestId(String batchRequestId) {
+        if (aiRecapStatus != AiRecapStatus.PENDING || batchRequestId == null
+                || batchRequestId.isBlank()) {
+            throw new IllegalStateException("대기 중인 리포트에만 요청 ID를 지정할 수 있습니다.");
+        }
+        this.batchRequestId = batchRequestId;
     }
 
     // AI가 제공한 회고를 저장하고 리포트 생성을 완료 상태로 전환한다.

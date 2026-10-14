@@ -6,6 +6,7 @@ import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.place.service.PlaceService;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
+import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.exception.DuplicateUserException;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
@@ -13,6 +14,10 @@ import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.service.SignupCommand;
 import com.ktb4.team16.mulo.user.service.UserProfileService;
 import com.ktb4.team16.mulo.user.service.UserSignupService;
+import com.ktb4.team16.mulo.user.service.UserWithdrawalService;
+import com.ktb4.team16.mulo.global.config.SecurityProperties;
+import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
+import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto;
 import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
@@ -35,10 +40,16 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 import static org.hamcrest.Matchers.hasItems;
 import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.patch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.put;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
@@ -48,12 +59,14 @@ class UserControllerTest {
     @Mock UserProfileService profileService;
     @Mock PlaceService placeService;
     @Mock RecordService recordService;
+    @Mock UserWithdrawalService withdrawalService;
     MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new UserController(signupService, profileService, placeService, recordService))
+                        new UserController(signupService, profileService, placeService, recordService,
+                                withdrawalService, new SecurityProperties(List.of(), false)))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -62,6 +75,60 @@ class UserControllerTest {
     @AfterEach
     void clearSecurityContext() {
         SecurityContextHolder.clearContext();
+    }
+
+    /** 성공 응답과 기존 경로의 Refresh Cookie 만료를 확인한다. */
+    @Test
+    void withdrawReturnsSuccessAndExpiresRefreshCookie() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.message").value("회원 탈퇴가 완료되었습니다."))
+                .andExpect(header().string("Set-Cookie", org.hamcrest.Matchers.allOf(
+                        org.hamcrest.Matchers.containsString("refreshToken="),
+                        org.hamcrest.Matchers.containsString("Max-Age=0"),
+                        org.hamcrest.Matchers.containsString("Path=/api/auth"),
+                        org.hamcrest.Matchers.containsString("HttpOnly"))));
+        verify(withdrawalService).withdraw(1L, "correct");
+    }
+
+    /** 공백 비밀번호를 공통 필드 오류로 반환한다. */
+    @Test
+    void blankWithdrawalPasswordIsRejected() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\" \"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.errors[0].code").value("PASSWORD_REQUIRED"));
+    }
+
+    /** 비밀번호 불일치에 기존 오류 코드를 재사용한다. */
+    @Test
+    void wrongWithdrawalPasswordUsesExistingError() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        doThrow(new UserWithdrawalException(ErrorCode.CURRENT_PASSWORD_MISMATCH))
+                .when(withdrawalService).withdraw(1L, "wrong");
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"wrong\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("CURRENT_PASSWORD_MISMATCH"));
+    }
+
+    /** 중복 탈퇴 요청은 401로 응답한다. */
+    @Test
+    void alreadyWithdrawnUserIsUnauthorized() throws Exception {
+        SecurityContextHolder.getContext().setAuthentication(
+                UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
+        doThrow(new UnauthenticatedUserException()).when(withdrawalService)
+                .withdraw(1L, "correct");
+        mvc.perform(delete("/api/users/me").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"password\":\"correct\"}"))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -93,6 +160,54 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.errors.length()").value(3))
                 .andExpect(jsonPath("$.errors[*].code", hasItems(
                         "INVALID_NICKNAME_FORMAT", "INVALID_EMAIL_FORMAT", "INVALID_PASSWORD_FORMAT")));
+    }
+
+    /** 깨진 JSON을 공통 400 오류로 반환하고 회원가입 서비스를 호출하지 않는다. */
+    @Test
+    void malformedSignupJsonReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"invalid_json"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 요청 DTO 필드의 JSON 타입 불일치를 공통 400 오류로 반환한다. */
+    @Test
+    void wrongSignupFieldTypeReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"nickname\":[\"test\"],\"email\":\"test@example.com\",\"password\":\"Password123!\"}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 비어 있는 필수 요청 본문을 공통 400 오류로 반환한다. */
+    @Test
+    void emptySignupBodyReturnsBadRequest() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.APPLICATION_JSON)
+                        .content(""))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                .andExpect(jsonPath("$.message").value("입력값을 확인해주세요."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
+    }
+
+    /** 지원하지 않는 요청 Content-Type을 공통 415 오류로 반환한다. */
+    @Test
+    void unsupportedSignupMediaTypeReturnsUnsupportedMediaType() throws Exception {
+        mvc.perform(post("/api/users/signup").contentType(MediaType.TEXT_PLAIN)
+                        .content("nickname=test"))
+                .andExpect(status().isUnsupportedMediaType())
+                .andExpect(jsonPath("$.code").value("UNSUPPORTED_MEDIA_TYPE"))
+                .andExpect(jsonPath("$.message").value("지원하지 않는 요청 형식입니다."))
+                .andExpect(jsonPath("$.errors").doesNotExist());
+        verifyNoInteractions(signupService);
     }
 
     @Test
@@ -246,7 +361,8 @@ class UserControllerTest {
         UserProfileResponse response = new UserProfileResponse(
                 "회원 정보 조회 성공",
                 new UserProfileResponse.UserProfileData(
-                        1L, "뮤로16", "user@example.com"));
+                        1L, "뮤로16", "user@example.com", null, false,
+                        LocalDateTime.of(2026, 10, 1, 12, 34, 56)));
         when(profileService.getMyProfile(1L)).thenReturn(response);
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(1L, null, List.of()));
@@ -256,7 +372,72 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.message").value("회원 정보 조회 성공"))
                 .andExpect(jsonPath("$.data.userId").value(1))
                 .andExpect(jsonPath("$.data.nickname").value("뮤로16"))
-                .andExpect(jsonPath("$.data.email").value("user@example.com"));
+                .andExpect(jsonPath("$.data.email").value("user@example.com"))
+                .andExpect(jsonPath("$.data.preferredGenres").value(org.hamcrest.Matchers.nullValue()))
+                .andExpect(jsonPath("$.data.genreOnboardingDone").value(false))
+                .andExpect(jsonPath("$.data.createdAt").value("2026-10-01T12:34:56"));
+    }
+
+    @Test
+    void authenticatedUserCanSaveZeroToThreePreferredGenres() throws Exception {
+        authenticateUser(1L);
+        List<GenreRequestCase> cases = List.of(
+                new GenreRequestCase("{\"preferredGenres\":[]}", List.of(), null),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\"]}",
+                        List.of("재즈"), "[\"재즈\"]"),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\",\"인디음악\"]}",
+                        List.of("재즈", "인디음악"), "[\"재즈\",\"인디음악\"]"),
+                new GenreRequestCase("{\"preferredGenres\":[\"재즈\",\"인디음악\",\"POP\"]}",
+                        List.of("재즈", "인디음악", "POP"), "[\"재즈\",\"인디음악\",\"POP\"]"));
+
+        for (GenreRequestCase requestCase : cases) {
+            List<String> storedGenres = requestCase.genres().isEmpty()
+                    ? null : requestCase.genres();
+            when(profileService.updatePreferredGenres(1L, requestCase.genres()))
+                    .thenReturn(new UpdatePreferredGenresResponse(
+                            "선호 장르가 저장되었습니다.",
+                            new UpdatePreferredGenresResponse.PreferredGenresData(
+                                    storedGenres, true)));
+
+            var result = mvc.perform(put("/api/users/me/preferences/genres")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(requestCase.body()))
+                    .andExpect(status().isOk())
+                    .andExpect(jsonPath("$.message").value("선호 장르가 저장되었습니다."))
+                    .andExpect(jsonPath("$.data.genreOnboardingDone").value(true))
+                    .andReturn();
+
+            if (storedGenres == null) {
+                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                        .contains("\"preferredGenres\":null");
+            } else {
+                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                        .contains(requestCase.expectedGenresJson());
+            }
+        }
+    }
+
+    @Test
+    void invalidPreferredGenresReturnBadRequestWithoutCallingService() throws Exception {
+        List<String> invalidBodies = List.of(
+                "{\"preferredGenres\":null}",
+                "{}",
+                "{\"preferredGenres\":[\"재즈\",\"인디음악\",\"POP\",\"OST\"]}",
+                "{\"preferredGenres\":[\"클래식\"]}",
+                "{\"preferredGenres\":[\"재즈\",\"재즈\"]}");
+
+        for (String body : invalidBodies) {
+            mvc.perform(put("/api/users/me/preferences/genres")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content(body))
+                    .andExpect(status().isBadRequest())
+                    .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
+                    .andExpect(jsonPath("$.errors[0].field").value("preferredGenres"))
+                    .andExpect(jsonPath("$.errors[0].code").value("INVALID_INPUT_VALUE"));
+        }
+
+        verify(profileService, never()).updatePreferredGenres(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -426,4 +607,6 @@ class UserControllerTest {
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(userId, null, List.of()));
     }
+
+    private record GenreRequestCase(String body, List<String> genres, String expectedGenresJson) { }
 }
