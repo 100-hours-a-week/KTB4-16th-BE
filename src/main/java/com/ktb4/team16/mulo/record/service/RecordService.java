@@ -19,6 +19,8 @@ import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
+import com.ktb4.team16.mulo.recorddraft.entity.RecordDraft;
+import com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
@@ -28,6 +30,7 @@ import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
 import java.time.LocalDateTime;
 import java.util.List;
 import java.util.Objects;
@@ -53,6 +56,8 @@ public class RecordService {
     private final MusicTrackService musicTrackService;
     private final RecordPhotoRepository recordPhotoRepository;
     private final GcsStorageService gcsStorageService;
+    private final RecordDraftRepository recordDraftRepository;
+    private final Clock clock;
 
 
     public Record findActiveRecordForOwner(Long userId, Long recordId) {
@@ -287,7 +292,7 @@ public class RecordService {
             KakaoRegionClient.LegalRegion preparedRegion,
             PreparedWeather preparedWeather
     ) {
-        User user = userRepository.findByUserIdAndDeletedAtIsNull(userId)
+        User user = userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)
                 .orElseThrow(UnauthenticatedUserException::new);
 
         BigDecimal longitude = request.location().longitude();
@@ -315,7 +320,14 @@ public class RecordService {
             placeRepository.save(place);
         }
 
-        Upload upload = uploadService.findValidUpload(userId, uploadId);
+        RecordDraft draft = recordDraftRepository.findByUser_UserId(userId).orElse(null);
+        boolean retainedByActiveDraft = draft != null
+                && draft.getUpload() != null
+                && uploadId.equals(draft.getUpload().getUploadId())
+                && LocalDateTime.now(clock).isBefore(draft.getUpdatedAt().plusDays(14));
+        Upload upload = retainedByActiveDraft
+                ? uploadService.findOwnedUploadForDraft(userId, uploadId)
+                : uploadService.findValidUpload(userId, uploadId);
 
         BigDecimal temperature = preparedWeather.temperature();
         Record.WeatherCondition weatherCondition = preparedWeather.weatherCondition();
@@ -354,6 +366,8 @@ public class RecordService {
         );
 
         recordPhotoRepository.save(recordPhoto);
+        recordDraftRepository.deleteByUser_UserId(userId);
+        recordDraftRepository.flush();
         uploadService.deleteMetadata(upload);
 
         return new RecordEmbeddingSnapshot(

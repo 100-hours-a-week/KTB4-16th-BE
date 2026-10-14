@@ -6087,6 +6087,248 @@ paths:
                     message: 서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
       x-implementation-status: implemented
       x-csrf-required: true
+  "/api/users/me/record-draft":
+    get:
+      tags:
+      - RECORD / 자물쇠
+      summary: 내 자물쇠 임시저장 조회
+      operationId: getApiUsersMeRecordDraft
+      description: |-
+        인증된 사용자의 임시저장을 조회한다. 사용자당 임시저장은 최대 1개다.
+        마지막 저장 시각(updatedAt)부터 14일이 지나면 만료된 것으로 간주하며,
+        만료된 임시저장은 204로 응답한다. 조회만으로 updatedAt은 갱신되지 않는다.
+        사진이 있으면 새 Signed URL을 발급하며 유효기간은 10분이다.
+        일반 임시 Upload의 1시간 사용 제한은 유지하되, 보관 중인 Draft 사진은
+        Draft의 14일 유효기간 동안 다시 조회할 수 있다. GCS 객체 물리 삭제는 V2 범위에서 제외한다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 활성 임시저장 조회 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    properties:
+                      location:
+                        type: object
+                        nullable: true
+                        properties:
+                          latitude:
+                            type: number
+                          longitude:
+                            type: number
+                          legalDongCode:
+                            type: string
+                            nullable: true
+                          legalDongName:
+                            type: string
+                            nullable: true
+                      music:
+                        type: object
+                        nullable: true
+                        properties:
+                          externalTrackId:
+                            type: string
+                          title:
+                            type: string
+                          artistName:
+                            type: string
+                          albumImageUrl:
+                            type: string
+                          externalUrl:
+                            type: string
+                      moodScore:
+                        type: integer
+                        minimum: -50
+                        maximum: 50
+                        default: 0
+                      comment:
+                        type: string
+                        nullable: true
+                        maxLength: 80
+                      uploadId:
+                        type: integer
+                        format: int64
+                        nullable: true
+                      photoUrl:
+                        type: string
+                        nullable: true
+                        description: 10분 동안 유효한 Signed URL
+                      expiresAt:
+                        type: string
+                        description: updatedAt에 14일을 더한 만료 시각(LocalDateTime)
+              example:
+                message: 임시저장 조회 성공
+                data:
+                  location:
+                    latitude: 37.5
+                    longitude: 127.0
+                    legalDongCode: "1168010100"
+                    legalDongName: 역삼동
+                  music:
+                    externalTrackId: track-id
+                    title: 노래 제목
+                    artistName: 아티스트
+                    albumImageUrl: https://example.com/album.jpg
+                    externalUrl: https://example.com/track
+                  moodScore: 0
+                  comment: 오늘의 기록
+                  uploadId: 88
+                  photoUrl: https://storage.example.com/signed-url
+                  expiresAt: "2026-10-28T09:00:00"
+        '204':
+          description: 활성 임시저장이 없거나 만료됨
+        '401':
+          description: 인증되지 않은 요청
+        '404':
+          description: 임시저장이 참조하는 Upload를 찾을 수 없음
+      x-implementation-status: implemented
+      x-csrf-required: true
+    put:
+      tags:
+      - RECORD / 자물쇠
+      summary: 내 자물쇠 임시저장 저장
+      operationId: putApiUsersMeRecordDraft
+      description: |-
+        인증된 사용자의 임시저장을 전체 스냅샷으로 저장한다. 사용자당 최대 1개를 유지하며,
+        기존 임시저장이 만료되었더라도 같은 행의 내용을 갱신해 다시 활성화한다.
+        요청에서 생략하거나 null로 전달한 선택 필드는 제거되며, moodScore 생략/null은 0이다.
+        마지막 저장 시각부터 14일 동안 유효하다. 새 uploadId는 본인 소유이며 생성 후 1시간 이내여야 한다.
+        활성 Draft가 이미 참조하는 동일 uploadId는 Draft 유효기간 내 다시 저장할 수 있다.
+        Draft 사진의 GCS 객체 물리 삭제는 V2 범위에서 제외한다.
+      security:
+      - bearerAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                location:
+                  type: object
+                  nullable: true
+                  properties:
+                    latitude:
+                      type: number
+                      minimum: -90
+                      maximum: 90
+                    longitude:
+                      type: number
+                      minimum: -180
+                      maximum: 180
+                    legalDongCode:
+                      type: string
+                      nullable: true
+                      maxLength: 20
+                    legalDongName:
+                      type: string
+                      nullable: true
+                      maxLength: 100
+                  required:
+                  - latitude
+                  - longitude
+                music:
+                  type: object
+                  nullable: true
+                  properties:
+                    externalTrackId:
+                      type: string
+                      minLength: 1
+                      maxLength: 22
+                    title:
+                      type: string
+                      minLength: 1
+                      maxLength: 255
+                    artistName:
+                      type: string
+                      minLength: 1
+                      maxLength: 255
+                    albumImageUrl:
+                      type: string
+                      minLength: 1
+                      maxLength: 255
+                    externalUrl:
+                      type: string
+                      minLength: 1
+                      maxLength: 255
+                  required:
+                  - externalTrackId
+                  - title
+                  - artistName
+                  - albumImageUrl
+                  - externalUrl
+                moodScore:
+                  type: integer
+                  nullable: true
+                  minimum: -50
+                  maximum: 50
+                  default: 0
+                comment:
+                  type: string
+                  nullable: true
+                  maxLength: 80
+                uploadId:
+                  type: integer
+                  format: int64
+                  nullable: true
+                  minimum: 1
+            example:
+              location:
+                latitude: 37.5
+                longitude: 127.0
+                legalDongCode: "1168010100"
+                legalDongName: 역삼동
+              music:
+                externalTrackId: track-id
+                title: 노래 제목
+                artistName: 아티스트
+                albumImageUrl: https://example.com/album.jpg
+                externalUrl: https://example.com/track
+              moodScore: 0
+              comment: 오늘의 기록
+              uploadId: 88
+      responses:
+        '200':
+          description: 전체 스냅샷 저장 성공
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+              example:
+                message: 임시저장 저장 성공
+        '400':
+          description: 요청 값 검증 실패
+        '401':
+          description: 인증되지 않은 요청
+        '404':
+          description: 존재하지 않거나 본인 소유가 아닌 Upload
+      x-implementation-status: implemented
+      x-csrf-required: true
+    delete:
+      tags:
+      - RECORD / 자물쇠
+      summary: 내 자물쇠 임시저장 삭제
+      operationId: deleteApiUsersMeRecordDraft
+      description: 임시저장 DB 행을 삭제한다. 행이 없어도 204이며 Upload 메타데이터와 GCS 객체는 삭제하지 않는다.
+      security:
+      - bearerAuth: []
+      responses:
+        '204':
+          description: 삭제 완료 또는 삭제할 임시저장이 없음
+        '401':
+          description: 인증되지 않은 요청
+      x-implementation-status: implemented
+      x-csrf-required: true
   "/api/users/me/records/search":
     post:
       tags:

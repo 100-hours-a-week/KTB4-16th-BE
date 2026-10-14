@@ -36,7 +36,7 @@
 - V1 지역 기준: 대한민국 국내 / 법정동을 표시·집계 기준으로 사용
 - 신규 장소 생성 시 Kakao 법정동(B) 코드·이름을 찾지 못하면 자물쇠 생성을 허용하지 않음
 - V1 서비스 시간 기준: `Asia/Seoul`
-- V1 제외: `record_drafts`, AI 기억 검색, Spotify 계정 저장
+- V1 제외였던 `record_drafts`는 V2에서 서버 임시저장 기능을 구현한다. AI 기억 검색과 Spotify 계정 저장은 V1 제외 상태를 유지한다.
 - 신규 V1 범위: 법정동 코드 기반 대시보드 그룹, 기상청 단기예보 캐시, `GET /api/weather`
 - 미정 항목은 Open Question으로 유지하며 상태 코드·오류 코드를 임의 생성하지 않는다.
 
@@ -187,6 +187,10 @@
 | `RECORD-013` | **현재 설계** | 자물쇠 삭제 | 자물쇠 삭제는 소유자만 가능하며 `records.deleted_at`을 설정하는 soft delete이다. | API 명세 상세2차 R129-R134 |
 | `RECORD-014` | **현재 설계** | 삭제 404 은닉 | 미존재·이미 삭제·타인 소유 기록은 동일한 404 `RECORD_NOT_FOUND`로 처리한다. | API 명세 상세2차 R132,R134 |
 | `RECORD-015` | **현재 설계** | updated_at | 자물쇠 `updated_at`은 생성 시 NULL이고 실제 수정 발생 시 최종 수정 시각을 기록한다. | 테이블 정의서 6차 수정 요약/§5 |
+| `RECORD-016` | **구현됨** | 임시저장 수량·Upsert | 사용자는 최대 1개의 임시저장을 가진다. PUT은 전체 스냅샷 Upsert이며 생략/null 선택 필드는 제거하고, moodScore 생략/null은 0으로 저장한다. | `RecordDraftService.upsertRecordDraft` / 테이블 정의서 v8.1 |
+| `RECORD-017` | **구현됨** | 임시저장 만료 | 마지막 성공 저장 시각 `updated_at`부터 14일이 지난 시점(`now >= updated_at + 14일`)부터 만료된다. 만료 Draft는 GET에서 제외하고, PUT 재저장 시 같은 Draft를 갱신한다. GET은 만료 시각을 연장하지 않는다. | `RecordDraftService` / OpenAPI v2.8 |
+| `RECORD-018` | **구현됨** | 임시 사진 보관 | 새 일반 Upload는 생성 후 1시간 동안 사용할 수 있다. 활성 Draft가 이미 참조하는 본인 Upload는 Draft 유효기간 내 재저장·조회할 수 있고, GET은 10분 유효 Signed URL을 새로 발급한다. 만료 Draft의 재저장에는 일반 1시간 제한을 적용한다. | `UploadService` / `RecordDraftService` / OpenAPI v2.8 |
+| `RECORD-019` | **확정** | 임시 사진 물리 삭제 | Draft 사진 교체·삭제·만료 및 최종 자물쇠 생성 시 GCS 객체의 물리 삭제는 V2 범위에 포함하지 않는다. Draft 삭제만으로 Upload 메타데이터도 삭제하지 않는다. 최종 Record 생성에서 실제 사용한 Upload 메타데이터만 기존 정책대로 삭제한다. | 사용자 확정 / `RecordService.createRecord` |
 
 ## 날씨·기상청 캐시
 
@@ -341,7 +345,7 @@
 | 항목 | 상태 | V1 처리 |
 |---|---|---|
 | Presigned URL 업로드 | **보류** | V1은 백엔드 수신 후 GCS 업로드 유지 |
-| `record_drafts` | **V1 제외·실제 테이블 존재** | 기능 범위에서는 제외됐지만 Flyway V1에 테이블이 존재한다. 삭제하려면 별도 승인된 신규 migration이 필요하다. |
+| `record_drafts` | **V1 제외·V2 구현** | V1에서는 기능을 제공하지 않았고 테이블은 Flyway V1에서 생성되었다. V2에서는 사용자당 1개, 전체 스냅샷 Upsert, 14일 유효기간의 서버 임시저장을 제공한다. |
 | AI 기억 검색 | **V1 제외** | 기존 API 설계 내용은 문서에 보존하고 `[V1 제외]`로 표시한다. V1 구현 대상에서는 제외한다. |
 | Spotify 계정 저장 | **V1 제외** | 추천 결과를 Spotify 계정에 저장하는 API를 제공하지 않음 |
 
@@ -368,10 +372,11 @@
 | ID | 대상 | 수정 필요 내용 |
 |---|---|---|
 | `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
-| `SYNC-002` | 매칭·Chat Server | 1:1 매칭, MATCHING/MATCHED 분리, Chat Server 소유권 및 최신 Chat lifecycle을 API·테이블·구현 상태와 동기화한다. |
-| `SYNC-003` | `record_drafts` | 정책상 V1 제외지만 Flyway V1에 실제 테이블이 존재한다. 기능에서 사용하지 않으며 삭제 여부는 별도 migration 결정으로 남긴다. |
+| `SYNC-002` | Chat Server 채팅방 선택 정보 | A2+B2 정책에 따라 선택 정보는 `vote_answers.selected_option`으로 판별한다. Backend DB의 기존 `chat_rooms`는 V6에서 제거되었으므로 별도 Chat DB 계약과 동기화한다. |
+| `SYNC-003` | `record_drafts` | 테이블 정의서를 실제 V1+V5 스키마와 V2 임시저장 정책에 맞춘다. V1 제외 이력은 보존하되 V2 구현 상태와 사용자당 1개, 14일 만료, Upload 참조를 반영한다. |
 | `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
 | `SYNC-005` | AI 오류 코드 | 기존 `AI_API_ERROR` 표기는 `AI_SERVICE_ERROR`로 통일한다. 최소 기억 검색 API와 AI 추천 API 문구를 함께 점검한다. |
+| `SYNC-006` | 매칭·Chat Server | 1:1 매칭, MATCHING/MATCHED 분리, Chat Server 소유권 및 최신 Chat lifecycle을 API·테이블·구현 상태와 동기화한다. |
 | `SYNC-007` | 매칭 동시성 | FIFO(`created_at ASC`, 동률 `match_request_id ASC`)를 유지한다. VoteQuestion 선행 row lock으로 lock 순서를 직렬화하며 V8 적용 후 실제 MySQL 통합 테스트를 재검증한다. |
 | `SYNC-008` | 서비스 시간 | 오늘/23:00/자정/월말 판단 기준을 `Asia/Seoul`로 명시한다. |
 | `SYNC-009` | 회원 탈퇴/사진 | 사용자와 활성 자물쇠 기록의 soft delete, 사진 메타데이터와 최종 GCS 사진 보존 정책을 API/테이블 정의서에 반영한다. |
@@ -435,7 +440,7 @@
 
 ## 테이블 전수 대조 체크리스트
 
-> 기존 1~22번 테이블 순서는 유지한다. `record_drafts`는 기능상 `[V1 제외]`지만 Flyway V1에 실제 존재한다. V2 레거시 `weather`와 V3 날씨 캐시 테이블을 23~25번으로 추가한다.
+> 기존 1~22번 테이블 순서는 유지한다. `record_drafts`는 V1에서 기능 제외였고 Flyway V1에 테이블이 생성되었으며, V2에서 서버 임시저장 기능을 제공한다. V2 레거시 `weather`와 V3 날씨 캐시 테이블을 23~25번으로 추가한다.
 
 - [x] 1. `users`
 - [x] 2. `refresh_tokens - 로그인 유지 토큰 테이블`
@@ -477,4 +482,4 @@ V1 당시 `chat_rooms`, `chat_room_participants`, `chat_messages` 정의는 테�
 - 최신 자료에서 근거가 없는 사항은 자동으로 확정하지 않았다.
 - `미확정 / 추가 결정 필요`와 `보류` 항목은 구현 단계에서 임의 확정하지 않는다.
 - DB 컬럼 사전이 아니라 서비스 동작 판단을 위한 정책 문서이므로, 세부 타입·인덱스·제약조건은 테이블 정의서/ERD/SQL에서 관리하되 정책과 충돌해서는 안 된다.
-- API 전수 대조는 OpenAPI v2.8의 45개 경로·49개 작업을 기준으로 한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V8의 실제 26개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
+- API 전수 대조는 OpenAPI v2.8의 46개 경로·53개 작업을 기준으로 한다. V2 임시저장 API는 GET/PUT/DELETE `/api/users/me/record-draft`이다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V8의 실제 26개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
