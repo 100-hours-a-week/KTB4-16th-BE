@@ -1,9 +1,17 @@
 package com.ktb4.team16.mulo.global.security;
 
 import com.ktb4.team16.mulo.auth.controller.AuthController;
+import com.ktb4.team16.mulo.auth.controller.ChatAuthVerificationController;
 import com.ktb4.team16.mulo.auth.service.AuthService;
+import com.ktb4.team16.mulo.auth.service.ChatAuthVerificationService;
+import com.ktb4.team16.mulo.global.config.JwtProperties;
+import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import jakarta.servlet.http.Cookie;
+import java.time.Duration;
+import java.time.Instant;
+import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -13,6 +21,11 @@ import org.springframework.boot.test.context.TestConfiguration;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.configuration.EnableWebSecurity;
+import org.springframework.security.oauth2.jose.jws.MacAlgorithm;
+import org.springframework.security.oauth2.jwt.JwtClaimsSet;
+import org.springframework.security.oauth2.jwt.JwtEncoderParameters;
+import org.springframework.security.oauth2.jwt.JwsHeader;
+import org.springframework.security.oauth2.jwt.NimbusJwtEncoder;
 import org.springframework.test.context.TestPropertySource;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -29,7 +42,10 @@ import org.springframework.web.context.WebApplicationContext;
 import org.springframework.web.servlet.config.annotation.EnableWebMvc;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -50,11 +66,14 @@ import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppC
 @TestPropertySource(properties = {
         "mulo.security.allowed-origins=http://localhost:3000",
         "mulo.security.cookie-secure=false",
+        "chat-auth.verify-api-key=test-chat-auth-api-key",
         "mulo.jwt.access-token-ttl=PT1H",
         "mulo.jwt.refresh-token-ttl=P7D"
 })
 class SecurityIntegrationTests {
     @Autowired WebApplicationContext context;
+    @Autowired UserRepository userRepository;
+    @Autowired JwtTokenProvider jwtTokenProvider;
     MockMvc mvc;
 
     /** 테스트 컨텍스트에 하드코딩하지 않은 JWT 서명 키를 제공한다. */
@@ -65,7 +84,103 @@ class SecurityIntegrationTests {
 
     @BeforeEach
     void setUp() {
+        reset(userRepository);
         mvc = webAppContextSetup(context).apply(springSecurity()).build();
+    }
+
+    @Test
+    void chatAuthVerifyReturnsActiveUserAndKoreaOffsetExpiration() throws Exception {
+        when(userRepository.existsByUserIdAndDeletedAtIsNull(17L)).thenReturn(true);
+        String accessToken = jwtTokenProvider.createAccessToken(17L);
+
+        var result = mvc.perform(post("/internal/auth/verify")
+                        .header("X-Internal-Api-Key", "test-chat-auth-api-key")
+                        .header("Authorization", "Bearer " + accessToken))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.userId").value(17))
+                .andReturn();
+
+        String expiresAtValue = com.jayway.jsonpath.JsonPath.read(
+                result.getResponse().getContentAsString(), "$.expiresAt");
+        OffsetDateTime expiresAt = OffsetDateTime.parse(expiresAtValue);
+        assertThat(expiresAt.getOffset()).isEqualTo(ZoneOffset.ofHours(9));
+    }
+
+    @Test
+    void chatAuthVerifyRejectsMissingOrWrongInternalApiKeyBeforeJwtValidation() throws Exception {
+        mvc.perform(post("/internal/auth/verify").header("Authorization", "Bearer forged"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        mvc.perform(post("/internal/auth/verify")
+                        .header("X-Internal-Api-Key", "wrong")
+                        .header("Authorization", "Bearer forged"))
+                .andExpect(status().isForbidden())
+                .andExpect(jsonPath("$.code").value("FORBIDDEN"));
+
+        verify(userRepository, org.mockito.Mockito.never())
+                .existsByUserIdAndDeletedAtIsNull(org.mockito.ArgumentMatchers.anyLong());
+    }
+
+    @Test
+    void chatAuthVerifyRejectsMissingAccessToken() throws Exception {
+        mvc.perform(post("/internal/auth/verify")
+                        .header("X-Internal-Api-Key", "test-chat-auth-api-key"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void chatAuthVerifyRejectsForgedExpiredAndRefreshTokens() throws Exception {
+        String apiKey = "test-chat-auth-api-key";
+        mvc.perform(post("/internal/auth/verify").header("X-Internal-Api-Key", apiKey)
+                        .header("Authorization", "Bearer forged-token"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(post("/internal/auth/verify").header("X-Internal-Api-Key", apiKey)
+                        .header("Authorization", "Bearer " + expiredAccessToken(21L)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+
+        mvc.perform(post("/internal/auth/verify").header("X-Internal-Api-Key", apiKey)
+                        .header("Authorization", "Bearer " + jwtTokenProvider.createRefreshToken(22L)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void chatAuthVerifyRejectsMissingOrWithdrawnUser() throws Exception {
+        when(userRepository.existsByUserIdAndDeletedAtIsNull(23L)).thenReturn(false);
+
+        mvc.perform(post("/internal/auth/verify")
+                        .header("X-Internal-Api-Key", "test-chat-auth-api-key")
+                        .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(23L)))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void otherInternalPathsRemainDenied() throws Exception {
+        mvc.perform(get("/internal/auth/other"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    private String expiredAccessToken(Long userId) {
+        var properties = new JwtProperties(TestJwtSecret.value(), Duration.ofHours(1), Duration.ofDays(7));
+        var encoder = NimbusJwtEncoder.withSecretKey(properties.secretKey())
+                .algorithm(MacAlgorithm.HS256)
+                .build();
+        Instant now = Instant.now();
+        var claims = JwtClaimsSet.builder()
+                .subject(userId.toString())
+                .issuedAt(now.minusSeconds(120))
+                .expiresAt(now.minusSeconds(60))
+                .claim("tokenType", "access")
+                .build();
+        var header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
+        return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
 
     @Test
@@ -445,7 +560,8 @@ class SecurityIntegrationTests {
     @EnableWebMvc
     @EnableWebSecurity
     @ComponentScan("com.ktb4.team16.mulo.global")
-    @Import({ProbeController.class, AuthController.class})
+    @Import({ProbeController.class, AuthController.class, ChatAuthVerificationController.class,
+            ChatAuthVerificationService.class})
     static class TestConfig {
         @Bean
         UserRepository userRepository() {

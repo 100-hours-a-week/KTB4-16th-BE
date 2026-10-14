@@ -22,6 +22,8 @@ class AiInternalTokenFilterTest {
         filter.doFilter(request, response, chain);
 
         org.assertj.core.api.Assertions.assertThat(response.getStatus()).isEqualTo(401);
+        org.assertj.core.api.Assertions.assertThat(response.getContentAsString())
+                .contains("\"code\":\"UNAUTHORIZED\"");
     }
 
     @Test
