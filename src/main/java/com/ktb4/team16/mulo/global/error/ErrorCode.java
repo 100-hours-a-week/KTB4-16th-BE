@@ -15,6 +15,7 @@ public enum ErrorCode {
     MATCH_REQUEST_CLOSED(HttpStatus.CONFLICT, "오늘 매칭 요청 가능 시간이 종료되었습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
     LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
     LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
     PHOTO_REQUIRED(HttpStatus.BAD_REQUEST, "사진 파일이 필요합니다."),

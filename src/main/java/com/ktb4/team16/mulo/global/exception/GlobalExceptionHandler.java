@@ -41,7 +41,9 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseEntity;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
+import org.springframework.web.HttpMediaTypeNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -273,10 +275,20 @@ public class GlobalExceptionHandler {
     @ExceptionHandler({MissingServletRequestParameterException.class,
             MethodArgumentTypeMismatchException.class,
             ConstraintViolationException.class,
-            HandlerMethodValidationException.class})
+            HandlerMethodValidationException.class,
+            HttpMessageNotReadableException.class})
+    // 요청 파라미터 오류와 요청 본문 파싱 실패를 공통 400 응답으로 변환한다.
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
+    // 지원하지 않는 요청 Content-Type을 공통 415 응답으로 변환한다.
+    public ResponseEntity<ErrorResponse> handleUnsupportedMediaType(
+            HttpMediaTypeNotSupportedException exception) {
+        return ResponseEntity.status(ErrorCode.UNSUPPORTED_MEDIA_TYPE.status())
+                .body(ErrorResponse.of(ErrorCode.UNSUPPORTED_MEDIA_TYPE));
     }
 
     @ExceptionHandler(MissingServletRequestPartException.class)
