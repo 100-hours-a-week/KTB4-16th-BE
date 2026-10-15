@@ -66,4 +66,16 @@ class MemorySearchControllerTest {
                 .andExpect(jsonPath("$.data.records[0].date").value("2026.10.15"))
                 .andExpect(jsonPath("$.data.suggestedRecords").isArray());
     }
+
+    /** 제한을 초과한 질문은 AI 검색을 시작하기 전에 400으로 거부한다. */
+    @Test
+    void rejectsQueryLongerThanFiveHundredCharacters() throws Exception {
+        String query = "가".repeat(501);
+
+        mvc.perform(post("/api/memories/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conversationId\":\"550e8400-e29b-41d4-a716-446655440000\","
+                                + "\"query\":\"" + query + "\"}"))
+                .andExpect(status().isBadRequest());
+    }
 }
