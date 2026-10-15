@@ -19,6 +19,10 @@ import org.junit.jupiter.api.Test;
 
 class MemorySearchServiceTest {
 
+    // 자물쇠 ID와 연관 엔티티 ID를 구분하는 테스트 데이터용 오프셋이다.
+    private static final long MUSIC_TRACK_ID_OFFSET = 100L;
+    private static final long PLACE_ID_OFFSET = 200L;
+
     /** DB 순서가 달라도 AI 관련도 순서로 공개하고 검증된 ID만 다음 문맥에 보관한다. */
     @Test
     void preservesAiOrderAfterOwnershipFilteringAndStoresVerifiedHistory() {
@@ -62,8 +66,8 @@ class MemorySearchServiceTest {
         when(music.getTitle()).thenReturn(title);
         when(music.getArtistName()).thenReturn("가수");
         when(music.getAlbumImageUrl()).thenReturn("");
-        when(music.getMusicTrackId()).thenReturn(id + 100);
-        when(place.getPlaceId()).thenReturn(id + 200);
+        when(music.getMusicTrackId()).thenReturn(id + MUSIC_TRACK_ID_OFFSET);
+        when(place.getPlaceId()).thenReturn(id + PLACE_ID_OFFSET);
         when(place.getLegalDongName()).thenReturn("서울");
         return record;
     }

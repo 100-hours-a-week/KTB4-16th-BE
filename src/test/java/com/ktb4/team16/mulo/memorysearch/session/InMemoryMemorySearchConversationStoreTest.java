@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.memorysearch.session;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ktb4.team16.mulo.memorysearch.MemorySearchLimits;
 import java.time.Clock;
 import java.time.Duration;
 import java.time.Instant;
@@ -12,15 +13,17 @@ import org.junit.jupiter.api.Test;
 
 class InMemoryMemorySearchConversationStoreTest {
 
+    private static final Duration IDLE_TTL = Duration.ofMinutes(30);
+
     /** 사용자·대화별 문맥을 분리하고 완료된 최근 5턴만 오래된 순서로 보존한다. */
     @Test
     void keepsOnlyFiveCompletedTurnsWithinOwnedConversation() {
-        var store = new InMemoryMemorySearchConversationStore(Duration.ofMinutes(30),
+        var store = new InMemoryMemorySearchConversationStore(IDLE_TTL,
                 Clock.fixed(Instant.parse("2026-10-15T00:00:00Z"), ZoneOffset.UTC));
         String first = store.start(35L);
         String second = store.start(35L);
 
-        for (int index = 1; index <= 6; index++) {
+        for (int index = 1; index <= MemorySearchLimits.MAX_RECENT_TURNS + 1; index++) {
             assertThat(store.appendIfActive(35L, first,
                     new MemorySearchTurn("질문 " + index, List.of((long) index)))).isTrue();
         }
@@ -37,14 +40,14 @@ class InMemoryMemorySearchConversationStoreTest {
     void rejectsAppendAfterExpiryOrClose() {
         Instant startedAt = Instant.parse("2026-10-15T00:00:00Z");
         var clock = new MutableClock(startedAt);
-        var store = new InMemoryMemorySearchConversationStore(Duration.ofMinutes(30), clock);
+        var store = new InMemoryMemorySearchConversationStore(IDLE_TTL, clock);
         String closed = store.start(35L);
         store.close(35L, closed);
         assertThat(store.appendIfActive(35L, closed,
                 new MemorySearchTurn("늦은 질문", List.of(1L)))).isFalse();
 
         String expired = store.start(35L);
-        clock.advance(Duration.ofMinutes(30));
+        clock.advance(IDLE_TTL);
         assertThat(store.isActive(35L, expired)).isFalse();
         assertThat(store.read(35L, expired)).isEmpty();
         assertThat(store.appendIfActive(35L, expired,

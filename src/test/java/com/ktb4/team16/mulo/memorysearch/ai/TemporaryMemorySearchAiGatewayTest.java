@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
 
+import com.ktb4.team16.mulo.memorysearch.MemorySearchLimits;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import java.util.List;
 import org.junit.jupiter.api.Test;
@@ -15,7 +16,8 @@ class TemporaryMemorySearchAiGatewayTest {
     @Test
     void returnsOwnedRecordIdsInRepositoryRelevanceOrder() {
         RecordRepository repository = mock(RecordRepository.class);
-        when(repository.findLatestActiveOwnedRecordIds(35L, PageRequest.of(0, 50)))
+        when(repository.findLatestActiveOwnedRecordIds(35L,
+                PageRequest.ofSize(MemorySearchLimits.MAX_RESULT_RECORDS)))
                 .thenReturn(List.of(9L, 2L, 7L));
         var gateway = new TemporaryMemorySearchAiGateway(repository);
 

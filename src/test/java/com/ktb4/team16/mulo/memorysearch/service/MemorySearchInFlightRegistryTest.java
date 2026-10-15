@@ -10,6 +10,9 @@ import org.junit.jupiter.api.Test;
 
 class MemorySearchInFlightRegistryTest {
 
+    // 비동기 테스트가 무한 대기하지 않도록 정한 최대 대기 시간이다.
+    private static final long AWAIT_TIMEOUT_SECONDS = 2;
+
     /** 같은 사용자의 요청은 하나만 허용하고 다른 사용자는 독립적으로 허용한다. */
     @Test
     void permitsOnlyOneActiveRequestPerUserAndReleasesAfterCompletion() throws Exception {
@@ -24,14 +27,14 @@ class MemorySearchInFlightRegistryTest {
                 }
                 return true;
             });
-            assertThat(acquired.await(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(acquired.await(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
             assertThat(registry.tryAcquire(35L)).isEmpty();
 
             try (var otherUser = registry.tryAcquire(36L).orElseThrow()) {
                 assertThat(otherUser).isNotNull();
             }
             finish.countDown();
-            assertThat(first.get(2, TimeUnit.SECONDS)).isTrue();
+            assertThat(first.get(AWAIT_TIMEOUT_SECONDS, TimeUnit.SECONDS)).isTrue();
             try (var next = registry.tryAcquire(35L).orElseThrow()) {
                 assertThat(next).isNotNull();
             }

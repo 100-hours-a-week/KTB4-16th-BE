@@ -62,6 +62,7 @@ public class InMemoryMemorySearchConversationStore implements MemorySearchConver
         Instant now = clock.instant();
         sessions.computeIfPresent(new Key(userId, conversationId), (key, session) -> {
             if (expired(session, now)) {
+                // computeIfPresent의 null 반환은 만료된 대화 항목을 맵에서 제거한다.
                 return null;
             }
             result.set(session.turns());
@@ -77,6 +78,7 @@ public class InMemoryMemorySearchConversationStore implements MemorySearchConver
         Instant now = clock.instant();
         sessions.computeIfPresent(new Key(userId, conversationId), (key, session) -> {
             if (expired(session, now)) {
+                // 만료된 대화는 턴을 추가하지 않고 저장소에서도 제거한다.
                 return null;
             }
             List<MemorySearchTurn> turns = new ArrayList<>(session.turns());

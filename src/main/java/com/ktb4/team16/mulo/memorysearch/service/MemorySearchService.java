@@ -42,6 +42,7 @@ public class MemorySearchService {
                     aiResult.suggestedRecords().stream()
                             .map(MemorySearchAiResult.SuggestedRecord::recordId).toList());
             Map<Long, MemorySearchCard> cards = loadCards(userId, exactIds, suggestedIds);
+            // 소유권 확인 뒤 카드 재조회 사이에 삭제된 자물쇠는 맵에 없으므로 제외한다.
             List<MemorySearchCard> exactCards = exactIds.stream()
                     .map(cards::get).filter(card -> card != null).toList();
             List<MemorySearchSuggestedCard> suggestedCards = aiResult.suggestedRecords()

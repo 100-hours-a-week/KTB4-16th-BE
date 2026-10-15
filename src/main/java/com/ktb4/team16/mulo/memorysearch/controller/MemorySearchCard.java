@@ -3,7 +3,7 @@ package com.ktb4.team16.mulo.memorysearch.controller;
 import com.ktb4.team16.mulo.record.entity.Record;
 import java.time.format.DateTimeFormatter;
 
-/** 검증된 자물쇠를 채팅과 전체보기에서 재사용하는 공개 카드 데이터다. */
+/** 검증된 자물쇠를 채팅과 전체보기에서 재사용한다. 날씨가 없는 기록의 weatherCondition은 null이다. */
 public record MemorySearchCard(Long recordId, Long musicTrackId, String title,
         String artistName, Long placeId, String placeName, String date,
         String weatherCondition, String albumImageUrl) {

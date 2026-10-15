@@ -17,7 +17,7 @@ public class MemorySearchOwnedRecordFilter {
         this.recordRepository = recordRepository;
     }
 
-    /** ID를 한 번에 조회한 뒤 AI의 순서를 유지하며 무권한·삭제·중복 ID를 제거한다. */
+    /** ID를 한 번에 조회한 뒤 AI 순서를 유지하며 null·무권한·삭제·중복 ID를 제거한다. */
     public List<Long> filter(Long userId, List<Long> recordIds) {
         List<Long> uniqueIds = new LinkedHashSet<>(recordIds).stream()
                 .filter(id -> id != null)

@@ -34,6 +34,7 @@ class MemorySearchControllerTest {
         mvc = MockMvcBuilders.standaloneSetup(new MemorySearchController(service))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
+        // 인증 주체만 검증하므로 자격 증명 값은 테스트에 필요하지 않다.
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(35L, null, List.of()));
     }
@@ -48,6 +49,7 @@ class MemorySearchControllerTest {
     @Test
     void returnsSearchCardsInPublicEnvelope() throws Exception {
         String conversationId = "550e8400-e29b-41d4-a716-446655440000";
+        // 날씨가 없는 기록의 공개 카드 값은 null이다.
         var card = new MemorySearchCard(9L, 109L, "밤편지", "아이유",
                 209L, "성수동", "2026.10.15", null, "");
         when(service.search(35L, conversationId, "가을 노래"))

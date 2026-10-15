@@ -35,6 +35,7 @@ class MemorySearchConversationControllerTest {
         mvc = MockMvcBuilders.standaloneSetup(new MemorySearchConversationController(service))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
+        // 인증 주체만 검증하므로 자격 증명 값은 테스트에 필요하지 않다.
         SecurityContextHolder.getContext().setAuthentication(
                 UsernamePasswordAuthenticationToken.authenticated(35L, null, List.of()));
     }
