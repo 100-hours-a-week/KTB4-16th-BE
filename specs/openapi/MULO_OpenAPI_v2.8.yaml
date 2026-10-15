@@ -33,7 +33,7 @@ tags:
 - name: MATCH / 매칭
 - name: CHAT SERVER / 채팅 서버
 - name: NOTIFICATION / 알림
-- name: MEMORY / 기억 [V1 제외]
+- name: MEMORY / 기억
 paths:
   "/api/auth/login":
     post:
@@ -5670,41 +5670,128 @@ paths:
           minimum: 1
       x-implementation-status: implemented
       x-csrf-required: true
-  "/api/memories/search":
+  "/api/memories/search/conversations":
     post:
       tags:
-      - MEMORY / 기억 [V1 제외]
-      summary: 기억 검색 [V1 제외]
-      operationId: postApiMemoriesSearch
-      description: |-
-        [V1 제외]
-
-        필수
-        query: String
-
-        자연어 챗봇형 사용자 히스토리 검색. 화면 진입은 허용하지만 활성 기록이 0개이면 프론트에서 채팅/검색 입력을 막고, 활성 기록이 1개 이상이면 검색할 수 있다. 요청 처리 중 검색 버튼을 비활성화한다. 응답은 answer + records이며 records 최대 5개. 별도 record_embeddings/vector DB는 사용하지 않는다.
+      - MEMORY / 기억
+      summary: 기억 검색 대화 시작 (V2)
+      operationId: postApiMemoriesSearchConversations
+      description: 인증된 사용자에게 새 기억 검색 대화 ID를 발급한다. 대화는 생성 또는 마지막 질문 완료 후 30분 동안 사용하지 않으면 만료된다. 새 대화 시작은 기존 대화를 자동 종료하지 않는다.
+      security:
+      - bearerAuth: []
       responses:
-        '200':
-          description: |-
-            검색 가능한 사용자의 기억 검색이 정상 처리되었으므로 200.
-
-            추가 케이스: 검색 수행 자체는 정상이며 조건에 맞는 기록이 없는 것은 오류가 아니므로 200.
+        '201':
+          description: 새 대화를 시작하고 서버가 발급한 conversationId를 반환한다.
           content:
             application/json:
               schema:
                 type: object
+                required:
+                - message
+                - data
                 properties:
                   message:
                     type: string
                   data:
                     type: object
+                    required:
+                    - conversationId
+                    properties:
+                      conversationId:
+                        type: string
+                        format: uuid
+              example:
+                message: 대화 시작 성공
+                data:
+                  conversationId: 550e8400-e29b-41d4-a716-446655440000
+        '401':
+          description: 유효한 Access Token이 없거나 인증에 실패한 경우 401.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-implementation-status: implemented
+      x-csrf-required: true
+  "/api/memories/search/conversations/{conversationId}":
+    delete:
+      tags:
+      - MEMORY / 기억
+      summary: 기억 검색 대화 종료 (V2)
+      operationId: deleteApiMemoriesSearchConversationsConversationId
+      description: 명시적 채팅 나가기에서 인증된 사용자의 대화를 즉시 종료한다. 상세 화면·전체보기 이동이나 새로고침에서는 호출하지 않는다. 이미 종료되었거나 만료된 대화에도 204를 반환한다. 진행 중인 AI 호출은 취소하지 않으며 늦게 온 결과는 저장하거나 공개하지 않는다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: conversationId
+        in: path
+        required: true
+        schema:
+          type: string
+          format: uuid
+      responses:
+        '204':
+          description: 대화 종료 완료. 응답 본문 없음.
+        '401':
+          description: 유효한 Access Token이 없거나 인증에 실패한 경우 401.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+      x-implementation-status: implemented
+      x-csrf-required: true
+  "/api/memories/search":
+    post:
+      tags:
+      - MEMORY / 기억
+      summary: 기억 검색 질문 (V2)
+      operationId: postApiMemoriesSearch
+      description: |-
+        인증된 사용자가 서버가 발급한 conversationId와 질문 query만 보낸다. userId와 history는 프론트가 보내지 않는다. 백엔드는 완료된 이전 최대 5턴의 질문과 공개된 정확 일치 자물쇠 ID를 AI 호출에 전달한다. AI V2는 history를 검색에 사용하지 않을 수 있으며 실제 AI 계약은 최종 명세 확인 전이다.
+
+        백엔드는 AI가 반환한 ID를 현재 사용자의 활성 자물쇠로 검증하고 DB에서 카드 데이터를 만든다. 삭제·비소유 ID는 제외하고 AI 관련도 순서를 유지한다. answer에는 건수를 포함하지 않는다. 프론트는 records.length로 건수를 표시하며 처음에는 앞 5개를, 6개 이상이면 전체보기에서 나머지를 같은 순서로 보여준다. suggestedRecords는 토글을 눌러 펼친다. 정확 일치 0건·제안만 있는 경우도 정상 200이다.
+
+        한 사용자에게 이전 요청이 진행 중이면 409로 새 질문을 차단한다. 대화는 생성 또는 마지막 질문 완료 후 30분 유휴 만료된다. 같은 탭 새로고침과 자물쇠 상세·전체보기 왕복은 대화 종료가 아니다. 로컬 프로필에서는 최신 본인 자물쇠를 반환하는 임시 AI를 사용하고, 로컬 외 환경은 실제 AI 연결 전까지 502 AI_SERVICE_ERROR를 반환한다.
+      security:
+      - bearerAuth: []
+      responses:
+        '200':
+          description: 질문 처리가 성공한 경우 200. 검색 결과가 없거나 제안만 있어도 빈 배열과 함께 200을 반환한다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - message
+                - data
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    required:
+                    - answer
+                    - records
+                    - suggestedRecords
                     properties:
                       answer:
                         type: string
+                        description: AI가 작성한 건수 없는 답변 문구.
                       records:
                         type: array
+                        maxItems: 50
+                        description: DB 소유권 검증을 통과한 정확 일치 카드. AI 관련도 순서 유지.
                         items:
                           type: object
+                          required:
+                          - recordId
+                          - musicTrackId
+                          - title
+                          - artistName
+                          - placeId
+                          - placeName
+                          - date
+                          - weatherCondition
+                          - albumImageUrl
                           properties:
                             recordId:
                               type: integer
@@ -5719,27 +5806,96 @@ paths:
                             placeId:
                               type: integer
                               format: int64
+                            placeName:
+                              type: string
+                              nullable: true
+                              description: 법정동 이름이 없는 기존 기록은 null.
                             date:
                               type: string
+                              description: 자물쇠 생성일을 YYYY.MM.DD 형식으로 표시.
+                              example: 2026.10.03
+                            weatherCondition:
+                              type: string
+                              nullable: true
+                              description: 날씨가 기록되지 않았으면 null.
+                            albumImageUrl:
+                              type: string
+                              description: 앨범 이미지가 없으면 빈 문자열일 수 있음.
+                      suggestedRecords:
+                        type: array
+                        description: 일부 조건만 맞는 제안 카드. AI 관련도 순서 유지. 최종 최대 건수는 AI 계약 확인 필요.
+                        items:
+                          type: object
+                          required:
+                          - recordId
+                          - musicTrackId
+                          - title
+                          - artistName
+                          - placeId
+                          - placeName
+                          - date
+                          - weatherCondition
+                          - albumImageUrl
+                          - matchedConditions
+                          properties:
+                            recordId:
+                              type: integer
+                              format: int64
+                            musicTrackId:
+                              type: integer
+                              format: int64
+                            title:
+                              type: string
+                            artistName:
+                              type: string
+                            placeId:
+                              type: integer
+                              format: int64
+                            placeName:
+                              type: string
+                              nullable: true
+                            date:
+                              type: string
+                              description: 자물쇠 생성일을 YYYY.MM.DD 형식으로 표시.
+                              example: 2025.10.11
+                            weatherCondition:
+                              type: string
+                              nullable: true
+                            albumImageUrl:
+                              type: string
+                            matchedConditions:
+                              type: array
+                              items:
+                                type: string
+                              description: AI가 해당 recordId에 제공한 일부 일치 조건을 그대로 전달.
               example:
                 message: 기억 검색 답변 생성 성공
                 data:
-                  answer: 홍대 근처에서 비 오는 날 저장하신 자물쇠 2건을 찾았습니다.
+                  answer: 서울숲 근처와 가을에 관한 기억을 살펴봤어요.
                   records:
-                  - recordId: 172
-                    musicTrackId: 3
-                    title: 비 오는 날엔
-                    artistName: 헤이즈
-                    placeId: 48
-                    date: 2026.03.14
-                  - recordId: 24
-                    musicTrackId: 72
-                    title: 우산
-                    artistName: 윤하
-                    placeId: 209
-                    date: 2026.06.02
+                  - recordId: 1
+                    musicTrackId: 101
+                    title: 밤편지
+                    artistName: 아이유
+                    placeId: 10
+                    placeName: 성수동1가
+                    date: 2026.10.03
+                    weatherCondition: RAIN
+                    albumImageUrl: https://example.com/album.jpg
+                  suggestedRecords:
+                  - recordId: 2
+                    musicTrackId: 102
+                    title: 가을 아침
+                    artistName: 아이유
+                    placeId: 11
+                    placeName: 성수동2가
+                    date: 2025.10.11
+                    weatherCondition: null
+                    albumImageUrl: ''
+                    matchedConditions:
+                    - 가을
         '400':
-          description: trim 후 검색어가 비어 있으면 요청 유효성 검증 실패이므로 400.
+          description: trim 후 검색어가 비어 있거나 활성 자물쇠가 0개인 경우 400. 자물쇠 0개는 MEMORY_SEARCH_NO_RECORDS.
           content:
             application/json:
               schema:
@@ -5761,12 +5917,8 @@ paths:
                         message:
                           type: string
               example:
-                code: INVALID_INPUT_VALUE
-                message: 입력값을 확인해주세요.
-                errors:
-                - field: query
-                  code: QUERY_REQUIRED
-                  message: 검색할 내용을 입력해주세요.
+                code: MEMORY_SEARCH_NO_RECORDS
+                message: 검색할 자물쇠가 없습니다.
         '401':
           description: 현재 사용자의 개인 기록을 대상으로 기억 검색을 수행하므로 유효한 Access Token이 없거나 인증에 실패한 경우 401.
           content:
@@ -5781,6 +5933,38 @@ paths:
               example:
                 code: UNAUTHORIZED
                 message: 로그인이 필요합니다.
+        '409':
+          description: 같은 사용자의 이전 기억 검색 요청이 진행 중이며, 새 질문은 시작되지 않았으므로 409.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                    - MEMORY_SEARCH_IN_PROGRESS
+                  message:
+                    type: string
+        '410':
+          description: 대화 ID가 종료·만료·미존재이거나 다른 사용자에게 속해 새 대화를 시작해야 하므로 410. 서버 재시작으로 인메모리 대화가 사라진 경우도 포함한다.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - code
+                - message
+                properties:
+                  code:
+                    type: string
+                    enum:
+                    - MEMORY_SEARCH_CONVERSATION_GONE
+                  message:
+                    type: string
         '500':
           description: MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.
           content:
@@ -5808,8 +5992,7 @@ paths:
                     type: string
               example:
                 code: AI_SERVICE_ERROR
-                message: 기억 검색 AI 서비스를 처리하지 못했습니다.
-      x-v1-excluded: true
+                message: AI 추천 서비스를 처리하지 못했습니다.
       requestBody:
         required: true
         content:
@@ -5817,13 +6000,15 @@ paths:
             schema:
               type: object
               properties:
+                conversationId:
+                  type: string
+                  format: uuid
                 query:
                   type: string
               required:
+              - conversationId
               - query
-            example:
-              query: 작년 겨울 비 오는 날 들었던 노래 뭐였지?
-      x-implementation-status: excluded-v1
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/records/regions":
     get:
