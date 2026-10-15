@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.auth.exception.InvalidCredentialsException;
 import com.ktb4.team16.mulo.auth.exception.InvalidRefreshTokenException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.error.ErrorResponse;
+import com.ktb4.team16.mulo.memorysearch.exception.MemorySearchDomainException;
 import com.ktb4.team16.mulo.friend.exception.FriendDomainException;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
 import io.sentry.Sentry;
@@ -56,6 +57,14 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class GlobalExceptionHandler {
     private static final Logger log = LoggerFactory.getLogger(GlobalExceptionHandler.class);
+
+    /** 기억 검색의 진행 중·만료 오류를 확정된 공개 상태와 코드로 변환한다. */
+    @ExceptionHandler(MemorySearchDomainException.class)
+    public ResponseEntity<ErrorResponse> handleMemorySearchDomain(
+            MemorySearchDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
 
     @ExceptionHandler(FriendDomainException.class)
     // 친구 도메인 오류를 계약 HTTP 상태와 표준 오류 본문으로 변환한다.

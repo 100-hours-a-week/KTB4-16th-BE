@@ -127,6 +127,46 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             Long userId
     );
 
+    /** 검색 전 인증 사용자가 삭제되지 않은 자물쇠를 하나라도 보유하는지 확인한다. */
+    boolean existsByUser_UserIdAndUser_DeletedAtIsNullAndDeletedAtIsNull(Long userId);
+
+    /** AI 결과 ID 중 현재 사용자가 소유하고 삭제되지 않은 기록 ID만 한 번에 조회한다. */
+    @Query("""
+        SELECT r.recordId
+        FROM Record r
+        WHERE r.user.userId = :userId
+            AND r.user.deletedAt IS NULL
+            AND r.deletedAt IS NULL
+            AND r.recordId IN :recordIds
+        """)
+    List<Long> findActiveOwnedRecordIds(@Param("userId") Long userId,
+            @Param("recordIds") List<Long> recordIds);
+
+    /** 로컬 임시 AI가 반환할 현재 사용자의 최신 활성 자물쇠 ID를 최대 요청 건수만큼 조회한다. */
+    @Query("""
+        SELECT r.recordId
+        FROM Record r
+        WHERE r.user.userId = :userId
+            AND r.user.deletedAt IS NULL
+            AND r.deletedAt IS NULL
+        ORDER BY r.createdAt DESC, r.recordId DESC
+        """)
+    List<Long> findLatestActiveOwnedRecordIds(@Param("userId") Long userId, Pageable pageable);
+
+    /** 검증된 AI 후보의 카드 필드를 한 번에 읽고 소유권과 활성 상태를 다시 확인한다. */
+    @Query("""
+        SELECT r
+        FROM Record r
+        JOIN FETCH r.musicTrack
+        JOIN FETCH r.place
+        WHERE r.user.userId = :userId
+            AND r.user.deletedAt IS NULL
+            AND r.deletedAt IS NULL
+            AND r.recordId IN :recordIds
+        """)
+    List<Record> findActiveOwnedRecordsForSearch(@Param("userId") Long userId,
+            @Param("recordIds") List<Long> recordIds);
+
     /** 활성 기록과 소유자 또는 현재 친구 관계를 한 SQL 조건으로 확인해 상세 접근을 허용한다. */
     @Query("""
         SELECT record

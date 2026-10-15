@@ -7,6 +7,7 @@
 > **작성일:** 2026-09-21 (KST)  
 > **친구 도메인 구현 상태 반영:** 2026-10-08 (KST)
 > **알림 도메인 구현 상태 반영:** 2026-10-11 (KST)
+> **AI 기억 검색 선행 구현 상태 반영:** 2026-10-15 (KST), `develop`에 병합된 PR #103 기준
 > **기준 자료**
 > 1. 대화에서 사용자가 직접 확정한 최신 결정
 > 2. 현재 백엔드 작업 트리와 Flyway V1~V8
@@ -36,7 +37,7 @@
 - V1 지역 기준: 대한민국 국내 / 법정동을 표시·집계 기준으로 사용
 - 신규 장소 생성 시 Kakao 법정동(B) 코드·이름을 찾지 못하면 자물쇠 생성을 허용하지 않음
 - V1 서비스 시간 기준: `Asia/Seoul`
-- V1 제외였던 `record_drafts`는 V2에서 서버 임시저장 기능을 구현한다. AI 기억 검색과 Spotify 계정 저장은 V1 제외 상태를 유지한다.
+- V1 제외였던 `record_drafts`는 V2에서 서버 임시저장 기능을 구현한다. AI 기억 검색은 V2 PR #103에서 공개 API와 로컬 임시 AI를 선행 구현했으며, 실제 AI 연동은 미완료다. Spotify 계정 저장은 V1 제외 상태를 유지한다.
 - 신규 V1 범위: 법정동 코드 기반 대시보드 그룹, 기상청 단기예보 캐시, `GET /api/weather`
 - 미정 항목은 Open Question으로 유지하며 상태 코드·오류 코드를 임의 생성하지 않는다.
 
@@ -57,7 +58,7 @@
 | 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정, KST 23:00 신규 요청 차단 및 당일 WAITING 만료 구현 | 구현됨 |
 | 매칭 상태 조회 | 인증된 요청 소유자의 현재 상태를 polling으로 조회 | 구현됨 |
 | Chat Server 연동·채팅 | ChatRoomClient는 구현됐으나 MatchService 연동·방 생성 완료 전이는 미구현 | 일부 구현 / contract-only |
-| AI 기억 검색 | V1 범위에서 제외 | excluded-v1 |
+| AI 기억 검색 | V1 제외 이력 유지, V2 공개 API·인메모리 대화·로컬 임시 AI는 `develop`에 선행 구현 | 백엔드 구현됨 / 실제 AI 연동 대기 |
 
 
 ## 공통·문서 원칙
@@ -269,6 +270,20 @@
 | `REC-012` | **현재 구현** | 추천 곡 앨범 이미지 | 조회·생성 응답의 각 곡은 `music_tracks.album_image_url`을 `albumImageUrl`로 반환한다. AI 응답에서 앨범 이미지 URL이 없으면 추천 결과를 저장하지 않고 AI 연동 오류로 처리한다. | `RecommendationPlaylistData`, `ContextRecommendationAiClient` |
 | `REC-013` | **현재 구현** | 추천 곡 최대 수 | 백엔드는 AI 요청의 `limit`을 10으로 고정해 전달한다. AI가 반환한 정상 곡 목록은 별도 축소 없이 현재 추천 플레이리스트로 저장한다. | `ContextRecommendationAiClient:19,39`, `RecommendationPlaylistWriter:28-39` |
 
+## AI 기억 검색
+
+| 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
+|---|---|---|---|---|
+| `MEM-001` | **확정** | 공개 API | 인증 사용자는 `POST /api/memories/search/conversations`로 대화를 시작하고, `POST /api/memories/search`에 `{conversationId, query}`를 보내고, 명시적 나가기에서 `DELETE /api/memories/search/conversations/{conversationId}`를 호출한다. 시작은 201, 질문은 200, 종료는 본문 없는 204다. 프론트는 `userId`나 `history`를 보내지 않는다. | 사용자 확정 / PR #103 컨트롤러 |
+| `MEM-002` | **확정·구현됨** | 대화 저장과 만료 | 백엔드가 사용자별 UUID 대화 ID를 발급하고 최근 완료된 질문·검증된 정확 일치 ID 최대 5턴을 단일 서버 프로세스 메모리에 저장한다. 생성 또는 마지막 질문 완료 후 30분 동안 사용하지 않으면 만료된다. 새 대화를 시작해도 다른 대화를 자동 종료하지 않는다. 서버 재시작 시 대화는 사라진다. Redis 도입은 서버 간 공유나 재시작 후 대화 유지가 필요할 때 재검토한다. | 사용자 확정 / PR #103 대화 저장소 |
+| `MEM-003` | **확정·기능 PR #105** | 입력·동시성 | 질문은 최대 500자이며 초과 시 `400 INVALID_INPUT_VALUE`를 반환한다. 활성 본인 자물쇠가 0개이면 프론트 입력을 막고 질문 API도 `400 MEMORY_SEARCH_NO_RECORDS`를 반환한다. 같은 사용자에게 AI 호출이 진행 중이면 추가 질문을 시작하지 않고 `409 MEMORY_SEARCH_IN_PROGRESS`를 반환한다. 종료·만료·없는 대화 ID 또는 타인 대화 ID는 `410 MEMORY_SEARCH_CONVERSATION_GONE`이다. | 사용자 확정 / PR #103 요청 게이트·오류 코드 / PR #105 500자 제한 |
+| `MEM-004` | **확정·기능 PR #105** | 응답과 화면 | 공개 성공 응답은 `{message, data: {answer, records, suggestedRecords}}`이다. AI의 `answer`에는 건수를 넣지 않는다. AI가 정확 일치 ID를 보냈으나 백엔드 소유권·삭제 검증 후 공개할 정확 일치 카드가 0건이면 백엔드가 `answer`를 `표시할 수 있는 자물쇠가 없어요.`로 교체한다. AI가 처음부터 정확 일치 0건이라고 판단한 경우에는 AI의 조건 설명을 유지한다. 프론트는 공개된 `records.length`로 건수를 표시하고 앞 5건을 먼저 보여준다. 6건 이상이면 전체보기에서 나머지를 같은 순서로 보여준다. 정확 일치가 0건이고 제안만 있어도 정상 200이며, 제안 카드는 사용자가 토글을 눌러 펼친다. | 사용자 확정 / 기억 검색 화면 시안 / PR #103 응답 DTO / PR #105 문구 교체 |
+| `MEM-005` | **확정·백엔드 구현됨** | 카드 데이터·순서 | 실제 AI 연결 시 정확 일치 `{recordId}`와 제안 `{recordId, matchedConditions}`를 관련도 순서로 받는 계약이다. 백엔드는 현재 사용자의 활성 자물쇠인지 DB에서 확인하고 카드 제목·가수·장소·생성일·날씨·앨범 이미지를 구성한다. 삭제·비소유 ID는 제외하고 각 배열의 AI 순서를 유지한다. 카드 `recordId`로 기존 상세 API에 진입하며 상세·전체보기 왕복은 대화 종료가 아니다. 날씨나 법정동 이름이 없는 기록의 해당 카드 값은 `null`일 수 있다. | 사용자 확정 / PR #103 소유권 필터·카드 DTO |
+| `MEM-006` | **확정·백엔드 경계 구현됨** | AI 문맥 전달 | 실제 AI 연결 시 인증 사용자 ID, 현재 `query`, 완료된 이전 최대 5턴의 `{query, recordIds}` 배열을 전달한다. 현재는 게이트웨이 인터페이스가 이 값들을 받으며 HTTP 전송은 미구현이다. 첫 요청의 `history`는 빈 배열이다. 턴당 `recordIds`는 공개된 정확 일치 결과만 최대 50개 저장하고 제안 ID는 제외한다. AI 자체에는 대화를 저장하지 않는다. AI 측 확인에 따르면 현재 V2는 `history`를 받아도 검색에는 사용하지 않으며, V3 멀티턴 적용은 예정 상태다. | 사용자 확정 / AI 전달 문서 / PR #103 게이트웨이 경계 |
+| `MEM-007` | **확정** | 화면 복원과 응답 유실 | 자물쇠 상세·전체보기 이동과 같은 탭 새로고침은 명시적 나가기가 아니다. 프론트는 새로고침 뒤 같은 사용자의 대화 ID와 완료된 화면 기록을 복원한다. 사용자가 AI 응답을 기다리다 나가도 AI 호출을 취소하지 않고, 명시적으로 종료된 대화의 늦은 결과는 저장·공개하지 않는다. 재진입 중 `409`이면 이전 호출 종료까지 자동 대기한다. 이전 응답 수신 여부가 불명확하면 자동 재전송하지 않고 새 대화에서 수동 재질문한다. `410`에는 새 대화 시작 안내를 표시한다. `409` 완료 확인 방법은 확인 필요하다. | 사용자 확정 / 프론트 구현 계획 |
+| `MEM-008` | **구현됨** | 실제 AI 연결 전 동작 | `local` 프로필은 본인 활성 자물쇠 ID를 최신 생성일·ID 내림차순으로 최대 50개 반환하는 임시 AI를 사용한다. 질문 내용·문맥은 검색 조건에 적용하지 않고 제안 배열은 비운다. 로컬 외 환경은 실제 AI 연결 전까지 `502 AI_SERVICE_ERROR`를 반환한다. | PR #103 임시 AI 게이트웨이 |
+| `MEM-009` | **일부 확인·실제 AI 연동 대기** | AI 계약과 장애 매핑 | AI 측 문서가 ID 중심 응답, 정확 일치 최대 50건·제안 최대 3건·합계 최대 50건, 오류 본문 `{code, message, field}`에 동의했으나 ID 중심 응답은 AI 측 구현 예정이고 백엔드 HTTP 연동도 미구현이다. 실제 연동 시 AI 4xx는 공개 `500 INTERNAL_SERVER_ERROR`, AI 200 본문 계약 위반·AI 503·연결/읽기 실패는 `502 AI_SERVICE_ERROR`로 매핑한다. AI 내부 오류 본문은 프론트에 공개하지 않는다. AI 배포 환경에서 DB 연결 설정이 빠지면 AI가 503을 반환하도록 요청하고, 로컬·테스트에서는 빈 결과를 허용한다. `409` 후 완료 확인 방법은 별도 결정이 필요하다. | AI 전달 문서 / 사용자 확정 / 실제 AI 연동 및 프론트 설계 대기 |
+
 ## 취향 투표
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
@@ -355,7 +370,7 @@
 |---|---|---|
 | Presigned URL 업로드 | **보류** | V1은 백엔드 수신 후 GCS 업로드 유지 |
 | `record_drafts` | **V1 제외·V2 구현** | V1에서는 기능을 제공하지 않았고 테이블은 Flyway V1에서 생성되었다. V2에서는 사용자당 1개, 전체 스냅샷 Upsert, 14일 유효기간의 서버 임시저장을 제공한다. |
-| AI 기억 검색 | **V1 제외** | 기존 API 설계 내용은 문서에 보존하고 `[V1 제외]`로 표시한다. V1 구현 대상에서는 제외한다. |
+| AI 기억 검색 | **V1 제외·V2 백엔드 선행 구현** | V1에서는 제외했다. V2 PR #103이 `develop`에 병합되어 대화 API·인메모리 문맥·로컬 임시 AI를 제공하지만 실제 AI 연동은 미완료다. |
 | Spotify 계정 저장 | **V1 제외** | 추천 결과를 Spotify 계정에 저장하는 API를 제공하지 않음 |
 
 ## 이번 버전에서 해소된 사항
@@ -371,6 +386,8 @@
 | `OQ-001` | 음악 장르의 정식 목록 | 정책, 테이블 |
 | `OQ-022` | 알림 보관 기간 | 정책, 테이블 |
 | `OQ-023` | 월간 리포트 배치 실행 시각 | 정책 |
+| `OQ-024` | AI 측 ID 중심 응답의 실제 구현·V3 멀티턴 적용 및 백엔드 HTTP 연동 확인 | 정책, API, AI 연동 |
+| `OQ-025` | 기억 검색 409 이후 완료 확인 방법 | 정책, API, 프론트 |
 
 미정 항목은 문서에 추론으로 채우지 않는다.
 
@@ -442,7 +459,9 @@
 | NOTIFICATION | 287 | 알림 목록 | `GET` | `/api/notifications` |
 | NOTIFICATION | 295 | 알림 일괄 읽음 처리 | `PATCH` | `/api/notifications/read` |
 | NOTIFICATION | 301 | 알림 삭제 | `DELETE` | `/api/notifications/{notificationId}` |
-| MEMORY | 308 | 기억 검색 | `POST` | `/api/memories/search` |
+| MEMORY (V2 백엔드) | OpenAPI v2.8 | 기억 검색 대화 시작 | `POST` | `/api/memories/search/conversations` |
+| MEMORY (V2 백엔드) | OpenAPI v2.8 | 기억 검색 질문 | `POST` | `/api/memories/search` |
+| MEMORY (V2 백엔드) | OpenAPI v2.8 | 기억 검색 대화 종료 | `DELETE` | `/api/memories/search/conversations/{conversationId}` |
 | WEATHER | OpenAPI v2.6 | 날씨 조회 | `GET` | `/api/weather` |
 | HOME LOCK (RECORD) | 팀원 OpenAPI v2.4 | 클러스터·장소 인기 음악 조회 | `POST` | `/api/places/popular-tracks/search` |
 | HOME LOCK (RECORD) | 팀원 OpenAPI v2.4 | 클러스터·장소 내 자물쇠 목록 | `POST` | `/api/users/me/records/search` |
