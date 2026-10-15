@@ -107,10 +107,10 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `GENRE-001` | **확정** | 대표 음악 장르 | AI가 사용자의 음악 기록을 분석해 대표 음악 장르 1개를 `users.music_genre`에 저장한다. | API 명세 상세2차 정책 요약 R33 / 테이블 정의서 §1 |
-| `GENRE-002` | **확정** | 장르 미결정 상태 | 대표 장르가 아직 결정되지 않은 사용자는 `music_genre=NULL`일 수 있다. | 테이블 정의서 6차 §1 |
-| `GENRE-003` | **확정** | 장르 미결정 사용자의 투표 | `users.music_genre IS NULL`인 사용자는 취향 투표에 참여할 수 없다. | API 명세 상세2차 정책 요약 R33 |
-| `GENRE-004` | **확정** | 대표 장르 미결정 API 응답 | `users.music_genre IS NULL`인 사용자가 오늘 투표 조회 또는 투표 제출 API에 직접 접근하면 `403 Forbidden` / `MUSIC_GENRE_REQUIRED`로 처리한다. | 사용자 확정 |
+| `GENRE-001` | **확정** | 최종 취향 그룹 산출 | AI가 매일 23:00~23:40 배치로 사용자별 최종 취향 그룹을 계산해 AI DB에 저장한다. BE는 그룹 계산을 수행하거나 AI 그룹 계산 API를 호출하지 않는다. | AI 팀 V2 연동 합의 |
+| `GENRE-002` | **확정** | 최종 취향 그룹 조회 | BE는 AI DB 읽기 전용 뷰 `be_user_music_genres(user_id, music_genre, updated_at)`를 조회한다. 해당 사용자의 행이 없으면 그룹을 `공통`으로 처리한다. 별도의 `vote_group` 필드는 사용하지 않는다. | AI 팀 V2 연동 합의 |
+| `GENRE-003` | **확정** | 최종 취향 그룹 값 | `music_genre` 허용값은 `발라드`, `댄스`, `랩/힙합`, `R&B/Soul`, `인디음악`, `록/메탈`, `포크/블루스`, `트로트`, `POP`, `일렉트로니카`, `OST`, `재즈`, `J-POP`, `공통`이다. | AI 팀 V2 연동 합의 |
+| `GENRE-004` | **확정** | 사용자 선호 장르와 최종 그룹 분리 | `preferred_genres`는 사용자가 온보딩에서 직접 고르는 `발라드`, `댄스`, `랩/힙합`, `R&B/Soul`, `인디음악`, `록/메탈`, `포크/블루스`, `트로트`, `POP`, `일렉트로니카`, `OST`, `재즈`, `J-POP` 중 최대 3개이며 AI 그룹 계산의 참고값이다. `users.preferred_genres`에 별도 저장할 예정이며 AI가 덮어쓰지 않는다. `music_genre`는 AI가 매일 계산한 단일 최종 그룹이다. 온보딩 상세 API 계약은 미확정이며 이번 문서 작업에서 정의하지 않는다. | 사용자 및 AI 팀 V2 연동 합의 |
 
 ## 장소·지도·대시보드
 
@@ -288,14 +288,23 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `VOTE-001` | **현재 설계** | 장르별 하루 질문 | 전체 서비스 하루 1개가 아니라 `music_genre`별 하루 1개의 질문을 제공한다. | API 명세 상세2차 정책 요약 R22 / 테이블 정의서 §16 |
-| `VOTE-002` | **현재 설계** | 오늘 질문 대상 | 사용자는 자신의 `users.music_genre`와 같은 장르의 오늘 질문 1건을 조회한다. | API 명세 상세2차 R221,R226 |
-| `VOTE-003` | **현재 설계** | 미응답/응답 표시 | 오늘 질문 조회의 `myAnswer`는 미응답이면 NULL, 응답했으면 실제 선택지 텍스트이다. | API 명세 상세2차 R221-R226 |
-| `VOTE-004` | **현재 설계** | 선택 입력 | 답변 API는 `selectedOption`으로 `A` 또는 `B`만 받는다. | API 명세 상세2차 R227-R236 |
-| `VOTE-005` | **현재 설계** | 선택 저장 | 서버는 A/B를 질문의 실제 선택지 텍스트로 매핑하고 DB `vote_answers.selected_option`에는 실제 텍스트를 저장한다. | API 명세 상세2차 R227 / 테이블 정의서 §17 |
-| `VOTE-006` | **현재 설계** | 첫 답변 불변 | 사용자당 같은 질문에 첫 답변만 허용하며 이후 수정할 수 없다. | API 명세 상세2차 R227,R233,R236 / 테이블 정의서 §17 |
-| `VOTE-007` | **현재 설계** | 활성 질문 조건 | 현재 날짜이면서 현재 사용자의 대표 장르와 같은 질문에만 답변할 수 있다. | API 명세 상세2차 R227,R234,R236 |
-| `VOTE-008` | **현재 설계** | 답변 결과 | 답변 성공 시 실제 선택지 텍스트와 현재 A/B 결과 비율을 반환한다. | API 명세 상세2차 R227 |
+| `VOTE-001` | **확정** | 질문 단위 | AI는 KST 기준 날짜와 취향 그룹별 질문을 제공한다. `be_vote_questions` 뷰의 컬럼은 `question_date`, `music_genre`, `question`, `option_a`, `option_b`다. | AI 팀 V2 연동 합의 / 테이블 정의서 §16 |
+| `VOTE-002` | **확정** | 오늘 질문 조회 및 fallback | BE는 AI DB 뷰에서 조회한 사용자 그룹의 오늘 질문을 우선하고, 없으면 같은 날짜의 `공통` 질문을 사용한다. 공통 질문도 없으면 404 `TODAY_VOTE_NOT_FOUND`다. | 사용자 및 AI 팀 V2 연동 합의 |
+| `VOTE-003` | **확정** | 미응답/응답 표시 | 오늘 질문 조회의 `myAnswer`와 `voteAnswerId`는 미응답이면 모두 `null`, 응답했으면 각각 실제 선택지 텍스트와 기존 답변 ID다. | 사용자 확정 |
+| `VOTE-004` | **확정** | 선택 입력 | 답변 API는 `selectedOption`으로 `A` 또는 `B`만 받는다. | API 명세 상세2차 R227-R236 |
+| `VOTE-005` | **확정** | 선택 저장 | 서버는 A/B를 질문의 실제 선택지 텍스트로 매핑하고 BE DB `vote_answers.selected_option`에는 실제 텍스트를 저장한다. | API 명세 상세2차 R227 / 테이블 정의서 §17 |
+| `VOTE-006` | **확정** | 첫 답변 불변 | 사용자당 같은 질문에 첫 답변만 허용하며 수정·재투표할 수 없다. 중복 답변은 409 `VOTE_ALREADY_ANSWERED`를 반환한다. | 사용자 확정 / 테이블 정의서 §17 |
+| `VOTE-007` | **확정** | 답변 가능 질문 | 답변은 KST 기준 오늘 질문 중 조회 대상 그룹 질문 또는 해당 그룹 질문 부재 시 제공된 공통 질문에만 가능하다. | 사용자 및 AI 팀 V2 연동 합의 |
+| `VOTE-008` | **확정** | 답변 결과 | 답변 성공 시 `voteAnswerId`, 실제 선택지 텍스트, 현재 A/B 결과 비율을 반환한다. | 사용자 확정 |
+| `VOTE-009` | **확정** | 결과 공개 권한 | 해당 질문에 투표한 사용자만 결과를 조회할 수 있다. 미투표 사용자는 403 `VOTE_REQUIRED_TO_VIEW_RESULTS`를 받는다. | 사용자 확정 |
+| `VOTE-010` | **확정** | 누적 결과 갱신 | 결과 조회와 투표 응답의 비율은 해당 시점의 BE DB 누적 답변을 기준으로 계산한다. 서버 실시간 push는 제공하지 않는다. | 사용자 확정 |
+| `VOTE-011` | **확정** | 비율 반올림 | A 비율은 정수로 반올림하고 B 비율은 `100 - A 비율`로 계산한다. 답변이 0건이면 A/B 모두 0%다. | 사용자 확정 |
+| `VOTE-012` | **확정** | 매칭 답변 ID 연계 | 투표 제출 응답 및 오늘 질문 조회 응답의 `voteAnswerId`를 기존 매칭 요청 API에 사용한다. 기존 매칭 요청 계약은 변경하지 않는다. | 사용자 확정 / `MatchService.createMatchRequest` |
+| `VOTE-013` | **확정** | AI 질문 생성·식별 | AI가 매일 23:00~23:40 배치로 날짜·취향 그룹별 질문을 생성한다. `(question_date, music_genre)` 조합마다 하나이며, 배치 완료 후 수정하지 않는다. AI 질문 뷰에는 질문 ID를 요구하지 않는다. 배치 완료 후 어느 날짜 질문이 조회 가능해지는지는 별도 확정 전까지 추정하지 않는다. | AI 팀 V2 연동 합의 |
+| `VOTE-014` | **확정** | Backend 질문 식별·재사용 | BE는 기존 투표·매칭 호환성을 위해 자체 `vote_questions` 행과 `vote_question_id`를 사용한다. AI 질문은 BE DB의 `(music_genre, vote_date)` UNIQUE 제약을 유지하면서 최초 저장하고, 이미 있으면 기존 ID를 재사용하며 반복 업데이트하지 않는다. | AI 팀 V2 연동 합의 / 기존 스키마 |
+| `VOTE-015` | **확정** | 동시 최초 저장 | 같은 날짜·그룹 질문을 여러 사용자가 동시에 처음 조회해도 중복 INSERT하지 않아야 한다. UNIQUE 충돌 시 기존 BE 질문을 재조회해 사용한다. | AI 팀 V2 연동 합의 |
+| `VOTE-016` | **확인 필요** | AI 원본 부재와 BE 복사본 우선순위 | AI 뷰에 질문이 없지만 BE DB에 같은 날짜·그룹의 기존 질문이 있을 때 BE 복사본을 계속 제공할지 또는 원본 부재로 처리할지 정해지지 않았다. 구현 전에 우선순위를 확정한다. | 사용자 요청에서 미확정으로 지정 |
+| `VOTE-017` | **미구현** | AI DB 뷰 연동 | BE의 AI DB 읽기 전용 연결 및 `be_user_music_genres`, `be_vote_questions` 조회 연동은 아직 실제 코드로 구현되지 않았다. BE는 AI 그룹을 계산하거나 질문 생성 API/내부 전달 API를 호출하지 않는다. | AI 팀 V2 연동 합의 |
 
 ## 매칭
 
@@ -391,7 +400,7 @@
 | `SYNC-001` | `places.legal_dong_code/name` | 기존/예외 데이터를 위한 NULL 허용 및 법정동 쌍 CHECK 제약을 유지한다. 신규 Place 생성은 서버 Kakao의 유효한 B code/name 확인이 필수이며 DB migration 없이 애플리케이션에서 보장한다. |
 | `SYNC-002` | Chat Server 채팅방 선택 정보 | A2+B2 정책에 따라 선택 정보는 `vote_answers.selected_option`으로 판별한다. Backend DB의 기존 `chat_rooms`는 V6에서 제거되었으므로 별도 Chat DB 계약과 동기화한다. |
 | `SYNC-003` | `record_drafts` | 테이블 정의서를 실제 V1+V5 스키마와 V2 임시저장 정책에 맞춘다. V1 제외 이력은 보존하되 V2 구현 상태와 사용자당 1개, 14일 만료, Upload 참조를 반영한다. |
-| `SYNC-004` | 취향 투표 API | `music_genre=NULL` 사용자의 오늘 질문 조회/투표 제출을 `403 MUSIC_GENRE_REQUIRED`로 통일한다. |
+| `SYNC-004` | 취향 투표 API | AI DB 읽기 전용 뷰의 사용자 그룹과 날짜·그룹 질문을 조회하고 `공통` fallback을 적용한다. BE 자체 `vote_question_id` 및 기존 `(music_genre, vote_date)` UNIQUE 제약과 동시 최초 저장 동작을 API·구현에 반영한다. AI 원본 부재 시 BE 기존 복사본의 우선순위는 확정이 필요하다. |
 | `SYNC-005` | AI 오류 코드 | 기존 `AI_API_ERROR` 표기는 `AI_SERVICE_ERROR`로 통일한다. 최소 기억 검색 API와 AI 추천 API 문구를 함께 점검한다. |
 | `SYNC-006` | 매칭·Chat Server | 1:1 매칭, MATCHING/MATCHED 분리, Chat Server 소유권 및 최신 Chat lifecycle을 API·테이블·구현 상태와 동기화한다. |
 | `SYNC-007` | 매칭 동시성 | FIFO(`created_at ASC`, 동률 `match_request_id ASC`)를 유지한다. VoteQuestion 선행 row lock으로 lock 순서를 직렬화하며 V8 적용 후 실제 MySQL 통합 테스트를 재검증한다. |
@@ -440,6 +449,7 @@
 | RECOMMEND | 205 | 새 추천 플레이리스트 생성 | `POST` | `/api/recommendations/playlists` |
 | VOTE | 221 | 오늘의 투표 조회 | `GET` | `/api/vote-questions/today` |
 | VOTE | 227 | 투표 답변 | `POST` | `/api/vote-questions/{voteQuestionId}/answers` |
+| VOTE | 신규 | 투표 결과 조회 | `GET` | `/api/vote-questions/{voteQuestionId}/results` |
 | MATCH | 238 | 매칭 요청 생성 | `POST` | `/api/match-requests` |
 | MATCH | 247 | 매칭 상태 조회 | `GET` | `/api/match-requests/{matchRequestId}` |
 | CHAT SERVER (contract-only) | 256 | 채팅방 입장 | `POST` | `/api/chat-rooms/{chatRoomId}/members` |
