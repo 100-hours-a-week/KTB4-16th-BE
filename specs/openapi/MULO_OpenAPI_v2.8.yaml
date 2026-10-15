@@ -5755,7 +5755,7 @@ paths:
       - bearerAuth: []
       responses:
         '200':
-          description: 질문 처리가 성공한 경우 200. 검색 결과가 없거나 제안만 있어도 빈 배열과 함께 200을 반환한다.
+          description: 질문 처리가 성공한 경우 200. 정확 일치 결과가 없으면 records는 빈 배열이며, 제안 카드만 있거나 두 배열이 모두 비어 있어도 200을 반환한다.
           content:
             application/json:
               schema:
