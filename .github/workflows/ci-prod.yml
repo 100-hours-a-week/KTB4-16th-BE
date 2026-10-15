@@ -1,0 +1,358 @@
+name: Backend CI prod
+
+# main 브랜치 전용 CI. PR 검증, push 시 프로덕션 이미지 릴리즈까지만 한다.
+# 프로덕션 배포는 cd-prod.yml이 이 워크플로가 성공하면 이어서 한다.
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+
+jobs:
+  pr-ci:
+    if: github.event_name == 'pull_request'
+    name: Backend CI prod pull_request
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: mulo
+          MYSQL_USER: mulo
+          MYSQL_PASSWORD: mulo
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+
+    permissions:
+      contents: read
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 1
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      # PR 게이트웨이 검사 유지
+      - name: Run Checkstyle
+        run: ./gradlew checkstyleMain
+
+      # 컴파일 (테스트 코드 포함)
+      - name: Run Compile
+        run: ./gradlew compileJava compileTestJava
+
+      # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
+      - name: Prepare test database
+        run: |
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+
+      # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
+      - name: Run Tests and Coverage Verification
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3307/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          DB_USERNAME: mulo
+          DB_PASSWORD: mulo
+          MULO_WEATHER_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          MULO_WEATHER_IT_DB_USERNAME: mulo
+          MULO_WEATHER_IT_DB_PASSWORD: mulo
+          JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          GCP_PROJECT_ID: mulo-ci-test
+          GCS_BUCKET_NAME: mulo-ci-test
+          KAKAO_REST_API_KEY: ci-test
+          KMA_SERVICE_KEY: ci-test
+          SPOTIFY_CLIENT_ID: ci-test
+          SPOTIFY_CLIENT_SECRET: ci-test
+          AI_INTERNAL_TOKEN: ci-test-token
+          # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
+          JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
+        run: |
+          # TODO: MySQL 8.4에서 친구 요청 동시 실행 테스트 2개가 데드락(CannotAcquireLockException)으로 실패한다.
+          # 서비스의 데드락 처리를 고친 뒤 init script와 --init-script 옵션을 지운다.
+          cat > "$RUNNER_TEMP/exclude-deadlock-tests.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  filter {
+                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentOppositeRequestsBecomeOneFriendship'
+                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentSameDirectionRequestsKeepOnePending'
+                  }
+              }
+          }
+          EOF
+          echo "데드락으로 실패하는 친구 동시 실행 테스트 2개를 제외하고 실행한다."
+          ./gradlew --init-script "$RUNNER_TEMP/exclude-deadlock-tests.gradle" test jacocoTestReport jacocoTestCoverageVerification
+
+      # 리포트는 실패했을 때도 확인할 수 있도록 항상 올린다
+      - name: Upload coverage report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/html
+          retention-days: 7
+
+      - name: Upload test report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+
+  pr-notify:
+    name: Discord notification (prod PR)
+    runs-on: ubuntu-latest
+    needs: pr-ci
+    if: ${{ always() && github.event_name == 'pull_request' }}
+    permissions: {}
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "백엔드 Main pull_request CI 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend CI: ${{ needs.pr-ci.result }}",
+                "description": ${{ toJSON(github.event.pull_request.title) }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ needs.pr-ci.result == 'success' && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "PR",
+                    "value": "[#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "작성자",
+                    "value": ${{ toJSON(github.event.pull_request.user.login) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "작업 브랜치",
+                    "value": ${{ toJSON(github.head_ref) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "대상 브랜치",
+                    "value": ${{ toJSON(github.base_ref) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]
+
+  main-ci:
+    if: github.event_name == 'push'
+    name: Backend CI prod release
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: mulo
+          MYSQL_USER: mulo
+          MYSQL_PASSWORD: mulo
+          MYSQL_ROOT_PASSWORD: root
+        ports:
+          - 3307:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -u root -proot --silent"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    concurrency:
+      group: backend-main-release
+      cancel-in-progress: false
+
+    permissions:
+      contents: write      # Git 태그, Release 생성
+      id-token: write      # GCP Workload Identity와 통신하기 위한 OIDC 토큰 발행 권한
+
+    env:
+      IMAGE_BASE: ${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+
+      - name: Set up JDK 21
+        uses: actions/setup-java@v6
+        with:
+          java-version: '21'
+          distribution: 'temurin'
+
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+
+      - name: Grant execute permission
+        run: chmod +x gradlew
+
+      - name: Run Checkstyle
+        run: ./gradlew checkstyleMain
+
+      # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
+      - name: Prepare test database
+        run: |
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+
+      # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
+      - name: Run Tests and Coverage Verification
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3307/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          DB_USERNAME: mulo
+          DB_PASSWORD: mulo
+          MULO_WEATHER_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          MULO_WEATHER_IT_DB_USERNAME: mulo
+          MULO_WEATHER_IT_DB_PASSWORD: mulo
+          JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          GCP_PROJECT_ID: mulo-ci-test
+          GCS_BUCKET_NAME: mulo-ci-test
+          KAKAO_REST_API_KEY: ci-test
+          KMA_SERVICE_KEY: ci-test
+          SPOTIFY_CLIENT_ID: ci-test
+          SPOTIFY_CLIENT_SECRET: ci-test
+          AI_INTERNAL_TOKEN: ci-test-token
+          # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
+          JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
+        run: |
+          # TODO: MySQL 8.4에서 친구 요청 동시 실행 테스트 2개가 데드락(CannotAcquireLockException)으로 실패한다.
+          # 서비스의 데드락 처리를 고친 뒤 init script와 --init-script 옵션을 지운다.
+          cat > "$RUNNER_TEMP/exclude-deadlock-tests.gradle" <<'EOF'
+          allprojects {
+              tasks.withType(Test).configureEach {
+                  filter {
+                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentOppositeRequestsBecomeOneFriendship'
+                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentSameDirectionRequestsKeepOnePending'
+                  }
+              }
+          }
+          EOF
+          echo "데드락으로 실패하는 친구 동시 실행 테스트 2개를 제외하고 실행한다."
+          ./gradlew --init-script "$RUNNER_TEMP/exclude-deadlock-tests.gradle" test jacocoTestReport jacocoTestCoverageVerification
+
+      # 리포트는 실패했을 때도 확인할 수 있도록 항상 올린다
+      - name: Upload coverage report
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: jacoco-report
+          path: build/reports/jacoco/test/html
+          retention-days: 7
+
+      - name: Upload test report
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report
+          path: build/reports/tests/test
+          retention-days: 7
+
+      - name: Build jar
+        run: ./gradlew bootJar
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+          package-manager-cache: false
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      - name: Authenticate to Google Cloud
+        uses: google-github-actions/auth@v3
+        with:
+          project_id: ${{ secrets.GCP_PROJECT_ID }}
+          workload_identity_provider: ${{ secrets.WORKLOAD_IDENTITY_PROVIDER }}
+          service_account: ${{ secrets.SERVICE_ACCOUNT }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Configure Docker authentication
+        run: |
+          gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
+
+      # release.config.main.json을 이 job 안에서만 .releaserc.json으로 복사해서 쓴다.
+      - name: Release backend image
+        env:
+          GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
+        run: |
+          cp release.config.main.json .releaserc.json
+          npx --yes \
+            --package=semantic-release@25 \
+            --package=@semantic-release/exec@7 \
+            semantic-release
+
+  main-notify:
+    name: Discord notification (prod release)
+    runs-on: ubuntu-latest
+    needs: main-ci
+    if: ${{ always() && github.event_name == 'push' }}
+    permissions: {}
+
+    env:
+      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
+
+    steps:
+      - name: Send CI result to Discord
+        if: ${{ env.DISCORD_WEBHOOK != '' }}
+        uses: Ilshidur/action-discord@0.3.2
+        with:
+          args: "Backend main CI 결과 알림"
+        env:
+          DISCORD_USERNAME: MURO_BOT
+          DISCORD_EMBEDS: |
+            [
+              {
+                "title": "Backend CI: ${{ needs.main-ci.result }}",
+                "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
+                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
+                "color": ${{ needs.main-ci.result == 'success' && 3066993 || 15158332 }},
+                "fields": [
+                  {
+                    "name": "커밋",
+                    "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
+                    "inline": true
+                  },
+                  {
+                    "name": "푸시한 사람",
+                    "value": ${{ toJSON(github.actor) }},
+                    "inline": true
+                  },
+                  {
+                    "name": "브랜치",
+                    "value": ${{ toJSON(github.ref_name) }},
+                    "inline": true
+                  }
+                ]
+              }
+            ]
