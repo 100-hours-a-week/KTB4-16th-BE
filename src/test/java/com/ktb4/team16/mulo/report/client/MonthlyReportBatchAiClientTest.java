@@ -28,11 +28,11 @@ class MonthlyReportBatchAiClientTest {
         fixture.server.expect(requestTo("http://ai.test/api/reports/batch-generate"))
                 .andExpect(method(HttpMethod.POST))
                 .andExpect(header("X-Internal-Token", "test-token"))
-                .andExpect(content().json("{\"year\":2026,\"month\":9,\"userIds\":[7,12]}"))
+                .andExpect(content().json("{\"batchRequestId\":\"batch-123\",\"year\":2026,\"month\":9,\"userIds\":[7,12]}"))
                 .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
                         .body("{\"status\":\"QUEUED\",\"jobId\":\"report_batch_2026-9\",\"targetCount\":2}"));
 
-        var accepted = fixture.client.requestBatch(YearMonth.of(2026, 9), List.of(7L, 12L));
+        var accepted = fixture.client.requestBatch(YearMonth.of(2026, 9), List.of(7L, 12L), "batch-123");
 
         assertThat(accepted.jobId()).isEqualTo("report_batch_2026-9");
         assertThat(accepted.targetCount()).isEqualTo(2);
@@ -46,7 +46,8 @@ class MonthlyReportBatchAiClientTest {
                 .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
                         .body("sensitive-ai-detail"));
 
-        assertThatThrownBy(() -> fixture.client.requestBatch(YearMonth.of(2026, 9), List.of(7L)))
+        assertThatThrownBy(() -> fixture.client.requestBatch(YearMonth.of(2026, 9),
+                List.of(7L), "batch-123"))
                 .isInstanceOf(MonthlyReportAiException.class)
                 .hasMessageNotContaining("sensitive-ai-detail");
     }

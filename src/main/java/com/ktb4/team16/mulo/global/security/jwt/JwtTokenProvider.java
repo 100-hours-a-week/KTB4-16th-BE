@@ -46,6 +46,26 @@ public class JwtTokenProvider {
         return extractUserId(token, "refresh");
     }
 
+    public AccessTokenDetails extractAccessTokenDetails(String token) {
+        Jwt jwt = decoder.decode(token);
+        if (!"access".equals(jwt.getClaimAsString("tokenType"))) {
+            throw new JwtException("JWT token type is invalid");
+        }
+
+        Long userId;
+        try {
+            userId = Long.valueOf(jwt.getSubject());
+        } catch (NumberFormatException exception) {
+            throw new JwtException("JWT subject is invalid", exception);
+        }
+
+        Instant expiresAt = jwt.getExpiresAt();
+        if (expiresAt == null) {
+            throw new JwtException("JWT expiration is missing");
+        }
+        return new AccessTokenDetails(userId, expiresAt);
+    }
+
     private Long extractUserId(String token, String expectedTokenType) {
         Jwt jwt = decoder.decode(token);
         if (!expectedTokenType.equals(jwt.getClaimAsString("tokenType"))) {
@@ -69,4 +89,6 @@ public class JwtTokenProvider {
         JwsHeader header = JwsHeader.with(MacAlgorithm.HS256).type("JWT").build();
         return encoder.encode(JwtEncoderParameters.from(header, claims)).getTokenValue();
     }
+
+    public record AccessTokenDetails(Long userId, Instant expiresAt) { }
 }

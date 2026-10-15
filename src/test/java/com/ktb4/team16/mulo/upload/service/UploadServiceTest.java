@@ -169,6 +169,26 @@ class UploadServiceTest {
     }
 
     @Test
+    void createsDraftSignedUrlForOwnedUploadWithoutApplyingOneHourLimit() {
+        Upload upload = mock(Upload.class);
+        when(upload.getImageUrl()).thenReturn("uploads/35/old-photo.jpg");
+        when(uploadRepository.findByUploadIdAndUser_UserId(123L, 35L))
+                .thenReturn(Optional.of(upload));
+        when(gcsStorageService.createReadSignedUrl("uploads/35/old-photo.jpg"))
+                .thenReturn("https://signed.example/draft-photo");
+
+        assertThat(uploadService.createDraftReadSignedUrl(35L, 123L))
+                .isEqualTo("https://signed.example/draft-photo");
+
+        verify(uploadRepository).findByUploadIdAndUser_UserId(123L, 35L);
+        verify(uploadRepository, never()).findByUploadIdAndUser_UserIdAndCreatedAtAfter(
+                org.mockito.ArgumentMatchers.eq(123L),
+                org.mockito.ArgumentMatchers.eq(35L),
+                any());
+        verify(gcsStorageService).createReadSignedUrl("uploads/35/old-photo.jpg");
+    }
+
+    @Test
     void rejectsSignedUrlForAnotherUsersUpload() {
         when(uploadRepository.findByUploadIdAndUser_UserIdAndCreatedAtAfter(
                 org.mockito.ArgumentMatchers.eq(123L),

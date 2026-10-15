@@ -40,6 +40,42 @@ class MonthlyReportPreparationServiceTest {
     @Mock private MonthlyMoodStatRepository moods;
     @Mock private MonthlyReportPreparationChunkService chunkService;
 
+    // 외부 AI 호출 전에 준비된 사용자 리포트에 동일한 요청 ID를 저장한다.
+    @Test
+    void reservesBatchRequestIdOnPreparedReport() {
+        YearMonth target = YearMonth.of(2026, 9);
+        MonthlyReport report = MonthlyReport.prepare(
+                User.signup("batch@example.test", "hash", "사용자"),
+                (short) 2026, (short) 9, 2, "가수");
+        when(reports.findForUpdate(7L, (short) 2026, (short) 9))
+                .thenReturn(Optional.of(report));
+        var batch = new MonthlyReportPreparationService.PreparedBatch(target, List.of(7L), 1, 0);
+
+        new MonthlyReportPreparationService(reports, chunkService)
+                .reserveBatchRequestId(batch, "4bc555fc-d70b-4060-8485-4e7664e164ab");
+
+        assertThat(report.getBatchRequestId()).isEqualTo("4bc555fc-d70b-4060-8485-4e7664e164ab");
+    }
+
+    // 이전 AI 요청의 늦은 실패가 새 시도의 PENDING 상태를 바꾸지 못하게 한다.
+    @Test
+    void ignoresFailureFromSupersededBatchAttempt() {
+        YearMonth target = YearMonth.of(2026, 9);
+        MonthlyReport report = MonthlyReport.prepare(
+                User.signup("superseded@example.test", "hash", "사용자"),
+                (short) 2026, (short) 9, 2, "가수");
+        report.assignBatchRequestId("current-batch");
+        when(reports.findForUpdate(7L, (short) 2026, (short) 9))
+                .thenReturn(Optional.of(report));
+        var batch = new MonthlyReportPreparationService.PreparedBatch(target, List.of(7L), 1, 0);
+
+        new MonthlyReportPreparationService(reports, chunkService)
+                .markFailed(batch, "older-batch");
+
+        assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.PENDING);
+        assertThat(report.getBatchRequestId()).isEqualTo("current-batch");
+    }
+
     // 청크 트랜잭션 예외를 다시 던지면서 월과 청크 위치를 운영 로그에 남긴다.
     @Test
     @ExtendWith(OutputCaptureExtension.class)

@@ -12,7 +12,7 @@
 | --- | --- |
 | `구현됨` | Flyway V1~V8에 실제 적용되는 구조 |
 | `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
-| `V1 제외·실제 테이블 존재` | V1 기능 범위에서는 제외됐지만 현재 Flyway에는 테이블이 존재함 |
+| `V1 제외·V2 구현` | V1 기능에서는 제외됐지만 V2에서 서버 기능으로 구현됨 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
 
 ### 현재 스키마 기준 및 변경 사항
@@ -22,7 +22,7 @@
 - Chat Server가 소유하는 채팅 schema는 별도 DB에 있으며 이 문서에서 Backend 테이블로 정의하지 않음
 - V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
 - V4의 `places` 컬럼 변경, 법정동 쌍 CHECK, 좌표 UNIQUE를 실제 구조로 반영
-- `record_drafts`는 정책상 V1 제외이지만 Flyway V1에 존재함을 명시
+- `record_drafts`는 V1 기능 제외 이력을 유지하고, V2 API 및 V5 실제 스키마를 반영
 - 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
 - V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
 - 설계 문서와 Flyway 사이의 차이는 문서 끝의 정합성 표에서 원본과 현재 상태를 함께 표시
@@ -45,7 +45,7 @@
 - 레거시 `weather`를 23번으로 명시하고 `weather_grids`, `weather_grid_forecasts`를 24~25번으로 배치
 - 날씨 캐시는 `(weather_grid_id, forecast_at)` 유일성 보장
 - `records.weather_condition`은 7개 상태 `CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER`만 저장
-- `record_drafts`는 기존 설계 내용을 보존하고 `[V1 제외]`로 표시
+- `record_drafts`는 V1 제외였던 이력과 V2 구현 상태를 함께 표시
 - AI 기억 검색 및 Spotify 계정 저장 기능은 V1 범위에서 제외
 - 1:1 매칭은 같은 질문의 반대 선택지 사용자를 FIFO로 연결한다
 - `matches.chat_room_id`와 `notifications.chat_room_id`는 Chat DB의 논리 ID이며 Backend FK가 아니다
@@ -105,7 +105,7 @@
 | `notifications` | `users.user_id` ↔ `notifications.user_id` | 1:N | 한 사용자는 친구 요청, 매칭 완료 등 서비스에서 발생하는 여러 알림을 받을 수 있다. |
 | `refresh_tokens` | `users.user_id` ↔ `refresh_tokens.user_id` | 1:1 | 각 Refresh Token은 한 사용자에게 속하며, 한 사용자는 로그인 세션에서 한 Refresh Token을 발급받을 수 있다. |
 | `uploads` | `users.user_id` ↔ `uploads.user_id` | 1:N | 한 사용자는 자물쇠 생성 과정에서 여러 임시 이미지를 업로드할 수 있으며, 각 임시 업로드는 한 명의 소유 사용자에게 속한다. |
-| `record_drafts` | `users.user_id` ↔ `record_drafts.user_id` | 1:N | 임시저장을 서버에서 관리하는 방식으로 확장할 경우 사용자의 작성 중인 자물쇠를 저장하기 위해 연결할 수 있다. |
+| `record_drafts` | `users.user_id` ↔ `record_drafts.user_id` | 1:1 | 사용자당 임시저장은 최대 1개이며 `uk_record_drafts_user`로 보장한다. |
 
 ---
 
@@ -193,7 +193,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- |
 | `records` | `places.place_id` ↔ `records.place_id` | 1:N | 하나의 장소에 여러 자물쇠가 존재할 수 있다. |
 | `monthly_reports` | `places.place_id` ↔ `monthly_reports.top_place_id` | 1:N | 월간 대표 법정동을 선정한 뒤 그 동의 대표 장소 행을 `top_place_id`에 저장한다. |
-| `record_drafts` | `places.place_id` ↔ `record_drafts.place_id` | 1:N | 서버 기반 자물쇠 임시저장을 지원할 경우 작성 중 선택된 장소를 복원하기 위해 장소를 참조할 수 있다. |
+| `record_drafts` | `uploads.upload_id` ↔ `record_drafts.upload_id` | N:1 | 사진이 있는 임시저장은 Upload 메타데이터를 참조한다. Draft의 유효기간 동안 새 Signed URL을 발급할 수 있으며 Draft 삭제만으로 Upload/GCS 객체를 삭제하지 않는다. |
 
 ---
 
@@ -378,28 +378,32 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 8. record_drafts - 자물쇠 임시저장 [V1 제외]
+## 8. record_drafts - 자물쇠 임시저장 [V1 제외, V2 구현]
 
 #### 1. 테이블 설명
 
-> **상태: V1 제외** — 기존 설계 내용은 이력 보존을 위해 유지하며 V1 구현 대상에서는 제외한다.
+> **상태: V1 제외, V2 구현** — V1에서는 사용하지 않았으며 V2에서 사용자당 1개의 서버 임시저장 API를 제공한다.
 
-자물쇠 작성 중인 내용을 서버에 임시 저장하여 이후 다시 불러올 수 있도록 하기 위한 테이블이다.
-
-( V1에서는 브라우저 로컬 저장소를 이용하므로 사용하지 않으며, 향후 계정 기반 임시저장 및 다른 기기·브라우저 간 임시저장 동기화를 지원할 경우 도입을 검토한다. )
+자물쇠 작성 중인 전체 스냅샷을 사용자별로 저장하고, 다른 기기·브라우저에서도 다시 불러올 수 있도록 한다. `updated_at`부터 14일이 지난 Draft는 조회되지 않으며, PUT으로 다시 저장하면 같은 행을 갱신하여 보관 기간을 연장한다. 만료 행은 별도 물리 삭제하지 않는다.
 
 #### 2. 컬럼 정의
 
 | 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `record_draft_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 임시저장 데이터 고유 ID | 임시저장 데이터를 고유하게 식별하기 위한 숫자형 PK이다. | 임시저장 한 건을 식별한다. |
-| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 임시저장을 작성한 사용자 ID | `users.user_id`를 참조하여 임시저장 데이터의 소유자를 식별한다. | 어떤 사용자의 임시저장인지 확인한다. |
-| `place_id` | `BIGINT` | - | NULL | NULL | FK | 작성 중 선택된 장소 ID | 임시저장 시점에는 장소 선택이 완료되지 않았을 수 있으므로 NULL을 허용한다. | 작성 화면 복원 시 선택했던 장소를 복원한다. |
-| `music_track_id` | `BIGINT` | - | NULL | NULL | FK | 작성 중 선택된 음악 ID | 음악 선택 전에도 임시저장이 가능할 수 있으므로 NULL을 허용한다. | 선택했던 음악을 복원한다. |
-| `mood_score` | `TINYINT` | - | NOT NULL | - | - | 작성 중 선택한 기분 | 기분은 `-50 ~ 50` 범위의 정수값으로 저장한다. 생성 화면의 초기 기분값은 애플리케이션에서 `0`으로 설정하며, 임시저장 시 현재 기분값을 명시적으로 저장하므로 DB 기본값은 두지 않는다. | 임시저장 시점의 기분값을 보존하여 작성 화면 복원 시 사용한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 임시저장을 작성한 사용자 ID | `users.user_id`를 참조하며 `uk_record_drafts_user`로 사용자당 한 행만 허용한다. | 임시저장의 소유자를 식별한다. |
+| `latitude` | `DECIMAL` | `11,7` | NULL | NULL | - | 작성 중 선택한 위도 | 위치 선택 전에는 NULL을 허용한다. | 작성 화면 복원에 사용한다. |
+| `longitude` | `DECIMAL` | `10,7` | NULL | NULL | - | 작성 중 선택한 경도 | 위치 선택 전에는 NULL을 허용한다. | 작성 화면 복원에 사용한다. |
+| `legal_dong_code` | `VARCHAR` | 20 | NULL | NULL | - | 법정동 코드 | 위치 정보가 있을 때 선택적으로 저장한다. | 위치 표시 및 복원에 사용한다. |
+| `legal_dong_name` | `VARCHAR` | 100 | NULL | NULL | - | 법정동 이름 | 위치 정보가 있을 때 선택적으로 저장한다. | 위치 표시 및 복원에 사용한다. |
+| `external_track_id` | `VARCHAR` | 22 | NULL | NULL | - | 외부 음악 트랙 ID | 음악 선택 전에는 NULL을 허용한다. | 선택한 음악 정보를 복원한다. |
+| `title` | `VARCHAR` | 255 | NULL | NULL | - | 음악 제목 | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `artist_name` | `VARCHAR` | 255 | NULL | NULL | - | 아티스트명 | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `album_image_url` | `VARCHAR` | 255 | NULL | NULL | - | 앨범 이미지 URL | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `external_url` | `VARCHAR` | 255 | NULL | NULL | - | 외부 음악 URL | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `mood_score` | `TINYINT` | - | NULL | NULL | - | 작성 중 선택한 기분 | API에서 null/생략된 값은 0으로 저장하며 허용 범위는 `-50 ~ 50`이다. | 임시저장 시점의 기분값을 복원한다. |
 | `comment` | `VARCHAR` | 80 | NULL | NULL | - | 작성 중 입력한 코멘트 | 자물쇠의 코멘트 최대 길이와 동일하게 관리한다. | 작성 중이던 코멘트를 복원한다. |
-| `photo_url` | `VARCHAR` | 255 | NULL | NULL | - | 임시 업로드된 사진 위치 | 사진이 선택되지 않았을 수 있으므로 NULL을 허용한다. | 임시저장 복원 시 사진을 다시 표시한다. |
-| `expires_at` | `DATETIME` | - | NULL | NULL | - | 임시저장 데이터 만료 시각 | 서버에 오래된 임시 데이터를 계속 보관하지 않도록 만료 정책을 적용할 경우 사용한다. | 만료된 임시저장 데이터를 정리하는 기준이 된다. |
+| `upload_id` | `BIGINT` | - | NULL | NULL | FK | 연결된 임시 Upload ID | 사진이 선택되지 않았을 수 있으므로 NULL이며 `uploads.upload_id`를 참조한다. | Draft 사진의 Upload 메타데이터를 찾고 Signed URL을 발급한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 임시저장 생성 시각 | 임시저장이 처음 생성된 시점을 기록한다. | 임시저장 생성 시점을 관리한다. |
 | `updated_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 마지막 임시저장 시각 | 작성 내용이 갱신된 마지막 시점을 기록한다. | 가장 최근 작성 상태와 임시저장 시점을 관리한다. |
 
@@ -408,18 +412,28 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
 | --- | --- | --- | --- | --- |
 | `pk_record_drafts` | PRIMARY KEY | `record_draft_id` | - | 각 임시저장 데이터를 고유하게 식별한다. |
+| `uk_record_drafts_user` | UNIQUE | `user_id` | - | 사용자당 임시저장 행을 최대 1개로 제한한다. |
 | `fk_record_drafts_user` | FOREIGN KEY | `user_id` | `users.user_id` | 임시저장 데이터의 소유 사용자와 연결한다. |
-| `fk_record_drafts_place` | FOREIGN KEY | `place_id` | `places.place_id` | 임시저장된 장소가 있는 경우 해당 장소와 연결한다. |
-| `fk_record_drafts_music_track` | FOREIGN KEY | `music_track_id` | `music_tracks.music_track_id` | 임시 선택된 음악이 있는 경우 해당 음악과 연결한다. |
+| `fk_record_drafts_upload` | FOREIGN KEY | `upload_id` | `uploads.upload_id` | 선택된 사진의 Upload 메타데이터를 참조한다. |
 | `chk_record_drafts_mood_score` | CHECK | `mood_score` | - | `mood_score`가 서비스에서 정의한 `-50 ~ 50` 범위를 벗어나지 않도록 `CHECK (mood_score BETWEEN -50 AND 50)`를 적용한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_record_draft_count` | 사용자당 임시저장은 최대 1개이며 `uk_record_drafts_user`로 보장한다. |
+| `rule_record_draft_upsert` | PUT은 전체 스냅샷 Upsert다. 생략/null 선택 필드는 제거하며 moodScore 생략/null은 0으로 저장한다. |
+| `rule_record_draft_expiration` | 마지막 저장 시각 `updated_at`부터 14일이 되는 시점부터 만료한다. GET은 만료 Draft를 반환하지 않고 updated_at을 변경하지 않으며, PUT 재저장은 기존 행을 갱신한다. |
+| `rule_record_draft_upload` | 일반 Upload는 생성 후 1시간 동안 사용 가능하다. 활성 Draft가 이미 참조하는 본인 Upload는 Draft 유효기간 내 조회를 위해 새 10분 Signed URL을 발급할 수 있다. |
+| `rule_record_draft_gcs` | Draft 사진 교체·삭제·만료 시 Upload 메타데이터와 GCS 객체를 삭제하지 않는다. GCS 객체 물리 삭제 및 만료 cleanup은 V2 범위에 포함하지 않는다. |
+| `rule_record_draft_record_create` | 최종 Record 생성 성공 시 해당 사용자의 Draft를 같은 DB 트랜잭션에서 삭제한다. RecordPhoto는 최종 요청의 Upload를 사용하며 해당 Upload 메타데이터만 기존 정책대로 삭제한다. GCS 객체는 유지한다. |
 
 #### 4. 관계
 
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
-| `users` | `record_drafts.user_id` ↔ `users.user_id` | N:1 | 하나의 임시저장은 한 사용자에게 속하며, 서버 임시저장 정책에 따라 한 사용자가 여러 임시저장을 가질 수 있다. |
-| `places` | `record_drafts.place_id` ↔ `places.place_id` | N:1 | 임시저장 중 장소를 선택한 경우 하나의 장소를 참조하며, 같은 장소가 여러 임시저장에서 사용될 수 있다. |
-| `music_tracks` | `record_drafts.music_track_id` ↔ `music_tracks.music_track_id` | N:1 | 임시저장 중 음악을 선택한 경우 하나의 음악을 참조하며, 같은 음악이 여러 임시저장에서 사용될 수 있다. |
+| `users` | `record_drafts.user_id` ↔ `users.user_id` | 1:1 | `uk_record_drafts_user`는 사용자당 Draft 최대 1개를 보장한다. |
+| `uploads` | `record_drafts.upload_id` ↔ `uploads.upload_id` | N:1 | Draft가 임시 사진을 선택한 경우 Upload 메타데이터를 참조한다. Draft 사진 조회는 10분 Signed URL을 발급하며 일반 Upload 1시간 제한은 유지한다. |
 
 ---
 
@@ -1032,7 +1046,7 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
 | `friend_requests` | 대기 요청만 저장하고 처리 후 삭제 | V1에 별도 `status` 컬럼 없이 사용자 쌍 UNIQUE로 구성 | 현재 구조와 정책이 일치하며 `status` 컬럼을 임의 추가하지 않음 |
 | `recommendation_playlists` | 사용자별 현재 플레이리스트 하나 유지 | V1은 `user_id`, `created_at`만 저장하며 `source`, `status`는 없음 | 현재 구조를 유지하고 추천 문맥은 정책으로만 기록 |
-| `record_drafts` | 브라우저 로컬 임시저장을 사용하여 V1 기능에서 제외 | Flyway V1에 테이블과 FK가 실제 존재 | `V1 제외·실제 테이블 존재`; 삭제 여부는 새 migration 승인 필요 |
+| `record_drafts` | V1에서는 브라우저 로컬 임시저장을 사용하고 서버 기능에서 제외 | Flyway V1 생성, V5에서 현재 임시저장 스키마로 조정 | V1 제외 이력 유지, V2에서 사용자당 1개·14일 보관의 서버 임시저장 API 구현 |
 | `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
 | `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
 | `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | Flyway V1과 현재 작업 트리에 엔티티·생성·목록·상세 조회 구현 | DB와 공개 조회 API는 구현됨, 내부 생성·AI 콜백은 정책서에서 분리 기록 |

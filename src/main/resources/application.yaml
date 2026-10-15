@@ -34,6 +34,10 @@ spring:
       # photo 한 장과 multipart boundary/header overhead를 허용한다.
       max-request-size: 11MB
 
+memory-search:
+  # 마지막으로 완료된 질문 뒤 대화 문맥을 보존하는 유휴 시간이다.
+  conversation-idle-ttl: 30m
+
 # 상태 확인과 Prometheus 지표 엔드포인트를 HTTP로 노출한다.
 management:
   endpoints:
@@ -104,3 +108,6 @@ chat-server:
   internal-api-key: ${CHAT_INTERNAL_API_KEY:}
   connect-timeout: ${CHAT_SERVER_CONNECT_TIMEOUT:PT2S}
   read-timeout: ${CHAT_SERVER_READ_TIMEOUT:PT3S}
+
+chat-auth:
+  verify-api-key: ${CHAT_AUTH_VERIFY_API_KEY:}

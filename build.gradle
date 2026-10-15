@@ -2,6 +2,7 @@ plugins {
     id 'java'
     // 컴파일 전 Java 코드 스타일과 기본 문법 규칙을 검사한다.lukas(이대훈)
     id 'checkstyle'
+    id 'jacoco'
     id 'org.springframework.boot' version '4.1.1'
     id 'io.spring.dependency-management' version '1.1.7'
 }
@@ -66,8 +67,49 @@ dependencies {
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+jacoco {
+    toolVersion = '0.8.13'   // JDK 21을 지원하는 버전
+}
+
+// 측정에서 제외할 대상 
+ext.coverageExcludes = [
+    '**/*Application.class',
+    '**/config/**',
+    '**/dto/**',
+    '**/*Request.class',
+    '**/*Response.class'
+]
+
 tasks.named('test') {
     useJUnitPlatform()
+    finalizedBy jacocoTestReport
+}
+
+jacocoTestReport {
+    dependsOn tasks.named('test')
+    reports {
+        xml.required = true
+        html.required = true
+    }
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, exclude: coverageExcludes)
+    }))
+}
+
+jacocoTestCoverageVerification {
+    dependsOn tasks.named('test')
+    classDirectories.setFrom(files(classDirectories.files.collect {
+        fileTree(dir: it, exclude: coverageExcludes)
+    }))
+    violationRules {
+        rule {
+            limit {
+                counter = 'LINE'
+                value = 'COVEREDRATIO'
+                minimum = 0.60
+            }
+        }
+    }
 }
 
 sourceSets {

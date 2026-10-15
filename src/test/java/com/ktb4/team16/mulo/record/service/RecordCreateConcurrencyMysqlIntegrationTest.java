@@ -373,7 +373,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         return new Fixture(user.getUserId(), upload.getUploadId(), request);
     }
 
-    /** 격리 DB 연결과 현재 Flyway V8 적용 상태를 확인한다. */
+    /** 격리 DB 연결과 현재 Flyway V9 적용 상태를 확인한다. */
     private void assertDatabaseTarget() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
@@ -381,7 +381,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
                     .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
             assertThat(jdbcTemplate.queryForObject(
                     "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isEqualTo(8);
+                    .isEqualTo(9);
         }
         assertThat(dataSource).isInstanceOf(HikariDataSource.class);
         assertThat(hikariMaximumPoolSize())

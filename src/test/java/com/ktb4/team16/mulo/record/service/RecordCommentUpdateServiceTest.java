@@ -41,7 +41,9 @@ class RecordCommentUpdateServiceTest {
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            mock(GcsStorageService.class)
+            mock(GcsStorageService.class),
+            mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
     );
 
     @Test

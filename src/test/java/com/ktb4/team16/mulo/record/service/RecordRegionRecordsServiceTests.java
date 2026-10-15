@@ -42,7 +42,9 @@ class RecordRegionRecordsServiceTests {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            gcsStorageService);
+            gcsStorageService,
+            mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
+            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul")));
 
     @Test
     void returnsOnlySelectedRegionRecords() {

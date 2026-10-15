@@ -15,6 +15,7 @@ public enum ErrorCode {
     MATCH_REQUEST_CLOSED(HttpStatus.CONFLICT, "오늘 매칭 요청 가능 시간이 종료되었습니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
     LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
     LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),
     PHOTO_REQUIRED(HttpStatus.BAD_REQUEST, "사진 파일이 필요합니다."),
@@ -33,6 +34,7 @@ public enum ErrorCode {
     INVALID_CURSOR(HttpStatus.BAD_REQUEST, "유효하지 않은 커서입니다."),
     INVALID_SIZE(HttpStatus.BAD_REQUEST, "올바른 페이지 크기를 입력해주세요."),
     INVALID_RECORD_ID(HttpStatus.BAD_REQUEST, "올바른 자물쇠 ID를 입력해주세요."),
+    MEMORY_SEARCH_NO_RECORDS(HttpStatus.BAD_REQUEST, "검색할 자물쇠가 없습니다."),
     COMMENT_TOO_LONG(HttpStatus.BAD_REQUEST, "코멘트는 80자 이하로 입력해주세요."),
     PLACE_IDS_REQUIRED(HttpStatus.BAD_REQUEST, "장소 ID 목록이 필요합니다."),
     PLACE_IDS_COUNT_EXCEEDED(HttpStatus.BAD_REQUEST,
@@ -62,6 +64,8 @@ public enum ErrorCode {
     FRIEND_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 보낸 친구 요청이 있습니다."),
     FRIENDSHIP_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 친구 관계입니다."),
     MATCH_REQUEST_ALREADY_EXISTS(HttpStatus.CONFLICT, "이미 매칭 요청이 존재합니다."),
+    MEMORY_SEARCH_IN_PROGRESS(HttpStatus.CONFLICT, "이전 기억 검색이 진행 중입니다."),
+    MEMORY_SEARCH_CONVERSATION_GONE(HttpStatus.GONE, "대화가 종료되었거나 만료되었습니다."),
 
     UPLOAD_NOT_FOUND(HttpStatus.NOT_FOUND, "업로드를 찾을 수 없습니다."),
     RECORD_NOT_FOUND(HttpStatus.NOT_FOUND, "자물쇠를 찾을 수 없습니다."),

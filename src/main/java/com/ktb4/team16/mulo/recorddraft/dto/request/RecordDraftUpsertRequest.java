@@ -8,6 +8,7 @@ import jakarta.validation.constraints.Max;
 import jakarta.validation.constraints.Min;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.Positive;
 import jakarta.validation.constraints.Size;
 import java.math.BigDecimal;
 
@@ -18,7 +19,7 @@ public record RecordDraftUpsertRequest(
         @Max(value = 50, message = "INVALID_INPUT_VALUE")
         Integer moodScore,
         @Size(max = 80, message = "INVALID_INPUT_VALUE") String comment,
-        Long uploadId
+        @Positive(message = "INVALID_INPUT_VALUE") Long uploadId
 ) {
     public record Location(
             @NotNull(message = "INVALID_INPUT_VALUE")
