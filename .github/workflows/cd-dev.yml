@@ -58,8 +58,8 @@ jobs:
         run: |
           TAG=$(gcloud artifacts docker images list \
             "${{ secrets.GCP_REGION }}-docker.pkg.dev/${{ secrets.GCP_PROJECT_ID_Develop }}/${{ secrets.PROJECT_REPOSITORY }}/${{ secrets.IMAGE_NAME }}" \
-            --include-tags --sort-by="~UPDATE_TIME" --limit=1 \
-            --format="value(TAGS)" | cut -d',' -f1)
+            --include-tags --sort-by="~UPDATE_TIME" \
+            --format="value(TAGS)" | tr ',' '\n' | grep -m1 '^dev-' || true)
           echo "tag=$TAG" >> "$GITHUB_OUTPUT"
 
       # 3. backend.env 파일을 GitHub Secrets 값으로 생성한다.

@@ -53,8 +53,8 @@ jobs:
             TAG="$INPUT_TAG"
           else
             TAG=$(gcloud artifacts docker images list "$IMAGE_REPO" \
-              --include-tags --sort-by="~UPDATE_TIME" --limit=1 \
-              --format="value(TAGS)" | cut -d',' -f1)
+              --include-tags --sort-by="~UPDATE_TIME" \
+              --format="value(TAGS)" | tr ',' '\n' | grep -m1 -E '^[0-9]+\.[0-9]+\.[0-9]+$' || true)
           fi
           if [ -z "$TAG" ]; then
             echo "배포할 이미지 태그를 찾을 수 없습니다."
