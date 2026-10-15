@@ -28,11 +28,13 @@ V3__add_xxx_index.sql
 
 ## 2. MySQL 8.4 실행
 
-### 방법 A: Docker Compose 사용 권장
+### 방법 A: 별도로 관리하는 Docker Compose 사용
 
-Docker가 설치되어 있다면 프로젝트 루트에서 `.env.example`을 `.env`로 복사하고
-`DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`를 직접 입력한다. `.env`는 Git에서 제외된다.
-Compose는 `.env`를 자동으로 읽지만 Spring Boot/Gradle은 자동으로 읽지 않는다.
+팀 백엔드 저장소에는 MySQL Compose 파일이 없다. Docker를 사용하는 개발자는
+자신이 관리하는 Compose 파일의 디렉터리에서 MySQL 8.4를 실행한다.
+그 디렉터리의 `.env`에는 `DB_PASSWORD`, `MYSQL_ROOT_PASSWORD`를 직접 입력하고
+Git에서 제외한다.
+Compose는 해당 디렉터리의 `.env`를 자동으로 읽지만 Spring Boot/Gradle은 자동으로 읽지 않는다.
 
 비밀번호는 쉘에서도 읽을 수 있도록 작은따옴표로 감싸 작성한다. 기존 DB 볼륨을
 사용한다면 기존 비밀번호를 사용한다. `.env` 변경만으로 DB 계정 비밀번호가 바뀌지 않는다.
@@ -89,7 +91,20 @@ GRANT ALL PRIVILEGES ON mulo.* TO 'mulo'@'localhost';
 FLUSH PRIVILEGES;
 ```
 
-## 3. 애플리케이션 실행
+## 3. AI 기억 검색 대화 저장소
+
+기억 검색의 최근 5턴은 백엔드 서버 한 대의 프로세스 메모리에 저장한다.
+마지막 완료 질문으로부터 30분 동안 사용하지 않으면 만료된다. 서버를 재시작하면
+이전 대화는 사라지며, 기존 대화 ID로 질문하면 `410` 응답을 받고 새 대화를 시작한다.
+로컬 Redis 실행은 필요하지 않다.
+
+`SPRING_PROFILES_ACTIVE=local`에서는 실제 AI 대신 현재 사용자의 활성 자물쇠를
+최신 생성일·ID 내림차순으로 최대 50건 반환한다. 질문 내용과 이전 문맥은 아직
+검색 조건으로 쓰지 않으며 제안 카드는 반환하지 않는다. 카드의 답변 문구는
+개발용 임시 결과임을 표시한다. 로컬 외 환경에서는 실제 AI가 연결되기 전까지
+기억 검색 질문에 `AI_SERVICE_ERROR`를 반환한다.
+
+## 4. 애플리케이션 실행
 
 macOS/Linux에서 직접 작성한 신뢰할 수 있는 `.env`를 환경변수로 로드한 후 실행한다:
 
@@ -98,6 +113,16 @@ set -a
 source .env
 set +a
 SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
+```
+
+DB가 필요한 테스트도 같은 방식으로 `.env`를 로드한 셸에서 실행한다. `.env`가
+존재하는 것만으로 `./gradlew test`가 비밀번호를 읽지는 않는다.
+
+```bash
+set -a
+source .env
+set +a
+./gradlew test
 ```
 
 Windows에서는 IDE 실행 설정 또는 환경변수에 `DB_PASSWORD`와
@@ -118,7 +143,7 @@ SPRING_PROFILES_ACTIVE=local ./gradlew bootRun
 
 전체 검증도 위 환경변수를 로드한 같은 터미널에서 `./gradlew clean build`로 수행한다.
 
-## 4. 첫 실행에서 일어나는 일
+## 5. 첫 실행에서 일어나는 일
 
 애플리케이션 시작 시 순서는 다음과 같다.
 
@@ -141,7 +166,7 @@ src/main/resources/db/migration/V1__init_schema.sql
 
 Flyway가 최초 실행되면 DB에 `flyway_schema_history` 테이블도 자동 생성한다.
 
-## 5. 두 개발자의 일상적인 작업 방식
+## 6. 두 개발자의 일상적인 작업 방식
 
 개발 시작:
 
@@ -171,7 +196,7 @@ ADD COLUMN xxx VARCHAR(100) NULL;
 
 그리고 관련 Java 코드와 migration을 같이 커밋한다.
 
-## 6. 절대 지켜야 할 규칙
+## 7. 절대 지켜야 할 규칙
 
 ### 이미 적용된 migration을 수정하지 않는다
 
@@ -217,7 +242,7 @@ spring:
 
 로 유지한다.
 
-## 7. V1 스키마와 Entity 개발 순서
+## 8. V1 스키마와 Entity 개발 순서
 
 초기 구축 순서는 다음으로 통일한다.
 
@@ -231,7 +256,7 @@ spring:
 
 Entity를 먼저 작성해 Hibernate가 스키마를 임의 생성하게 하지 않는 이유는 MULO가 Generated Column, CHECK, 복합 UNIQUE, ENUM, `ON DELETE CASCADE/SET NULL` 등 DB 레벨 제약을 적극적으로 사용하기 때문이다.
 
-## 8. 현재 파일 역할
+## 9. 현재 파일 역할
 
 ```text
 build.gradle
@@ -240,8 +265,8 @@ build.gradle
 application.yaml
   DB 접속 / Flyway / Hibernate validate 설정
 
-compose.yaml
-  두 개발자가 동일한 MySQL 8.4를 로컬에서 실행하기 위한 선택적 Docker 환경
+별도 관리하는 MySQL Compose 파일
+  Docker를 사용하는 개발자의 로컬 MySQL 8.4 환경. 팀 백엔드 저장소에는 없음
 
 src/main/resources/db/migration/V1__init_schema.sql
   최초 DB 스키마
@@ -250,7 +275,7 @@ README_DEV_SETUP.md
   팀 개발환경 및 Flyway 운영 규칙
 ```
 
-## 9. 주의
+## 10. 주의
 
 `record_drafts`는 테이블 정의서에 포함되어 있어 V1 DDL에도 포함했지만, 현재 V1 서비스 정책에서는 브라우저 로컬 저장소를 사용하여 서버 기능에서는 사용하지 않는 예약 테이블이다.
 
