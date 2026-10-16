@@ -22,6 +22,8 @@ import org.springframework.stereotype.Service;
 @RequiredArgsConstructor
 public class MemorySearchService {
 
+    private static final String NO_DISPLAYABLE_RECORDS_ANSWER = "표시할 수 있는 자물쇠가 없어요.";
+
     private final MemorySearchConversationStore store;
     private final MemorySearchRequestGate gate;
     private final MemorySearchRecordAvailability availability;
@@ -57,7 +59,10 @@ public class MemorySearchService {
                     new MemorySearchTurn(query, publishedIds))) {
                 throw new MemorySearchDomainException(ErrorCode.MEMORY_SEARCH_CONVERSATION_GONE);
             }
-            return new MemorySearchResult(aiResult.answer(), exactCards, suggestedCards);
+            // AI가 정확 일치 결과를 보냈지만 검증 후 모두 제외되면 찾았다는 문구를 교체한다.
+            String answer = !aiResult.recordIds().isEmpty() && exactCards.isEmpty()
+                    ? NO_DISPLAYABLE_RECORDS_ANSWER : aiResult.answer();
+            return new MemorySearchResult(answer, exactCards, suggestedCards);
         }
     }
 
