@@ -87,6 +87,13 @@ public class NotificationOutboxRepository {
                 """, status, retryCount, nextRetryAt, errorCode, failedAt, eventId.toString());
     }
 
+    /** 친구 알림 수신자 전체를 ID 순서로 공유 잠금해 이후 대상 잠금과 순서를 맞춘다. */
+    public void lockExistingRecipientsInIdOrder(List<Long> recipientIds) {
+        recipientIds.stream().distinct().sorted().forEach(userId -> jdbcTemplate.queryForList("""
+                SELECT user_id FROM users WHERE user_id = ? FOR SHARE
+                """, Long.class, userId));
+    }
+
     /** 대상 Target이 같은 DB에 존재하면 공유 잠금으로 INSERT와 동시 삭제를 직렬화한다. */
     public Long lockExistingTarget(NotificationType type, Long targetId) {
         if (targetId == null) {

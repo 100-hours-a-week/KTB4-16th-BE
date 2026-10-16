@@ -63,7 +63,27 @@ jobs:
       # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
       - name: Prepare test database
         run: |
-          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+
+      # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
+      - name: Run Friend Deadlock Regression
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          DB_USERNAME: mulo
+          DB_PASSWORD: mulo
+          MULO_DEADLOCK_IT_ADMIN_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          MULO_DEADLOCK_IT_ADMIN_USERNAME: root
+          MULO_DEADLOCK_IT_ADMIN_PASSWORD: root
+          JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          GCP_PROJECT_ID: mulo-ci-test
+          GCS_BUCKET_NAME: mulo-ci-test
+          KAKAO_REST_API_KEY: ci-test
+          KMA_SERVICE_KEY: ci-test
+          SPOTIFY_CLIENT_ID: ci-test
+          SPOTIFY_CLIENT_SECRET: ci-test
+          AI_INTERNAL_TOKEN: ci-test-token
+          JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
+        run: ./gradlew test --tests com.ktb4.team16.mulo.friend.service.FriendDeadlockMysqlIntegrationTest --rerun-tasks
 
       # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
       - name: Run Tests and Coverage Verification
@@ -84,21 +104,7 @@ jobs:
           AI_INTERNAL_TOKEN: ci-test-token
           # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
-        run: |
-          # TODO: MySQL 8.4에서 친구 요청 동시 실행 테스트 2개가 데드락(CannotAcquireLockException)으로 실패한다.
-          # 서비스의 데드락 처리를 고친 뒤 init script와 --init-script 옵션을 지운다.
-          cat > "$RUNNER_TEMP/exclude-deadlock-tests.gradle" <<'EOF'
-          allprojects {
-              tasks.withType(Test).configureEach {
-                  filter {
-                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentOppositeRequestsBecomeOneFriendship'
-                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentSameDirectionRequestsKeepOnePending'
-                  }
-              }
-          }
-          EOF
-          echo "데드락으로 실패하는 친구 동시 실행 테스트 2개를 제외하고 실행한다."
-          ./gradlew --init-script "$RUNNER_TEMP/exclude-deadlock-tests.gradle" test jacocoTestReport jacocoTestCoverageVerification
+        run: ./gradlew test jacocoTestReport jacocoTestCoverageVerification --rerun-tasks
 
       # 리포트는 실패했을 때도 확인할 수 있도록 항상 올린다
       - name: Upload coverage report
@@ -221,7 +227,27 @@ jobs:
       # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
       - name: Prepare test database
         run: |
-          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+
+      # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
+      - name: Run Friend Deadlock Regression
+        env:
+          DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          DB_USERNAME: mulo
+          DB_PASSWORD: mulo
+          MULO_DEADLOCK_IT_ADMIN_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
+          MULO_DEADLOCK_IT_ADMIN_USERNAME: root
+          MULO_DEADLOCK_IT_ADMIN_PASSWORD: root
+          JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
+          GCP_PROJECT_ID: mulo-ci-test
+          GCS_BUCKET_NAME: mulo-ci-test
+          KAKAO_REST_API_KEY: ci-test
+          KMA_SERVICE_KEY: ci-test
+          SPOTIFY_CLIENT_ID: ci-test
+          SPOTIFY_CLIENT_SECRET: ci-test
+          AI_INTERNAL_TOKEN: ci-test-token
+          JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
+        run: ./gradlew test --tests com.ktb4.team16.mulo.friend.service.FriendDeadlockMysqlIntegrationTest --rerun-tasks
 
       # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
       - name: Run Tests and Coverage Verification
@@ -242,21 +268,7 @@ jobs:
           AI_INTERNAL_TOKEN: ci-test-token
           # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
-        run: |
-          # TODO: MySQL 8.4에서 친구 요청 동시 실행 테스트 2개가 데드락(CannotAcquireLockException)으로 실패한다.
-          # 서비스의 데드락 처리를 고친 뒤 init script와 --init-script 옵션을 지운다.
-          cat > "$RUNNER_TEMP/exclude-deadlock-tests.gradle" <<'EOF'
-          allprojects {
-              tasks.withType(Test).configureEach {
-                  filter {
-                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentOppositeRequestsBecomeOneFriendship'
-                      excludeTestsMatching 'com.ktb4.team16.mulo.friend.service.FriendMysqlIntegrationTest.concurrentSameDirectionRequestsKeepOnePending'
-                  }
-              }
-          }
-          EOF
-          echo "데드락으로 실패하는 친구 동시 실행 테스트 2개를 제외하고 실행한다."
-          ./gradlew --init-script "$RUNNER_TEMP/exclude-deadlock-tests.gradle" test jacocoTestReport jacocoTestCoverageVerification
+        run: ./gradlew test jacocoTestReport jacocoTestCoverageVerification --rerun-tasks
 
       # 리포트는 실패했을 때도 확인할 수 있도록 항상 올린다
       - name: Upload coverage report
