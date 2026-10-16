@@ -16,7 +16,7 @@ public record UserProfileResponse(String message, UserProfileData data) {
                         user.getEmail(),
                         user.getPreferredGenres() == null
                                 ? null : List.copyOf(user.getPreferredGenres()),
-                        user.isGenreOnboardingDone(),
+                        user.hasCompletedGenreOnboarding(),
                         user.getCreatedAt()));
     }
 

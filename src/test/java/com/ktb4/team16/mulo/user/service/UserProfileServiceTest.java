@@ -70,22 +70,32 @@ class UserProfileServiceTest {
     }
 
     @Test
-    void getMyProfileReturnsSelectedGenresAndExplicitSkipState() {
+    void getMyProfileTreatsOnlyValidPreferredGenresAsCompletedOnboarding() {
         User selected = User.signup("selected@example.com", "password-hash", "선택사용자");
         ReflectionTestUtils.setField(selected, "preferredGenres", List.of("재즈", "인디음악"));
-        ReflectionTestUtils.setField(selected, "genreOnboardingDone", true);
-        User skipped = User.signup("skipped@example.com", "password-hash", "건너뛴사용자");
-        ReflectionTestUtils.setField(skipped, "genreOnboardingDone", true);
+        User inconsistentNull = User.signup("null@example.com", "password-hash", "기존사용자1");
+        ReflectionTestUtils.setField(inconsistentNull, "genreOnboardingDone", true);
+        User inconsistentEmpty = User.signup("empty@example.com", "password-hash", "기존사용자2");
+        ReflectionTestUtils.setField(inconsistentEmpty, "preferredGenres", List.of());
+        ReflectionTestUtils.setField(inconsistentEmpty, "genreOnboardingDone", true);
         when(userRepository.findByUserIdAndDeletedAtIsNull(1L)).thenReturn(Optional.of(selected));
-        when(userRepository.findByUserIdAndDeletedAtIsNull(2L)).thenReturn(Optional.of(skipped));
+        when(userRepository.findByUserIdAndDeletedAtIsNull(2L))
+                .thenReturn(Optional.of(inconsistentNull));
+        when(userRepository.findByUserIdAndDeletedAtIsNull(3L))
+                .thenReturn(Optional.of(inconsistentEmpty));
 
         UserProfileResponse selectedResponse = service.getMyProfile(1L);
-        UserProfileResponse skippedResponse = service.getMyProfile(2L);
+        UserProfileResponse nullResponse = service.getMyProfile(2L);
+        UserProfileResponse emptyResponse = service.getMyProfile(3L);
 
         assertThat(selectedResponse.data().preferredGenres()).containsExactly("재즈", "인디음악");
         assertThat(selectedResponse.data().genreOnboardingDone()).isTrue();
-        assertThat(skippedResponse.data().preferredGenres()).isNull();
-        assertThat(skippedResponse.data().genreOnboardingDone()).isTrue();
+        assertThat(nullResponse.data().preferredGenres()).isNull();
+        assertThat(nullResponse.data().genreOnboardingDone()).isFalse();
+        assertThat(emptyResponse.data().preferredGenres()).isEmpty();
+        assertThat(emptyResponse.data().genreOnboardingDone()).isFalse();
+        assertThat(inconsistentNull.isGenreOnboardingDone()).isTrue();
+        assertThat(inconsistentEmpty.isGenreOnboardingDone()).isTrue();
     }
 
     @Test
@@ -105,17 +115,16 @@ class UserProfileServiceTest {
     }
 
     @Test
-    void emptyPreferredGenresCompletesOnboardingAndStoresNullSelection() {
+    void emptyPreferredGenresCannotCompleteOnboarding() {
         User user = User.signup("user@example.com", "password-hash", "뮤로16");
         when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
                 .thenReturn(Optional.of(user));
 
-        var response = service.updatePreferredGenres(1L, List.of());
+        assertThatThrownBy(() -> service.updatePreferredGenres(1L, List.of()))
+                .isInstanceOf(IllegalArgumentException.class);
 
         assertThat(user.getPreferredGenres()).isNull();
-        assertThat(user.isGenreOnboardingDone()).isTrue();
-        assertThat(response.data().preferredGenres()).isNull();
-        assertThat(response.data().genreOnboardingDone()).isTrue();
+        assertThat(user.isGenreOnboardingDone()).isFalse();
     }
 
     @Test
