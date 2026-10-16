@@ -11,7 +11,7 @@ public record UpdatePreferredGenresResponse(String message, PreferredGenresData 
                 UserMessage.PREFERRED_GENRES_UPDATED.message(),
                 new PreferredGenresData(
                         preferredGenres == null ? null : List.copyOf(preferredGenres),
-                        user.isGenreOnboardingDone()));
+                        user.hasCompletedGenreOnboarding()));
     }
 
     public record PreferredGenresData(List<String> preferredGenres, boolean genreOnboardingDone) {
