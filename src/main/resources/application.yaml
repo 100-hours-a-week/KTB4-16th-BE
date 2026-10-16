@@ -34,16 +34,22 @@ spring:
       # photo 한 장과 multipart boundary/header overhead를 허용한다.
       max-request-size: 11MB
 
+# Tomcat의 연결·스레드 지표를 Micrometer가 수집할 수 있도록 MBean 레지스트리를 켠다.
+server:
+  tomcat:
+    mbeanregistry:
+      enabled: true
+
 memory-search:
   # 마지막으로 완료된 질문 뒤 대화 문맥을 보존하는 유휴 시간이다.
   conversation-idle-ttl: 30m
 
-# 상태 확인과 Prometheus 지표 엔드포인트를 HTTP로 노출한다.
+# 상태, Prometheus, 애플리케이션 정보와 지표 엔드포인트를 HTTP에 등록한다.
 management:
   endpoints:
     web:
       exposure:
-        include: health,prometheus
+        include: health,prometheus,info,metrics
 
 sentry:
   dsn: ${SENTRY_DSN:}
