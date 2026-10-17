@@ -35,6 +35,17 @@ public class TodayVoteQuestionService {
     private final Clock clock;
 
     public TodayVoteQuestionResponse getToday(Long userId) {
+        VoteQuestion question = resolveTodayQuestion(userId);
+        Optional<VoteAnswer> answer = voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(
+                question.getVoteQuestionId(), userId);
+        return new TodayVoteQuestionResponse("투표 조회 성공",
+                new TodayVoteQuestionResponse.Data(question.getVoteQuestionId(),
+                        question.getQuestionText(), question.getOptionA(), question.getOptionB(),
+                        answer.map(VoteAnswer::getSelectedOption).orElse(null),
+                        answer.map(VoteAnswer::getVoteAnswerId).orElse(null)));
+    }
+
+    public VoteQuestion resolveTodayQuestion(Long userId) {
         LocalDate today = LocalDate.now(clock);
         userRepository.findByUserIdAndDeletedAtIsNull(userId)
                 .orElseThrow(UnauthenticatedUserException::new);
@@ -53,13 +64,7 @@ public class TodayVoteQuestionService {
                 || !assignment.musicGenre().equals(question.getMusicGenre())) {
             throw new VoteDomainException(ErrorCode.VOTE_SNAPSHOT_NOT_READY);
         }
-        Optional<VoteAnswer> answer = voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(
-                question.getVoteQuestionId(), userId);
-        return new TodayVoteQuestionResponse("투표 조회 성공",
-                new TodayVoteQuestionResponse.Data(question.getVoteQuestionId(),
-                        question.getQuestionText(), question.getOptionA(), question.getOptionB(),
-                        answer.map(VoteAnswer::getSelectedOption).orElse(null),
-                        answer.map(VoteAnswer::getVoteAnswerId).orElse(null)));
+        return question;
     }
 
     private VoteDailyAssignment assignLateUser(LocalDate today, Long userId) {

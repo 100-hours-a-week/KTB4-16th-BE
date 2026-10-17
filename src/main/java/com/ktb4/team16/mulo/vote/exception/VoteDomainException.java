@@ -11,6 +11,11 @@ public class VoteDomainException extends RuntimeException {
         this.errorCode = errorCode;
     }
 
+    public VoteDomainException(ErrorCode errorCode, Throwable cause) {
+        super(errorCode.message(), cause);
+        this.errorCode = errorCode;
+    }
+
     public ErrorCode errorCode() {
         return errorCode;
     }

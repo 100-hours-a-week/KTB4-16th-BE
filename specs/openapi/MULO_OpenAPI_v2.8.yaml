@@ -4351,7 +4351,8 @@ paths:
         Body의 selectedOption은 "A" 또는 "B"이며, voteQuestionId는 path parameter로 전달한다.
         BE는 매일 00:00 Asia/Seoul에 확정한 사용자 일일 그룹·질문 배정을 사용한다. 사용자가 당일에 이미 배정되었다면 이후 선호 장르, 자물쇠, AI 뷰가 바뀌어도 질문 그룹은 변경되지 않는다. 당일 질문이 없으면 같은 그룹의 전날 질문을 당일 BE 질문으로 복사하며 같은 날짜 공통 질문으로 대체하지 않는다.
         BE는 AI DB 읽기 전용 뷰를 조회하고 AI 그룹을 계산하거나 질문 생성 API/내부 전달 API를 호출하지 않는다. 신규 사용자 등 당일 스냅샷에 배정이 없는 사용자는 첫 조회에서 AI 그룹을 확인해 배정한다. 사용자 행 부재는 취향 정보 부족 판정 사유가 아니며, 이 경우 공통 그룹으로 배정한다.
-        서버는 A/B를 실제 선택지 텍스트로 매핑해 vote_answers.selected_option에 저장한다. 사용자당 동일 질문에 한 번만 답변할 수 있고 수정·재투표는 불가하며 중복은 409 VOTE_ALREADY_ANSWERED다.
+        POST 요청은 GET을 먼저 호출하지 않아도 동일한 당일 배정 로직으로 신규 사용자를 배정한다. 제출 가능한 질문은 로그인 사용자에게 오늘 배정된 질문뿐이며, 다른 질문 ID는 409 VOTE_QUESTION_NOT_ASSIGNED다. 투표는 23:00 이후에도 KST 당일 종료까지 가능하고 자정 이후 이전 날짜 질문 제출은 허용하지 않는다.
+        서버는 A/B를 실제 선택지 텍스트로 매핑해 vote_answers.selected_option에 저장한다. 두 선택지 문구가 같으면 400으로 거부한다. 사용자당 동일 질문에 한 번만 답변할 수 있고 수정·재투표는 불가하며 중복은 409 VOTE_ALREADY_ANSWERED다. 중복 동시 요청은 DB의 사용자·질문 UNIQUE 제약으로 방지한다.
         성공 시 voteAnswerId, 실제 선택지 텍스트와 현재 누적 답변 기준 결과 비율을 반환한다. A는 정수 반올림, B는 100-A이며 답변이 없으면 두 비율 모두 0이다.
         반환된 voteAnswerId는 기존 POST /api/match-requests 요청에 사용하며 해당 API 계약은 변경하지 않는다.
       responses:
@@ -4377,10 +4378,10 @@ paths:
                         properties:
                           optionAPercent:
                             type: integer
-                            format: int64
+                            format: int32
                           optionBPercent:
                             type: integer
-                            format: int64
+                            format: int32
               example:
                 message: 투표 답변 성공
                 data:
@@ -4395,6 +4396,8 @@ paths:
             필수 selectedOption이 누락되어 요청 유효성 검증에 실패했으므로 400.
 
             추가 케이스: 허용되지 않은 선택값
+
+            추가 케이스: 두 선택지 문구가 동일한 질문
 
             추가 케이스: voteQuestionId 형식 오류
             voteQuestionId가 API에서 요구하는 식별자 형식을 만족하지 않으므로 400.
@@ -4457,7 +4460,8 @@ paths:
                 message: 투표를 찾을 수 없습니다.
         '409':
           description: |-
-            동일 사용자가 동일 질문에 이미 답변하여 409 VOTE_ALREADY_ANSWERED. 오늘 날짜 또는 사용자가 답변할 수 있는 장르/공통 질문 조건과 맞지 않는 질문도 기존 409 응답 정책을 따른다.
+            동일 사용자가 동일 질문에 이미 답변한 경우 409 VOTE_ALREADY_ANSWERED.
+            오늘 사용자에게 배정되지 않은 질문 ID인 경우 409 VOTE_QUESTION_NOT_ASSIGNED.
           content:
             application/json:
               schema:
@@ -4470,6 +4474,20 @@ paths:
               example:
                 code: VOTE_ALREADY_ANSWERED
                 message: 이미 답변한 투표입니다.
+        '503':
+          description: 당일 투표 스냅샷 또는 신규 사용자 배정에 필요한 AI 데이터가 준비되지 않은 경우.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: VOTE_SNAPSHOT_NOT_READY
+                message: 오늘의 취향 투표를 준비 중입니다.
         '500':
           description: MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.
           content:
@@ -4491,6 +4509,7 @@ paths:
         schema:
           type: integer
           format: int64
+          minimum: 1
       requestBody:
         required: true
         content:
@@ -4509,7 +4528,7 @@ paths:
               selectedOption: A
       security:
       - bearerAuth: []
-      x-implementation-status: contract-only
+      x-implementation-status: implemented
       x-csrf-required: true
   "/api/vote-questions/{voteQuestionId}/results":
     get:
