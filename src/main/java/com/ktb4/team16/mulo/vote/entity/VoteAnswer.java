@@ -39,4 +39,12 @@ public class VoteAnswer {
 
     @Column(name = "created_at", nullable = false, insertable = false, updatable = false)
     private LocalDateTime createdAt;
+
+    public static VoteAnswer create(User user, VoteQuestion voteQuestion, String selectedOption) {
+        VoteAnswer answer = new VoteAnswer();
+        answer.user = user;
+        answer.voteQuestion = voteQuestion;
+        answer.selectedOption = selectedOption;
+        return answer;
+    }
 }
