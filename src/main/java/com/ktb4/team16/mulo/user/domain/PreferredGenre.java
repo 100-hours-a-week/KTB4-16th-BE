@@ -19,6 +19,7 @@ public enum PreferredGenre {
     JAZZ("재즈"),
     J_POP("J-POP");
 
+    private static final int MIN_SELECTION_COUNT = 1;
     private static final int MAX_SELECTION_COUNT = 3;
 
     private final String value;
@@ -32,7 +33,8 @@ public enum PreferredGenre {
     }
 
     public static boolean isValidSelection(List<String> values) {
-        if (values == null || values.size() > MAX_SELECTION_COUNT) {
+        if (values == null || values.size() < MIN_SELECTION_COUNT
+                || values.size() > MAX_SELECTION_COUNT) {
             return false;
         }
 

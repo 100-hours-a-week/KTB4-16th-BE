@@ -379,10 +379,9 @@ class UserControllerTest {
     }
 
     @Test
-    void authenticatedUserCanSaveZeroToThreePreferredGenres() throws Exception {
+    void authenticatedUserCanSaveOneToThreePreferredGenres() throws Exception {
         authenticateUser(1L);
         List<GenreRequestCase> cases = List.of(
-                new GenreRequestCase("{\"preferredGenres\":[]}", List.of(), null),
                 new GenreRequestCase("{\"preferredGenres\":[\"재즈\"]}",
                         List.of("재즈"), "[\"재즈\"]"),
                 new GenreRequestCase("{\"preferredGenres\":[\"재즈\",\"인디음악\"]}",
@@ -391,8 +390,7 @@ class UserControllerTest {
                         List.of("재즈", "인디음악", "POP"), "[\"재즈\",\"인디음악\",\"POP\"]"));
 
         for (GenreRequestCase requestCase : cases) {
-            List<String> storedGenres = requestCase.genres().isEmpty()
-                    ? null : requestCase.genres();
+            List<String> storedGenres = requestCase.genres();
             when(profileService.updatePreferredGenres(1L, requestCase.genres()))
                     .thenReturn(new UpdatePreferredGenresResponse(
                             "선호 장르가 저장되었습니다.",
@@ -407,23 +405,20 @@ class UserControllerTest {
                     .andExpect(jsonPath("$.data.genreOnboardingDone").value(true))
                     .andReturn();
 
-            if (storedGenres == null) {
-                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
-                        .contains("\"preferredGenres\":null");
-            } else {
-                org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
-                        .contains(requestCase.expectedGenresJson());
-            }
+            org.assertj.core.api.Assertions.assertThat(result.getResponse().getContentAsString())
+                    .contains(requestCase.expectedGenresJson());
         }
     }
 
     @Test
     void invalidPreferredGenresReturnBadRequestWithoutCallingService() throws Exception {
         List<String> invalidBodies = List.of(
+                "{\"preferredGenres\":[]}",
                 "{\"preferredGenres\":null}",
                 "{}",
                 "{\"preferredGenres\":[\"재즈\",\"인디음악\",\"POP\",\"OST\"]}",
                 "{\"preferredGenres\":[\"클래식\"]}",
+                "{\"preferredGenres\":[\"재즈\",null]}",
                 "{\"preferredGenres\":[\"재즈\",\"재즈\"]}");
 
         for (String body : invalidBodies) {

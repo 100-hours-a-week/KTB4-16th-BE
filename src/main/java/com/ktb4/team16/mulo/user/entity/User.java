@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.user.entity;
 
+import com.ktb4.team16.mulo.user.domain.PreferredGenre;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.GeneratedValue;
@@ -83,8 +84,15 @@ public class User {
     }
 
     public void updatePreferredGenres(List<String> preferredGenres) {
-        this.preferredGenres = preferredGenres.isEmpty() ? null : List.copyOf(preferredGenres);
+        if (!PreferredGenre.isValidSelection(preferredGenres)) {
+            throw new IllegalArgumentException("선호 장르는 1개 이상 3개 이하로 선택해야 합니다.");
+        }
+        this.preferredGenres = List.copyOf(preferredGenres);
         this.genreOnboardingDone = true;
+    }
+
+    public boolean hasCompletedGenreOnboarding() {
+        return PreferredGenre.isValidSelection(preferredGenres);
     }
 
     /** 탈퇴 시각을 보존해 계정을 소프트 삭제한다. */

@@ -276,6 +276,14 @@ class SecurityIntegrationTests {
                 .andExpect(content().string("health"));
     }
 
+    /** Prometheus는 사용자 로그인이나 전용 토큰 없이 GET으로 지표를 조회한다. */
+    @Test
+    void prometheusGetIsPublicForScraping() throws Exception {
+        mvc.perform(get("/actuator/prometheus"))
+                .andExpect(status().isOk())
+                .andExpect(content().string("metrics"));
+    }
+
     @Test
     void profileWithoutAccessTokenReturnsUnauthorized() throws Exception {
         mvc.perform(get("/api/users/me"))
@@ -604,6 +612,10 @@ class SecurityIntegrationTests {
         // Docker healthcheck가 인증 없이 상태만 확인할 수 있는 Actuator 경로를 모사한다.
         @GetMapping("/actuator/health")
         String health() { return "health"; }
+
+        // 비인증 Prometheus GET이 보안 체인을 통과하는지 확인하는 테스트용 엔드포인트다.
+        @GetMapping("/actuator/prometheus")
+        String prometheus() { return "metrics"; }
 
         @GetMapping("/api/places/popular")
         String allRecordMarkers() { return "markers"; }
