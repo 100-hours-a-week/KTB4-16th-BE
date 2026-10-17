@@ -75,12 +75,15 @@ class MatchServiceTest {
         MatchRequest waiting = matchRequest(301L, MatchRequestStatus.WAITING, null, true);
         MatchRequest matching = matchRequest(302L, MatchRequestStatus.MATCHING, null, true);
         MatchRequest expired = matchRequest(303L, MatchRequestStatus.EXPIRED, null, true);
+        MatchRequest failed = matchRequest(304L, MatchRequestStatus.FAILED, null, true);
         when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(301L, 11L))
                 .thenReturn(Optional.of(waiting));
         when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(302L, 11L))
                 .thenReturn(Optional.of(matching));
         when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(303L, 11L))
                 .thenReturn(Optional.of(expired));
+        when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(304L, 11L))
+                .thenReturn(Optional.of(failed));
 
         assertThat(matchService.getMatchRequestStatus(11L, 301L).data().status())
                 .isEqualTo(MatchRequestStatus.WAITING);
@@ -91,6 +94,9 @@ class MatchServiceTest {
         assertThat(matchService.getMatchRequestStatus(11L, 303L).data().status())
                 .isEqualTo(MatchRequestStatus.EXPIRED);
         assertThat(matchService.getMatchRequestStatus(11L, 303L).data().chatRoomId()).isNull();
+        assertThat(matchService.getMatchRequestStatus(11L, 304L).data().status())
+                .isEqualTo(MatchRequestStatus.FAILED);
+        assertThat(matchService.getMatchRequestStatus(11L, 304L).data().chatRoomId()).isNull();
     }
 
     @Test
@@ -309,12 +315,16 @@ class MatchServiceTest {
         MatchRequest candidate = MatchRequest.waiting(user(12L), mock(VoteAnswer.class));
         when(matchRequestRepository.findOppositeWaitingForUpdate(101L, PageRequest.of(0, 1)))
                 .thenReturn(List.of(candidate));
-        when(matchRepository.save(any(Match.class))).thenAnswer(invocation -> invocation.getArgument(0));
+        when(matchRepository.saveAndFlush(any(Match.class))).thenAnswer(invocation -> {
+            Match match = invocation.getArgument(0);
+            ReflectionTestUtils.setField(match, "matchId", 401L);
+            return match;
+        });
 
         var response = matchService.createMatchRequest(11L, new MatchRequestCreateRequest(101L));
 
         ArgumentCaptor<Match> matchCaptor = ArgumentCaptor.forClass(Match.class);
-        verify(matchRepository).save(matchCaptor.capture());
+        verify(matchRepository).saveAndFlush(matchCaptor.capture());
         Match match = matchCaptor.getValue();
         ArgumentCaptor<MatchRequest> requestCaptor = ArgumentCaptor.forClass(MatchRequest.class);
         verify(matchRequestRepository).saveAndFlush(requestCaptor.capture());
@@ -377,12 +387,16 @@ class MatchServiceTest {
         ReflectionTestUtils.setField(matchRequest, "matchRequestId", matchRequestId);
         if (status == MatchRequestStatus.EXPIRED) {
             matchRequest.expire();
-        } else if (status == MatchRequestStatus.MATCHING || (status == MatchRequestStatus.MATCHED && attachMatch)) {
+        } else if (status == MatchRequestStatus.MATCHING
+                || (status == MatchRequestStatus.MATCHED && attachMatch)
+                || status == MatchRequestStatus.FAILED) {
             Match match = Match.create(mock(VoteQuestion.class));
             ReflectionTestUtils.setField(match, "chatRoomId", chatRoomId);
             matchRequest.startMatching(match);
             if (status == MatchRequestStatus.MATCHED) {
                 ReflectionTestUtils.setField(matchRequest, "status", MatchRequestStatus.MATCHED);
+            } else if (status == MatchRequestStatus.FAILED) {
+                matchRequest.failMatching();
             }
         } else if (status == MatchRequestStatus.MATCHED) {
             ReflectionTestUtils.setField(matchRequest, "status", MatchRequestStatus.MATCHED);

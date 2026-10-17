@@ -21,7 +21,9 @@ public class ChatServerClientException extends RuntimeException {
     private static String messageFor(FailureType failureType) {
         return switch (failureType) {
             case CLIENT_ERROR -> "Chat Server가 요청을 거부했습니다.";
-            case PARTICIPANT_CONFLICT -> "Chat Server의 매칭 참여자 정보가 충돌합니다.";
+            case AUTHENTICATION_ERROR -> "Chat Server 내부 인증에 실패했습니다.";
+            case REQUEST_CONFLICT -> "Chat Server의 기존 채팅방 요청 정보와 충돌합니다.";
+            case EXPIRED_REQUEST -> "만료된 매칭에는 새 채팅방을 생성할 수 없습니다.";
             case SERVER_ERROR -> "Chat Server 내부 오류가 발생했습니다.";
             case COMMUNICATION_ERROR -> "Chat Server와 통신하지 못했습니다.";
             case INVALID_RESPONSE -> "Chat Server 응답이 유효하지 않습니다.";
@@ -31,10 +33,16 @@ public class ChatServerClientException extends RuntimeException {
 
     public enum FailureType {
         CLIENT_ERROR,
-        PARTICIPANT_CONFLICT,
+        AUTHENTICATION_ERROR,
+        REQUEST_CONFLICT,
+        EXPIRED_REQUEST,
         SERVER_ERROR,
         COMMUNICATION_ERROR,
         INVALID_RESPONSE,
-        CONFIGURATION_ERROR
+        CONFIGURATION_ERROR;
+
+        public boolean isRetryable() {
+            return this == SERVER_ERROR || this == COMMUNICATION_ERROR || this == INVALID_RESPONSE;
+        }
     }
 }
