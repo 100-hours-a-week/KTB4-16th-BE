@@ -39,6 +39,7 @@ import java.util.concurrent.atomic.AtomicInteger;
 import javax.sql.DataSource;
 import org.aopalliance.intercept.MethodInterceptor;
 import org.hibernate.exception.ConstraintViolationException;
+import org.flywaydb.core.Flyway;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.RepeatedTest;
@@ -67,6 +68,7 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
 
     @Autowired private DataSource dataSource;
     @Autowired private JdbcTemplate jdbcTemplate;
+    @Autowired private Flyway flyway;
     @Autowired private RecordCreationOrchestrator orchestrator;
     @Autowired private UserRepository userRepository;
     @Autowired private UploadRepository uploadRepository;
@@ -373,16 +375,19 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         return new Fixture(user.getUserId(), upload.getUploadId(), request);
     }
 
-    /** 격리 DB 연결과 현재 Flyway V9 적용 상태를 확인한다. */
+    /** 격리 DB 연결과 Flyway 적용 상태를 확인한다. */
     private void assertDatabaseTarget() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
             assertThat(connection.getMetaData().getURL())
                     .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
-            assertThat(jdbcTemplate.queryForObject(
-                    "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 1", Integer.class))
-                    .isEqualTo(9);
         }
+        flyway.validate();
+        assertThat(flyway.info().current()).isNotNull();
+        assertThat(flyway.info().pending()).isEmpty();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0", Integer.class))
+                .isZero();
         assertThat(dataSource).isInstanceOf(HikariDataSource.class);
         assertThat(hikariMaximumPoolSize())
                 .as("all synchronized requests must acquire a connection before the barrier releases")
