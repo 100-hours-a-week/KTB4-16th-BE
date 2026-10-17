@@ -9,7 +9,6 @@ public class PreferredGenresValidator
         implements ConstraintValidator<ValidPreferredGenres, List<String>> {
     @Override
     public boolean isValid(List<String> preferredGenres, ConstraintValidatorContext context) {
-        // @NotNull reports null/missing input; an empty list is a valid explicit skip.
         return preferredGenres == null || PreferredGenre.isValidSelection(preferredGenres);
     }
 }

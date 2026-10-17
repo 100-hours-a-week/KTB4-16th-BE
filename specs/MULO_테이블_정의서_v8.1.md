@@ -48,6 +48,7 @@
 - `record_drafts`는 V1 제외였던 이력과 V2 구현 상태를 함께 표시
 - AI 기억 검색 및 Spotify 계정 저장 기능은 V1 범위에서 제외
 - 1:1 매칭은 같은 질문의 반대 선택지 사용자를 FIFO로 연결한다
+- 취향 투표 당일 그룹 및 질문은 일일 스냅샷으로 고정한다
 - `matches.chat_room_id`와 `notifications.chat_room_id`는 Chat DB의 논리 ID이며 Backend FK가 아니다
 - V1 당시 채팅 테이블 정의는 문서 하단에 역사 자료로만 남기며 현재 Backend schema로 취급하지 않는다
 
@@ -57,7 +58,7 @@
 
 #### 1. 테이블 설명
 
-사용자의 계정 및 기본 정보를 저장하는 테이블이다. 회원가입, 로그인, 마이페이지 등의 회원 기능에서 사용하며, 사용자와 관련된 서비스 데이터를 식별하는 기준이 된다. 또한 사용자의 음악 기록을 AI가 분석해 결정한 대표 음악 장르 1개를 저장하여 장르별 취향 투표 질문 제공에 활용한다.
+사용자의 계정 및 기본 정보를 저장하는 테이블이다. 회원가입, 로그인, 마이페이지 등의 회원 기능에서 사용하며, 사용자와 관련된 서비스 데이터를 식별하는 기준이 된다. 사용자 선호 장르와 온보딩 상태를 저장한다. AI 최종 그룹의 최신본은 AI DB 읽기 전용 뷰에서 조회하고, 당일 투표 그룹은 날짜 스냅샷으로 고정한다.
 
 #### 2. 컬럼 정의
 
@@ -69,7 +70,9 @@
 | `password_hash` | `VARCHAR(60)` | NOT NULL | - | - | 해시 처리된 비밀번호 | 비밀번호 원문을 저장하지 않고 bcrypt 해시값을 저장한다. bcrypt 인코딩 결과 문자열은 60자로 고정되므로 `VARCHAR(60)`을 사용한다. | 이메일 로그인 시 입력된 비밀번호와 저장된 해시값을 비교하여 사용자 인증에 사용한다. |
 | `nickname` | `VARCHAR(10)` | NOT NULL | - | - | 서비스에서 사용하는 사용자 닉네임 | 닉네임 정책인 2~10자를 반영한다. 탈퇴 후에도 기존 사용자 데이터를 보존하기 위해 실제 닉네임 값은 유지한다. | 프로필, 친구 목록, 채팅 등에서 사용자 표시 이름으로 사용한다. |
 | `active_nickname` | `VARCHAR(10)` | NULL | - | UK | 활성 회원 닉네임 | `deleted_at IS NULL`이면 `nickname` 값을 가지고, 탈퇴한 회원이면 `NULL`이 되도록 생성되는 Generated Column이다. | 활성 회원끼리만 닉네임 UNIQUE 제약을 적용하여 탈퇴한 회원의 닉네임을 재사용할 수 있도록 한다. |
-| `music_genre` | `VARCHAR(50)` | NULL | `NULL` | - | 사용자의 대표 음악 장르 | 사용자가 직접 선택하는 값이 아니라 사용자의 음악 기록을 AI가 분석하여 결정한 대표 장르 1개를 저장한다. 아직 대표 장르가 결정되지 않은 사용자가 존재할 수 있으므로 `NULL`을 허용한다. | 사용자의 대표 장르와 동일한 `vote_questions.music_genre`의 질문을 조회하여 장르별 취향 투표를 제공하는 데 사용한다. |
+| `music_genre` | `VARCHAR(50)` | NULL | `NULL` | - | 레거시 대표 음악 장르 | 기존 스키마 호환을 위해 유지한다. AI 대표 그룹의 최신본은 `be_user_music_genres`에서 읽으며 BE가 이 컬럼을 그룹 계산값으로 갱신하지 않는다. | 기존 참조와 과거 데이터를 보존한다. 당일 투표에는 일일 배정 스냅샷을 사용한다. |
+| `preferred_genres` | `JSON` | NULL | `NULL` | - | 사용자가 선택한 선호 장르 | 온보딩에서 고른 고정 13개 장르 중 최대 3개를 선택 순서대로 저장한다. | AI 그룹 계산의 입력으로 제공하며 AI가 덮어쓰지 않는다. |
+| `genre_onboarding_done` | `BOOLEAN` | NOT NULL | `FALSE` | - | 장르 온보딩 응답 완료 여부 | 기본값 FALSE로 미응답 사용자를 표시한다. | 선택 또는 명시적 건너뛰기를 구분한다. |
 | `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 계정 생성 시각 | 계정이 생성된 날짜와 시각을 기록하기 위해 `DATETIME`을 사용한다. | 회원가입 시점을 기록한다. |
 | `updated_at` | `DATETIME` | NULL | `NULL` | - | 회원 정보 최종 수정 시각 | 닉네임 등 사용자 정보가 수정된 마지막 시점을 기록한다. 한 번도 수정되지 않은 경우 `NULL`을 허용한다. | 회원 정보 변경 시점을 추적한다. |
 | `deleted_at` | `DATETIME` | NULL | `NULL` | - | 계정 탈퇴 시각 | 활성 회원은 `NULL`이며, 탈퇴 시 탈퇴 시각을 기록한다. 해당 값에 따라 `active_email`,`active_nickname` 생성 컬럼 값이 자동으로 결정된다. | 소프트 삭제 여부를 판단하고 탈퇴 회원의 이메일·닉네임 재사용 여부를 제어한다. |
@@ -87,9 +90,9 @@
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_user_music_genre` | 사용자의 음악 기록을 AI가 분석하여 대표 음악 장르 하나를 `music_genre`에 저장한다. 대표 장르가 아직 결정되지 않은 경우 `NULL`을 허용한다. |
-| `rule_user_genre_vote_question` | 취향 투표 제공 시 사용자의 `music_genre`와 동일한 장르의 당일 `vote_questions`를 조회한다. `users.music_genre`와 `vote_questions.music_genre`는 값 기준으로 매칭하며 FK 관계를 두지 않는다. |
-| `rule_user_genre_vote_eligibility` | `music_genre`가 결정되지 않은 사용자는 취향 투표에 참여할 수 없다. |
+| `rule_user_music_genre` | AI가 계산한 최종 대표 그룹은 AI DB `be_user_music_genres` 뷰에서 읽으며 BE는 그룹 계산·통합을 수행하지 않는다. |
+| `rule_user_genre_vote_question` | 취향 투표는 당일 `vote_user_daily_assignments`에 고정된 그룹과 질문 ID를 기준으로 제공한다. 오늘 날짜·그룹 질문이 `vote_questions`에 이미 있으면 질문 ID·문구·선택지·답변을 보존하여 AI 데이터보다 우선 재사용한다. |
+| `rule_user_genre_vote_assignment` | 질문 조회는 선호 장르 또는 자물쇠 생성 이력이 없어도 허용한다. AI 사용자 뷰에 행이 없으면 `공통` 그룹을 배정하며, 최초 저장한 당일 배정은 변경하지 않는다. |
 
 #### 4. 관계
 
@@ -729,7 +732,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-사용자에게 제공할 장르별 취향 투표 질문과 선택지를 저장하는 테이블이다. 사용자의 `users.music_genre`와 동일한 `music_genre`의 당일 질문을 제공하며, 같은 장르의 같은 질문에서 선택한 답변을 이후 매칭 기준으로 사용한다.
+사용자에게 제공할 장르별 취향 투표 질문과 선택지를 저장하는 테이블이다. 질문은 날짜와 그룹으로 구분하며, 사용자의 당일 배정은 `vote_user_daily_assignments`에 고정한다. 해당 날짜·그룹 질문이 이미 존재하면 AI 원본과 내용이 달라도 기존 행·ID·답변을 유지해 재사용한다. 기존 질문이 없을 때 AI 오늘 질문을 저장하고, 오늘 질문이 없으면 전날 같은 그룹 질문을 오늘 날짜의 새 행으로 복사한다. 답변과 매칭은 BE 질문 ID를 기준으로 연계한다.
 
 #### 2. 컬럼 정의
 
@@ -739,8 +742,8 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `question_text` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자에게 보여줄 취향 투표 질문 내용 | 질문 문장은 최대 100자가 넘지 않도록 한다. | 취향 투표 화면에 질문을 표시한다. |
 | `option_a` | `VARCHAR` | 100 | NOT NULL | - | - | 첫 번째 선택지 | 선택지는 짧은 문자열이므로 `VARCHAR`를 사용한다. | 사용자가 선택할 첫 번째 답변을 표시한다. |
 | `option_b` | `VARCHAR` | 100 | NOT NULL | - | - | 두 번째 선택지 | 선택지는 짧은 문자열이므로 `VARCHAR`를 사용한다. | 사용자가 선택할 두 번째 답변을 표시한다. |
-| `music_genre` | `VARCHAR` | 50 | NOT NULL | - | - | 질문이 속한 음악 장르 | 장르별로 질문을 구분하고 사용자의 `users.music_genre`와 동일한 장르의 질문을 조회하기 위해 문자열로 저장한다. | 사용자의 대표 음악 장르에 맞는 취향 투표 질문을 제공하고, 동일 장르 사용자 안에서 투표·매칭이 이루어지도록 하는 기준값으로 사용한다. |
-| `vote_date` | `DATE` | - | NOT NULL | - | - | 해당 투표 질문이 사용자에게 제공되는 날짜 | 취향 투표는 하루 단위로 운영되므로 시간 범위 대신 날짜만 저장한다. | 현재 날짜와 사용자의 `music_genre`를 함께 기준으로 질문을 조회하여 장르별 하루 하나의 질문을 제공한다. |
+| `music_genre` | `VARCHAR` | 50 | NOT NULL | - | - | 질문이 속한 AI 취향 그룹 | 날짜별 그룹 질문을 식별하는 문자열이다. | 동일 그룹의 질문과 투표·매칭 대상을 구분한다. |
+| `vote_date` | `DATE` | - | NOT NULL | - | - | 질문이 배정되는 KST 날짜 | 투표 데이터를 날짜 단위로 분리한다. | BE 자체 질문 ID와 기존 투표·매칭 관계를 유지한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 투표 질문이 생성된 시각 | 해당 질문이 시스템에 등록된 시점을 기록하기 위해 사용한다. | 질문 생성 이력을 관리한다. |
 
 #### 3. 제약조건
@@ -754,9 +757,9 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 | 규칙명 | 설명 |
 | --- | --- |
-| `rule_vote_question_by_genre` | 사용자는 자신의 `users.music_genre`와 동일한 `vote_questions.music_genre`의 당일 질문을 제공받는다. |
+| `rule_vote_question_by_genre` | 사용자는 당일 일일 배정의 그룹·질문을 제공받는다. 오늘 AI 질문이 없으면 같은 그룹의 전날 질문 내용을 오늘 날짜의 새 행으로 복사한다. |
 | `rule_matching_within_genre_question` | 사용자의 장르는 질문에 귀속되어 있으므로 매칭 시 별도 장르 컬럼을 중복 저장하지 않고 `vote_answer_id → vote_question_id → music_genre` 경로로 동일 장르·동일 질문 여부를 확인할 수 있다. |
-| `rule_vote_question_genre_required` | 대표 음악 장르가 결정된 사용자만 자신의 `users.music_genre`와 동일한 장르의 당일 질문에 참여할 수 있다. |
+| `rule_vote_question_genre_required` | 당일 그룹과 질문 배정은 선호 장르 변경, 자물쇠 생성 및 AI 뷰 갱신으로 덮어쓰지 않는다. |
 
 #### 4. 관계
 
@@ -1221,5 +1224,59 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 - 재시도 후보는 `FOR UPDATE SKIP LOCKED` 방식으로 잠가 여러 Worker가 같은 이벤트를 처리하지 않게 한다.
 - 최대 횟수 초과 또는 영구 오류는 `FAILED`로 기록한다. `COMPLETED`에만 `processed_at`을 기록한다.
 - `MATCH_COMPLETED` 발행은 배포 환경별 기존 4인 매칭 이력 0건 확인과 Chat DB 참가자 등록 근거가 확인될 때까지 보류한다.
+
+## 27. vote_daily_snapshots - 일일 취향 투표 스냅샷 상태 테이블
+
+#### 1. 테이블 설명
+
+KST 날짜별 사용자 배정이 원자적으로 준비되었는지 기록한다. 스냅샷 생성은 하나의 BE DB 트랜잭션에서 BUILDING으로 시작해 배정 저장 후 READY로 전환한다. 트랜잭션이 실패하면 질문 복사본, 사용자 배정, 상태 변경이 모두 롤백된다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `vote_date` | `DATE` | NOT NULL | - | PK | 스냅샷 기준 KST 날짜 |
+| `status` | `VARCHAR(16)` | NOT NULL | - | CHECK | `BUILDING` 또는 `READY` |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 스냅샷 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `PRIMARY` | PRIMARY KEY | `vote_date` | 날짜별 스냅샷을 하나만 유지한다. |
+| `chk_vote_daily_snapshots_status` | CHECK | `status` | 허용 상태를 제한한다. |
+
+## 28. vote_user_daily_assignments - 사용자별 일일 취향 투표 배정 테이블
+
+#### 1. 테이블 설명
+
+사용자별 당일 AI 그룹과 BE 질문 ID를 고정한다. 자정 이후 가입자는 스냅샷 READY 이후 첫 질문 조회에서 배정되며, 유일 제약과 insert-if-absent 처리로 기존 배정을 덮어쓰지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `vote_date` | `DATE` | NOT NULL | - | PK, FK | 스냅샷 기준 KST 날짜 |
+| `user_id` | `BIGINT` | NOT NULL | - | PK, FK | 배정 사용자 |
+| `music_genre` | `VARCHAR(50)` | NOT NULL | - | - | 당일 고정 AI 그룹 |
+| `vote_question_id` | `BIGINT` | NULL | NULL | FK, INDEX | 당일 그룹의 BE 질문 ID. 사용 가능한 질문이 없으면 NULL |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 배정 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `PRIMARY` | PRIMARY KEY | `vote_date`, `user_id` | - | 사용자당 날짜별 배정 한 건을 보장한다. |
+| `fk_vote_user_daily_assignments_snapshot` | FOREIGN KEY | `vote_date` | `vote_daily_snapshots.vote_date` | 배정의 스냅샷 날짜를 보장한다. |
+| `fk_vote_user_daily_assignments_user` | FOREIGN KEY | `user_id` | `users.user_id` | 실제 사용자에 대한 배정만 허용한다. |
+| `fk_vote_user_daily_assignments_question` | FOREIGN KEY | `vote_question_id` | `vote_questions.vote_question_id` | 설정된 질문 ID를 검증한다. |
+| `idx_vote_user_daily_assignments_question` | INDEX | `vote_question_id` | - | 질문별 배정을 조회한다. |
+
+#### 4. 처리 규칙
+
+- 스냅샷 테이블의 READY 행은 날짜 데이터 전체가 원자적으로 저장됐음을 의미한다. 미준비 상태는 API에서 503으로 반환한다.
+- AI 그룹은 AI DB 뷰에서 읽으며 BE는 그룹화 또는 인원 부족 그룹 통합을 하지 않는다. AI 사용자 행이 없으면 `공통` 그룹으로 배정한다.
+- 오늘 그룹 질문이 없으면 AI 뷰의 같은 그룹 전날 질문 내용을 오늘 날짜의 새 `vote_questions` 행으로 저장한다. 같은 그룹의 전날 질문도 없으면 질문 ID를 비우고 조회 시 404를 반환한다.
+- 기존 `vote_questions(music_genre, vote_date)` UNIQUE 제약을 유지한다. 같은 날짜·그룹의 기존 BE 질문이 있으면 AI 질문 내용과 달라도 기존 BE 질문·ID·답변을 우선 재사용하고 덮어쓰지 않는다.
 
 ---

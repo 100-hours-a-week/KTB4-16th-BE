@@ -7,6 +7,7 @@ import com.ktb4.team16.mulo.global.error.ErrorResponse;
 import com.ktb4.team16.mulo.memorysearch.exception.MemorySearchDomainException;
 import com.ktb4.team16.mulo.friend.exception.FriendDomainException;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
+import com.ktb4.team16.mulo.vote.exception.VoteDomainException;
 import io.sentry.Sentry;
 import com.ktb4.team16.mulo.music.exception.MusicProviderUnavailableException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
@@ -75,6 +76,12 @@ public class GlobalExceptionHandler {
 
     @ExceptionHandler(MatchDomainException.class)
     public ResponseEntity<ErrorResponse> handleMatchDomain(MatchDomainException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
+    }
+
+    @ExceptionHandler(VoteDomainException.class)
+    public ResponseEntity<ErrorResponse> handleVoteDomain(VoteDomainException exception) {
         ErrorCode errorCode = exception.errorCode();
         return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
     }
