@@ -2,6 +2,9 @@ package com.ktb4.team16.mulo.match.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.cloud.storage.Storage;
@@ -63,6 +66,8 @@ class MatchRequestExpirationMysqlIntegrationTest {
     private Storage storage;
     @MockitoBean
     private Clock clock;
+    @MockitoBean
+    private ChatRoomCreationOrchestrator chatRoomCreationOrchestrator;
 
     private final List<Long> voteQuestionIds = new ArrayList<>();
     private final List<Long> userIds = new ArrayList<>();
@@ -195,6 +200,7 @@ class MatchRequestExpirationMysqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM match_requests WHERE vote_answer_id = ? AND status = 'MATCHING'",
                 Integer.class, waitingAnswerId)).isEqualTo(1);
+        verify(chatRoomCreationOrchestrator).createAfterMatch(anyLong(), any());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM match_requests WHERE vote_answer_id = ? AND status = 'EXPIRED'",
                 Integer.class, waitingAnswerId)).isZero();

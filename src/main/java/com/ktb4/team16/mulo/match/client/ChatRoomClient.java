@@ -5,6 +5,8 @@ import com.ktb4.team16.mulo.match.config.ChatServerProperties;
 import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.response.ChatRoomCreateResponse;
 import java.net.http.HttpClient;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.client.JdkClientHttpRequestFactory;
@@ -21,15 +23,21 @@ public class ChatRoomClient {
 
     private final RestClient restClient;
     private final ChatServerProperties properties;
+    private final ObjectMapper objectMapper;
 
     @Autowired
     public ChatRoomClient(ChatServerProperties properties) {
-        this(configuredBuilder(RestClient.builder(), properties), properties);
+        this(configuredBuilder(RestClient.builder(), properties), properties, new ObjectMapper());
     }
 
     ChatRoomClient(RestClient.Builder builder, ChatServerProperties properties) {
+        this(builder, properties, new ObjectMapper());
+    }
+
+    ChatRoomClient(RestClient.Builder builder, ChatServerProperties properties, ObjectMapper objectMapper) {
         this.restClient = builder.baseUrl(properties.baseUrl().toString()).build();
         this.properties = properties;
+        this.objectMapper = objectMapper;
     }
 
     public ChatRoomCreateResponse createChatRoom(ChatRoomCreateRequest request) {
@@ -69,8 +77,18 @@ public class ChatRoomClient {
 
     private ChatServerClientException classifyHttpFailure(RestClientResponseException exception) {
         int status = exception.getStatusCode().value();
+        String errorCode = extractErrorCode(exception);
+        if ("INTERNAL_AUTH_UNAVAILABLE".equals(errorCode)) {
+            return new ChatServerClientException(FailureType.CONFIGURATION_ERROR, status);
+        }
+        if (status == 401 || status == 403) {
+            return new ChatServerClientException(FailureType.AUTHENTICATION_ERROR, status);
+        }
         if (status == 409) {
-            return new ChatServerClientException(FailureType.PARTICIPANT_CONFLICT, status);
+            if ("CHAT_ROOM_EXPIRED".equals(errorCode)) {
+                return new ChatServerClientException(FailureType.EXPIRED_REQUEST, status);
+            }
+            return new ChatServerClientException(FailureType.REQUEST_CONFLICT, status);
         }
         if (exception.getStatusCode().is4xxClientError()) {
             return new ChatServerClientException(FailureType.CLIENT_ERROR, status);
@@ -79,6 +97,16 @@ public class ChatRoomClient {
             return new ChatServerClientException(FailureType.SERVER_ERROR, status);
         }
         return new ChatServerClientException(FailureType.INVALID_RESPONSE, status);
+    }
+
+    private String extractErrorCode(RestClientResponseException exception) {
+        try {
+            JsonNode body = objectMapper.readTree(exception.getResponseBodyAsByteArray());
+            JsonNode code = body == null ? null : body.get("code");
+            return code != null && code.isTextual() ? code.asText() : null;
+        } catch (RuntimeException ignored) {
+            return null;
+        }
     }
 
     private static RestClient.Builder configuredBuilder(RestClient.Builder builder,
