@@ -13,6 +13,8 @@ public enum ErrorCode {
     MATCH_VOTE_ANSWER_NOT_OWNED(HttpStatus.FORBIDDEN, "해당 투표 답변에 접근할 권한이 없습니다."),
     MATCH_VOTE_ANSWER_NOT_TODAY(HttpStatus.BAD_REQUEST, "오늘의 투표 답변이 아닙니다."),
     MATCH_REQUEST_CLOSED(HttpStatus.CONFLICT, "오늘 매칭 요청 가능 시간이 종료되었습니다."),
+    TODAY_VOTE_NOT_FOUND(HttpStatus.NOT_FOUND, "오늘의 취향 투표 질문을 찾을 수 없습니다."),
+    VOTE_SNAPSHOT_NOT_READY(HttpStatus.SERVICE_UNAVAILABLE, "오늘의 취향 투표를 준비 중입니다."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
