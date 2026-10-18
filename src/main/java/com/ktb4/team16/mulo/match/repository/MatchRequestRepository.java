@@ -22,11 +22,13 @@ public interface MatchRequestRepository extends JpaRepository<MatchRequest, Long
     @Query("""
             SELECT candidate
             FROM MatchRequest candidate
+            JOIN candidate.user candidateUser
             JOIN candidate.voteAnswer candidateAnswer
             JOIN candidateAnswer.voteQuestion question
             JOIN VoteAnswer requesterAnswer ON requesterAnswer.voteQuestion = question
             WHERE requesterAnswer.voteAnswerId = :requesterVoteAnswerId
                 AND candidate.status = com.ktb4.team16.mulo.match.domain.MatchRequestStatus.WAITING
+                AND candidateUser.deletedAt IS NULL
                 AND question.optionA <> question.optionB
                 AND (
                     (requesterAnswer.selectedOption = question.optionA
@@ -55,4 +57,13 @@ public interface MatchRequestRepository extends JpaRepository<MatchRequest, Long
             @Param("voteQuestionId") Long voteQuestionId,
             @Param("status") MatchRequestStatus status
     );
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("""
+            SELECT request
+            FROM MatchRequest request
+            WHERE request.match.matchId = :matchId
+            ORDER BY request.matchRequestId ASC
+            """)
+    List<MatchRequest> findByMatchIdForUpdate(@Param("matchId") Long matchId);
 }

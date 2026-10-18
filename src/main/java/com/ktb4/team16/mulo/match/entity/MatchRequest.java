@@ -76,4 +76,24 @@ public class MatchRequest {
         }
         this.status = MatchRequestStatus.EXPIRED;
     }
+
+    public void completeMatching() {
+        if (this.status == MatchRequestStatus.MATCHED) {
+            return;
+        }
+        if (this.status != MatchRequestStatus.MATCHING || this.match == null) {
+            throw new IllegalStateException("매칭 중인 요청만 매칭 완료할 수 있습니다.");
+        }
+        this.status = MatchRequestStatus.MATCHED;
+    }
+
+    public void failMatching() {
+        if (this.status == MatchRequestStatus.FAILED) {
+            return;
+        }
+        if (this.status != MatchRequestStatus.MATCHING || this.match == null) {
+            throw new IllegalStateException("매칭 중인 요청만 실패 처리할 수 있습니다.");
+        }
+        this.status = MatchRequestStatus.FAILED;
+    }
 }
