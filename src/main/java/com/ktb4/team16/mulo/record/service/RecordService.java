@@ -115,7 +115,7 @@ public class RecordService {
             String comment
     ) {
         Record record = findActiveRecordForOwner(userId, recordId);
-        record.updateComment(comment, LocalDateTime.now());
+        record.updateComment(comment, LocalDateTime.now(clock));
         RecordPhoto recordPhoto = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
                 .orElseThrow(IllegalStateException::new);
         MusicTrack musicTrack = record.getMusicTrack();
@@ -135,7 +135,7 @@ public class RecordService {
     @Transactional
     public void deleteRecord(Long userId, Long recordId) {
         Record record = findActiveRecordForOwner(userId, recordId);
-        record.softDelete(LocalDateTime.now());
+        record.softDelete(LocalDateTime.now(clock));
     }
 
     public MyPlaceRecordsResponseDto getMyPlaceRecords(
@@ -353,7 +353,7 @@ public class RecordService {
                 temperature,
                 moodScore,
                 comment,
-                LocalDateTime.now()
+                LocalDateTime.now(clock)
         );
 
         Record savedRecord = recordRepository.save(record);
