@@ -24,13 +24,17 @@ import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class RecordCommentUpdateServiceTest {
     private static final LocalDateTime CREATED_AT = LocalDateTime.parse("2026-09-30T19:40:00");
+    private static final LocalDateTime FIXED_KST_TIME = LocalDateTime.parse("2026-10-16T00:04:05");
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
     private final RecordService recordService = new RecordService(
@@ -43,7 +47,7 @@ class RecordCommentUpdateServiceTest {
             recordPhotoRepository,
             mock(GcsStorageService.class),
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
-            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
+            Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );
 
     @Test
@@ -55,7 +59,7 @@ class RecordCommentUpdateServiceTest {
                 7L, 125L, "수정된 코멘트");
 
         assertThat(record.getComment()).isEqualTo("수정된 코멘트");
-        assertThat(record.getUpdatedAt()).isNotNull();
+        assertThat(record.getUpdatedAt()).isEqualTo(FIXED_KST_TIME);
         assertThat(snapshot).isEqualTo(new RecordEmbeddingSnapshot(
                 125L,
                 7L,

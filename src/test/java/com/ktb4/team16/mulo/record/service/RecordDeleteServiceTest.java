@@ -1,7 +1,6 @@
 package com.ktb4.team16.mulo.record.service;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
@@ -19,11 +18,15 @@ import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
+import java.time.Clock;
+import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 
 class RecordDeleteServiceTest {
+    private static final LocalDateTime FIXED_KST_TIME = LocalDateTime.parse("2026-10-16T00:04:05");
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
     private final PlaceRepository placeRepository = mock(PlaceRepository.class);
@@ -41,7 +44,7 @@ class RecordDeleteServiceTest {
             recordPhotoRepository,
             gcsStorageService,
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
-            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
+            Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );
 
     @Test
@@ -52,7 +55,11 @@ class RecordDeleteServiceTest {
 
         recordService.deleteRecord(7L, 125L);
 
-        verify(record).softDelete(any(LocalDateTime.class));
+        org.mockito.ArgumentCaptor<LocalDateTime> deletedAtCaptor =
+                org.mockito.ArgumentCaptor.forClass(LocalDateTime.class);
+        verify(record).softDelete(deletedAtCaptor.capture());
+        org.assertj.core.api.Assertions.assertThat(deletedAtCaptor.getValue())
+                .isEqualTo(FIXED_KST_TIME);
         verifyNoInteractions(userRepository, placeRepository, uploadService,
                 musicTrackService, recordPhotoRepository, gcsStorageService);
     }
