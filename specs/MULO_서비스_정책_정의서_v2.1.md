@@ -7,6 +7,7 @@
 > **작성일:** 2026-09-21 (KST)  
 > **친구 도메인 구현 상태 반영:** 2026-10-08 (KST)
 > **알림 도메인 구현 상태 반영:** 2026-10-11 (KST)
+> **친구 요청 알림 정책 갱신:** 2026-10-18 (KST), [위키 #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) 사용자 확정
 > **AI 기억 검색 선행 구현 상태 반영:** 2026-10-15 (KST), `develop`에 병합된 PR #103 기준
 > **기준 자료**
 > 1. 대화에서 사용자가 직접 확정한 최신 결정
@@ -348,13 +349,14 @@
 | `NOTI-004` | **구현됨** | 읽음 일괄 처리 | 개별 읽음 API 없이 `notificationIds` 배열을 받는 batch read API만 제공한다. | `NotificationController:37-44` |
 | `NOTI-005` | **구현됨** | batch read 원자성 | 배열 중 하나라도 미존재 또는 타인 소유 알림이면 전체 요청을 404로 실패시키고 일부만 읽음 처리하지 않는다. | `NotificationService:66-80` |
 | `NOTI-006` | **현재 설계** | 자동 읽음 UI 흐름 | 프론트는 알림 페이지를 받은 뒤 해당 페이지의 unread IDs를 모아 batch read API를 별도 호출한다. | API 명세 상세2차 R287,R294 |
-| `NOTI-007` | **현재 설계** | Target 삭제 후 알림 유지 | 연결 Target이 삭제되어도 알림은 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. 별도 Chat DB의 `chat_room_id`는 FK가 없으므로 알림 구현에서 삭제 시점의 정합성을 별도로 처리해야 한다. | API 명세 상세2차 정책 요약 R32 / Flyway V6 / 테이블 정의서 §22 |
+| `NOTI-007` | **확정** | Target 삭제 후 알림 유지 | 이미 저장된 알림은 연결 Target이 삭제되어도 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. 친구 요청이 수락·취소·거절되어 삭제되어도 저장된 `FRIEND_REQUEST` 알림의 `friend_request_id`만 `NULL`이 되고 원래 title/content와 읽음/삭제 기능은 유지한다. 별도 Chat DB의 `chat_room_id`는 FK가 없으므로 알림 구현에서 삭제 시점의 정합성을 별도로 처리해야 한다. | 사용자 확정 2026-10-18 / [위키 #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) / API 명세 상세2차 정책 요약 R32 / Flyway V6 / 테이블 정의서 §22 |
 | `NOTI-008` | **현재 설계** | Target 없는 알림 UI | `targetId=null`인 과거 알림은 표시하되 해당 Target으로 이동/처리하는 기능은 비활성화한다. | API 명세 상세2차 정책 요약 R32 |
 | `NOTI-009` | **구현됨** | 알림 삭제 범위 | 알림 삭제는 알림 자체만 삭제하고 연결된 Target 리소스는 삭제하지 않는다. | `NotificationService:82-90` |
 | `NOTI-010` | **구현됨** | 알림 소유권 은닉 | 읽음/삭제 시 미존재 또는 타인 소유 알림은 404 `NOTIFICATION_NOT_FOUND`로 처리한다. | `NotificationService:66-90` |
 | `NOTI-011` | **확정** | 매칭 완료 알림 | 동일 `vote_question_id`에서 A/B 선택 사용자 각 1명으로 구성된 1:1 매칭이다. Chat DB에서 두 참가자의 선등록 완료가 확인된 뒤 매칭당 `MATCH_COMPLETED` Outbox 이벤트 1건을 발행한다. Payload v1은 `matchParticipantCount=2`와 중복 없는 `recipientUserIds` 두 개를 포함하고, 이벤트 처리 시 수신자별 알림 1건씩 총 2건을 생성한다. | 사용자 확정 2026-10-11 / MULO V2 알림 통합 프롬프트 §3.1·§5.2 / Flyway V6 |
 | `NOTI-012` | **확인 필요** | 매칭 발행 전제 | `MATCH_COMPLETED` 발행은 모든 환경에서 기존 4인 매칭 이력이 0건임을 확인하고, Chat DB에서 두 참가자의 선등록 완료를 검증할 수 있을 때까지 보류한다. 확인되지 않은 이력을 1:1 Payload로 재해석하지 않는다. | 사용자 확정 2026-10-11 / 로컬 Backend DB 점검 결과 / 외부 환경 확인 미완료 |
 | `NOTI-013` | **구현됨** | Outbox 재시도 | 최초 처리는 원본 COMMIT 후 즉시 시도한다. 자동 추가 재시도는 최대 5회이며 간격은 1·2·4·8·16분에 사용자 확정 지터 0~30초를 더한다. Scheduler는 1분마다 최대 20건을 조회한다. | MULO V2 알림 통합 프롬프트 §8·§10 / 사용자 확정 지터 2026-10-11 |
+| `NOTI-014` | **확정** | 종료된 친구 요청의 신규 알림 생략 | `FRIEND_REQUEST` 알림은 원래 `friend_request_id`를 대상으로 `INSERT SELECT ... FOR SHARE`를 수행하여 요청의 현재 존재 확인과 저장을 한 SQL로 처리한다. 요청이 이미 삭제됐다면 0행 삽입으로 생략하고 Outbox를 retry 증가 없이 `COMPLETED`로 완료한다. 사용자 행 선잠금과 원래 요청 ID 기준을 유지한다. 이미 저장된 요청 알림은 `NOTI-007`·`NOTI-008`에 따라 보존한다. 다른 알림 유형의 생성·재시도 정책은 유지한다. | 사용자 확정 2026-10-18 / [위키 #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) |
 
 
 ## 목록·페이지네이션
