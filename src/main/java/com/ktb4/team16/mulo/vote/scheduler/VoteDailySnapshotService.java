@@ -7,14 +7,12 @@ import com.ktb4.team16.mulo.vote.ai.AiVoteQuestion;
 import com.ktb4.team16.mulo.vote.ai.AiVoteReadRepository;
 import com.ktb4.team16.mulo.vote.snapshot.VoteDailySnapshotWriter;
 import com.ktb4.team16.mulo.vote.snapshot.VoteSnapshotStore;
-import com.ktb4.team16.mulo.vote.snapshot.VoteUserGenreAssignment;
 import java.time.Clock;
 import java.time.LocalDate;
-import java.util.ArrayList;
-import java.util.LinkedHashMap;
-import java.util.LinkedHashSet;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.stream.Collectors;
 import lombok.RequiredArgsConstructor;
@@ -40,96 +38,96 @@ public class VoteDailySnapshotService {
     private final VoteDailySnapshotWriter snapshotWriter;
     private final Clock clock;
 
-    @Scheduled(cron = "0 0 0 * * *", zone = "Asia/Seoul")
-    public void snapshotToday() {
-        createSnapshot(LocalDate.now(clock));
+    @Scheduled(cron = "0 55 23 * * *", zone = "Asia/Seoul")
+    public void finalizeTomorrowSnapshot() {
+        createSnapshot(LocalDate.now(clock).plusDays(1));
     }
 
     public void createSnapshot(LocalDate voteDate) {
         if (snapshotStore.isReady(voteDate)) {
             return;
         }
-        if (!aiVoteReadRepository.isAvailable()) {
-            log.warn("취향 투표 일일 스냅샷을 만들 수 없습니다: AI DB 연결이 설정되지 않았습니다. date={}", voteDate);
-            return;
-        }
 
+        long startedAt = System.nanoTime();
+        String outcome = "READY";
         try {
-            Map<Long, String> aiGenres = aiVoteReadRepository.findAllUserGenres();
-            List<VoteUserGenreAssignment> assignments = findAssignments(
-                    userRepository.findAllByDeletedAtIsNull(), aiGenres);
-            List<AiVoteQuestion> selectedQuestions = selectQuestions(voteDate, assignments);
-            snapshotWriter.write(voteDate, selectedQuestions, assignments);
+            List<Long> activeUserIds = userRepository.findAllByDeletedAtIsNull().stream()
+                    .map(User::getUserId)
+                    .toList();
+            Optional<Map<Long, String>> userGenres = readUserGenres(voteDate);
+            List<AiVoteQuestion> questions = readQuestions(voteDate);
+            snapshotWriter.finalizeSnapshot(voteDate, questions, activeUserIds, userGenres);
         } catch (DataIntegrityViolationException exception) {
-            if (snapshotStore.isReady(voteDate)) {
-                return;
+            if (!snapshotStore.isReady(voteDate)) {
+                outcome = "FAILED";
+                log.error("취향 투표 스냅샷 확정에 실패했습니다. date={}, errorType={}",
+                        voteDate, exception.getClass().getSimpleName());
             }
-            log.error("취향 투표 일일 스냅샷 저장에 실패했습니다. date={}, errorType={}",
-                    voteDate, exception.getClass().getSimpleName());
         } catch (RuntimeException exception) {
-            log.error("취향 투표 일일 스냅샷 준비에 실패했습니다. date={}, errorType={}",
+            outcome = "FAILED";
+            log.error("취향 투표 스냅샷 확정에 실패했습니다. date={}, errorType={}",
                     voteDate, exception.getClass().getSimpleName());
+        } finally {
+            log.info("취향 투표 스냅샷 확정 작업 종료. date={}, outcome={}, elapsedMs={}",
+                    voteDate, outcome, (System.nanoTime() - startedAt) / 1_000_000);
         }
     }
 
-    private List<AiVoteQuestion> selectQuestions(LocalDate voteDate,
-            List<VoteUserGenreAssignment> assignments) {
-        Set<String> requiredGenres = assignments.stream()
-                .map(VoteUserGenreAssignment::musicGenre)
-                .collect(Collectors.toCollection(LinkedHashSet::new));
-        Map<String, AiVoteQuestion> selected = new LinkedHashMap<>();
-        for (String genre : requiredGenres) {
-            snapshotStore.findQuestionContent(voteDate, genre).ifPresent(existing ->
-                    selected.put(genre, new AiVoteQuestion(voteDate, genre, existing.question(),
-                            existing.optionA(), existing.optionB())));
+    private Optional<Map<Long, String>> readUserGenres(LocalDate voteDate) {
+        if (!isAiAvailable(voteDate, "사용자 장르")) {
+            log.warn("AI 사용자 장르 조회를 사용할 수 없습니다. date={}", voteDate);
+            return Optional.empty();
         }
-
-        Set<String> missingGenres = new LinkedHashSet<>(requiredGenres);
-        missingGenres.removeAll(selected.keySet());
-        if (missingGenres.isEmpty()) {
-            return new ArrayList<>(selected.values());
+        try {
+            return Optional.of(Map.copyOf(aiVoteReadRepository.findAllUserGenres()));
+        } catch (RuntimeException exception) {
+            log.error("AI 사용자 장르 조회에 실패했습니다. date={}, errorType={}",
+                    voteDate, exception.getClass().getSimpleName());
+            return Optional.empty();
         }
+    }
 
-        Map<String, AiVoteQuestion> byDateAndGenre = new LinkedHashMap<>();
-        for (AiVoteQuestion question : aiVoteReadRepository.findQuestions(
-                voteDate.minusDays(1), voteDate)) {
-            validateQuestion(question);
-            String key = question.questionDate() + "|" + question.musicGenre();
-            if (byDateAndGenre.putIfAbsent(key, question) != null) {
+    private List<AiVoteQuestion> readQuestions(LocalDate voteDate) {
+        if (!isAiAvailable(voteDate, "질문")) {
+            log.warn("AI 질문 조회를 사용할 수 없습니다. date={}", voteDate);
+            return List.of();
+        }
+        try {
+            List<AiVoteQuestion> questions = aiVoteReadRepository.findQuestions(voteDate, voteDate);
+            validateQuestions(voteDate, questions);
+            return questions;
+        } catch (RuntimeException exception) {
+            log.error("AI 질문 조회에 실패했습니다. date={}, errorType={}",
+                    voteDate, exception.getClass().getSimpleName());
+            return List.of();
+        }
+    }
+
+    private boolean isAiAvailable(LocalDate voteDate, String dataType) {
+        try {
+            return aiVoteReadRepository.isAvailable();
+        } catch (RuntimeException exception) {
+            log.error("AI {} 조회 가능 여부를 확인하지 못했습니다. date={}, errorType={}",
+                    dataType, voteDate, exception.getClass().getSimpleName());
+            return false;
+        }
+    }
+
+    private void validateQuestions(LocalDate voteDate, List<AiVoteQuestion> questions) {
+        Set<String> seenGenres = new HashSet<>();
+        for (AiVoteQuestion question : questions) {
+            validateGenre(question.musicGenre());
+            if (!voteDate.equals(question.questionDate())) {
+                throw new IllegalStateException("AI 질문 뷰에 요청 날짜와 다른 질문이 있습니다.");
+            }
+            if (question.question() == null || question.optionA() == null || question.optionB() == null
+                    || question.question().length() > 100 || question.optionA().length() > 100
+                    || question.optionB().length() > 100) {
+                throw new IllegalStateException("AI 질문 값이 Backend vote_questions 컬럼 조건과 맞지 않습니다.");
+            }
+            if (!seenGenres.add(question.musicGenre())) {
                 throw new IllegalStateException("AI 질문 뷰에 날짜·그룹 중복 행이 있습니다.");
             }
-        }
-        for (String genre : missingGenres) {
-            AiVoteQuestion question = byDateAndGenre.get(voteDate + "|" + genre);
-            if (question == null) {
-                question = byDateAndGenre.get(voteDate.minusDays(1) + "|" + genre);
-            }
-            if (question != null) {
-                selected.put(genre, new AiVoteQuestion(voteDate, genre, question.question(),
-                        question.optionA(), question.optionB()));
-            }
-        }
-        return new ArrayList<>(selected.values());
-    }
-
-    private List<VoteUserGenreAssignment> findAssignments(List<User> users, Map<Long, String> aiGenres) {
-        List<VoteUserGenreAssignment> assignments = new ArrayList<>();
-        for (User user : users) {
-            String genre = aiGenres.getOrDefault(user.getUserId(), COMMON_GENRE);
-            validateGenre(genre);
-            assignments.add(new VoteUserGenreAssignment(user.getUserId(), genre));
-        }
-        return assignments;
-    }
-
-    private void validateQuestion(AiVoteQuestion question) {
-        validateGenre(question.musicGenre());
-        if (question.question() == null || question.optionA() == null || question.optionB() == null) {
-            throw new IllegalStateException("AI 질문 뷰에 질문 또는 선택지 값이 없습니다.");
-        }
-        if (question.question().length() > 100 || question.optionA().length() > 100
-                || question.optionB().length() > 100) {
-            throw new IllegalStateException("AI 질문 값이 Backend vote_questions 컬럼 길이를 초과합니다.");
         }
     }
 
