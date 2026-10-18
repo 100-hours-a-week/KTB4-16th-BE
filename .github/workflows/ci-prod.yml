@@ -6,6 +6,9 @@ on:
   push:
     branches:
       - main
+    paths-ignore:
+      - "docs/**"
+      - "**.md"
   pull_request:
     branches:
       - main
@@ -15,6 +18,9 @@ jobs:
     if: github.event_name == 'pull_request'
     name: Backend CI prod pull_request
     runs-on: ubuntu-latest
+    concurrency:
+      group: pr-ci-${{ github.ref }}
+      cancel-in-progress: true
     services:
       mysql:
         image: mysql:8.4
@@ -123,55 +129,13 @@ jobs:
           path: build/reports/tests/test
           retention-days: 7
 
-  pr-notify:
-    name: Discord notification (prod PR)
-    runs-on: ubuntu-latest
-    needs: pr-ci
-    if: ${{ always() && github.event_name == 'pull_request' }}
-    permissions: {}
-
-    env:
-      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-
-    steps:
-      - name: Send CI result to Discord
-        if: ${{ env.DISCORD_WEBHOOK != '' }}
-        uses: Ilshidur/action-discord@0.3.2
+      - name: Notify result
+        if: ${{ always() }}
+        uses: ./.github/actions/notify-discord
         with:
-          args: "백엔드 Main pull_request CI 결과 알림"
-        env:
-          DISCORD_USERNAME: MURO_BOT
-          DISCORD_EMBEDS: |
-            [
-              {
-                "title": "Backend CI: ${{ needs.pr-ci.result }}",
-                "description": ${{ toJSON(github.event.pull_request.title) }},
-                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "color": ${{ needs.pr-ci.result == 'success' && 3066993 || 15158332 }},
-                "fields": [
-                  {
-                    "name": "PR",
-                    "value": "[#${{ github.event.pull_request.number }}](${{ github.event.pull_request.html_url }})",
-                    "inline": true
-                  },
-                  {
-                    "name": "작성자",
-                    "value": ${{ toJSON(github.event.pull_request.user.login) }},
-                    "inline": true
-                  },
-                  {
-                    "name": "작업 브랜치",
-                    "value": ${{ toJSON(github.head_ref) }},
-                    "inline": true
-                  },
-                  {
-                    "name": "대상 브랜치",
-                    "value": ${{ toJSON(github.base_ref) }},
-                    "inline": true
-                  }
-                ]
-              }
-            ]
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "Backend CI prod pull_request"
+          status: ${{ job.status }}
 
   main-ci:
     if: github.event_name == 'push'
@@ -287,8 +251,9 @@ jobs:
           path: build/reports/tests/test
           retention-days: 7
 
+      # 테스트는 위에서 이미 실행했으므로 jar는 테스트를 건너뛰고 만든다
       - name: Build jar
-        run: ./gradlew bootJar
+        run: ./gradlew bootJar -x test
 
       - name: Set up Node.js
         uses: actions/setup-node@v7
@@ -314,6 +279,10 @@ jobs:
           gcloud auth configure-docker "${{ secrets.GCP_REGION }}-docker.pkg.dev" --quiet
 
       # release.config.main.json을 이 job 안에서만 .releaserc.json으로 복사해서 쓴다.
+      # `semantic-release --extends <path>`로 직접 넘기면 플러그인 모듈 해석 기준 경로가
+      # 달라져서 semantic-release 코어에 번들된 기본 플러그인(commit-analyzer 등)조차
+      # 못 찾는 문제가 있었다(2026-09-30 실제 발생, main-ci에서 재현 확인). cosmiconfig가
+      # 원래 쓰던 자동 탐색 방식 그대로 두고, 파일만 이 job 시작 시점에 맞바꿔 충돌을 피한다.
       - name: Release backend image
         env:
           GITHUB_TOKEN: ${{ secrets.GIT_TOKEN }}
@@ -324,47 +293,10 @@ jobs:
             --package=@semantic-release/exec@7 \
             semantic-release
 
-  main-notify:
-    name: Discord notification (prod release)
-    runs-on: ubuntu-latest
-    needs: main-ci
-    if: ${{ always() && github.event_name == 'push' }}
-    permissions: {}
-
-    env:
-      DISCORD_WEBHOOK: ${{ secrets.DISCORD_WEBHOOK }}
-
-    steps:
-      - name: Send CI result to Discord
-        if: ${{ env.DISCORD_WEBHOOK != '' }}
-        uses: Ilshidur/action-discord@0.3.2
+      - name: Notify result
+        if: ${{ always() }}
+        uses: ./.github/actions/notify-discord
         with:
-          args: "Backend main CI 결과 알림"
-        env:
-          DISCORD_USERNAME: MURO_BOT
-          DISCORD_EMBEDS: |
-            [
-              {
-                "title": "Backend CI: ${{ needs.main-ci.result }}",
-                "description": ${{ toJSON(github.event.head_commit.message || '커밋 메시지 없음') }},
-                "url": "${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}",
-                "color": ${{ needs.main-ci.result == 'success' && 3066993 || 15158332 }},
-                "fields": [
-                  {
-                    "name": "커밋",
-                    "value": "[커밋 확인](${{ github.server_url }}/${{ github.repository }}/commit/${{ github.sha }})",
-                    "inline": true
-                  },
-                  {
-                    "name": "푸시한 사람",
-                    "value": ${{ toJSON(github.actor) }},
-                    "inline": true
-                  },
-                  {
-                    "name": "브랜치",
-                    "value": ${{ toJSON(github.ref_name) }},
-                    "inline": true
-                  }
-                ]
-              }
-            ]
+          webhook: ${{ secrets.DISCORD_WEBHOOK }}
+          title: "Backend CI prod release"
+          status: ${{ job.status }}

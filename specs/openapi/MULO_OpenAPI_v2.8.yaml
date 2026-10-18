@@ -3164,6 +3164,10 @@ paths:
         nickname: String
 
         닉네임으로 요청한다. 반대 방향 pending 요청이 이미 있으면 pending을 삭제하고 바로 friendship을 생성한다. 처음부터 A→B와 B→A 요청이 동시에 들어와도 최종적으로 friendship 한 건을 성립시키고 pending을 남기지 않는다.
+
+        FRIEND_REQUEST 알림은 원래 친구 요청이 생성 시점에도 존재할 때만 저장한다. 요청이 이미 삭제됐다면 신규 알림을 생성하지 않고 Outbox를 retry 증가 없이 COMPLETED로 완료한다.
+
+        이미 저장된 요청 알림은 요청 삭제 시 ON DELETE SET NULL로 연결만 해제하고 이력으로 유지한다. 종료된 요청의 알림 표시는 알림 목록 정책을 따른다.
       responses:
         '201':
           description: 새 pending friend_request가 생성되므로 201.
@@ -3325,6 +3329,8 @@ paths:
         friendRequestId: Long
 
         수신자만 수락 가능. friendship 생성 후 friend_request는 삭제한다.
+
+        이미 저장된 FRIEND_REQUEST 알림은 요청 삭제 시 ON DELETE SET NULL로 연결만 해제하여 원래 title/content와 읽음/삭제 기능을 보존한다. 알림 생성 시 원래 친구 요청이 이미 삭제됐다면 신규 INSERT를 생략하고 Outbox를 retry 증가 없이 COMPLETED로 완료한다. null 대상 요청 알림의 이동 제한은 알림 목록 정책을 따르며, null만으로 수락·취소·거절 사유를 구분하지 않는다.
       responses:
         '200':
           description: 기존 요청을 수락하여 관계 상태를 변경하는 작업이므로 200.
@@ -3410,6 +3416,8 @@ paths:
         friendRequestId: Long
 
         수신자가 호출하면 거절, 발신자가 호출하면 취소. friend_request를 물리 삭제한다.
+
+        이미 저장된 FRIEND_REQUEST 알림은 요청 삭제 시 ON DELETE SET NULL로 연결만 해제하여 원래 title/content와 읽음/삭제 기능을 보존한다. 알림 생성 시 원래 친구 요청이 이미 삭제됐다면 신규 INSERT를 생략하고 Outbox를 retry 증가 없이 COMPLETED로 완료한다. null 대상 요청 알림의 이동 제한은 알림 목록 정책을 따르며, null만으로 수락·취소·거절 사유를 구분하지 않는다.
       responses:
         '200':
           description: 요청 자원을 정상 삭제했으므로 200.
@@ -5406,6 +5414,10 @@ paths:
         size: Integer (기본값 20, 최대 100)
 
         최신순 Cursor 페이지네이션, 페이지 크기 20. GET 자체는 read-only이며 프론트가 페이지를 받은 뒤 해당 페이지 unread IDs로 batch read API를 자동 호출한다.
+
+        이미 저장된 FRIEND_REQUEST 알림은 친구 요청이 수락·취소·거절로 삭제되어도 ON DELETE SET NULL로 연결만 해제하여 이력으로 유지한다. 원래 title/content와 읽음/삭제 기능을 유지하고, targetId=null인 알림에는 대상 이동 링크를 제공하지 않는다. null만으로 수락·취소·거절 중 어떤 사유인지 구분하거나 추정하지 않는다.
+
+        FRIEND_REQUEST 알림 생성 시 원래 친구 요청이 이미 삭제됐다면 신규 알림을 생성하지 않고 Outbox를 retry 증가 없이 COMPLETED로 완료한다. 이미 저장된 요청 알림의 이력 보존과 신규 생성 생략은 각각 적용하며 다른 알림 유형의 생성·재시도 정책은 유지한다.
       responses:
         '200':
           description: |-

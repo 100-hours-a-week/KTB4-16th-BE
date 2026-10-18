@@ -66,7 +66,7 @@ public class NotificationOutboxRepository {
         return rows.stream().findFirst();
     }
 
-    /** 모든 수신자 알림 저장이 끝난 이벤트를 COMPLETED로 전환한다. */
+    /** 알림 저장 또는 종료된 요청의 생략을 마친 이벤트를 COMPLETED로 전환한다. */
     public int markCompleted(UUID eventId, LocalDateTime processedAt) {
         return jdbcTemplate.update("""
                 UPDATE outbox_events
@@ -116,8 +116,12 @@ public class NotificationOutboxRepository {
         return found.isEmpty() ? null : found.getFirst();
     }
 
-    /** Outbox event ID를 포함한 수신자별 알림을 트랜잭션에 INSERT한다. */
+    /** 수신자별 알림을 저장하되 생성 전에 종료된 친구 요청 알림은 생략한다. */
     public void insertNotification(UUID eventId, NotificationDraft draft) {
+        if (draft.type() == NotificationType.FRIEND_REQUEST) {
+            insertPendingFriendRequestNotification(eventId, draft);
+            return;
+        }
         Long targetId = lockExistingTarget(draft.type(), draft.targetId());
         jdbcTemplate.update("""
                 INSERT INTO notifications (
@@ -130,6 +134,22 @@ public class NotificationOutboxRepository {
                 draft.type() == NotificationType.FRIEND_ACCEPTED ? targetId : null,
                 draft.type() == NotificationType.FRIEND_REQUEST ? targetId : null,
                 eventId.toString(), draft.title(), draft.content());
+    }
+
+    /** 원래 요청의 현재 존재 확인과 알림 저장을 한 SQL로 수행하고 종료된 요청은 0행 처리한다. */
+    private void insertPendingFriendRequestNotification(UUID eventId, NotificationDraft draft) {
+        // worker의 사용자 선잠금 뒤 실행한다. FOR SHARE로 RC/RR 모두 최신 요청과 행 보호를 유지한다.
+        // 0행도 정상 처리이므로 바깥 worker가 이벤트를 COMPLETED로 마무리한다.
+        jdbcTemplate.update("""
+                INSERT INTO notifications (
+                    user_id, type, friend_request_id, source_event_id, title, content
+                )
+                SELECT ?, 'FRIEND_REQUEST', request.friend_request_id, ?, ?, ?
+                FROM friend_requests request
+                WHERE request.friend_request_id = ?
+                FOR SHARE
+                """, draft.recipientUserId(), eventId.toString(), draft.title(), draft.content(),
+                draft.targetId());
     }
 
     /** JDBC 결과 행의 DB 값만 worker 내부 record로 변환한다. */

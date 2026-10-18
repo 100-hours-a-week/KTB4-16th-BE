@@ -1,5 +1,7 @@
 # 친구 알림 잠금 순서 개선 결과 — 작업 #248
 
+> **2026-10-18 정책 대체:** 아래 정책과 검증 수치는 2026-10-16 당시의 원문 기록이다. [위키 #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) 사용자 확정에 따라 요청이 사라진 `FRIEND_REQUEST`는 신규 INSERT를 생략하고 retry 증가 없이 Outbox를 `COMPLETED`로 완료한다. 이미 저장된 이력의 최신 표시 기준은 서비스 정책 `NOTI-007`·`NOTI-008`·`NOTI-014`이며, 아래 결과는 새 정책의 검증 결과를 의미하지 않는다.
+
 ## 범위와 근거
 
 - 브랜치: `fix/friend-notification-deadlock-248` (원본 백엔드 폴더, `origin/develop` 기준).

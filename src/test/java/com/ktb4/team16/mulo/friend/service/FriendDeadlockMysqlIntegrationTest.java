@@ -164,12 +164,142 @@ class FriendDeadlockMysqlIntegrationTest {
                 assertThat(event.get("last_error_code")).isNull();
             });
             assertThat(((Number) state.get("accepted_notification_count")).longValue()).isEqualTo(2);
-            assertThat(((Number) state.get("late_request_notification_count")).longValue()).isEqualTo(1);
+            assertThat(((Number) state.get("late_request_notification_count")).longValue()).isZero();
         } finally {
             continueRequest.countDown();
             executor.shutdownNow();
             assertThat(executor.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
         }
+    }
+
+    /** 요청 알림이 사용자 S 잠금을 먼저 얻으면 역방향 명령은 저장 완료를 기다리고 이력을 보존한다. */
+    @Test
+    void notificationHoldingUserLockCompletesBeforeOppositeRequest() throws Exception {
+        assertIsolatedDatabase();
+        TestUser first = insertUser("wfA");
+        TestUser second = insertUser("wfB");
+        var initial = commands.sendFriendRequest(first.id(), second.nickname());
+        UUID requestEventId = initial.eventIds().getFirst();
+        long requestId = ((SendFriendRequestResult.Pending) initial.result()).friendRequestId();
+        var executor = Executors.newFixedThreadPool(2);
+
+        try (Connection observer = openObserver()) {
+            observer.setAutoCommit(false);
+            try {
+                holdRequestBarrier(observer, requestId);
+                var notificationFuture = executor.submit(() -> processor.process(requestEventId));
+                RequestLockObservation workerLocks = awaitRequestLockWait(observer, requestId, second.id());
+                assertThat(workerLocks.recipientSharedLockHeld())
+                        .as("요청 INSERT 대기 전에 수신자 사용자 S 잠금을 얻어야 한다")
+                        .isTrue();
+
+                var requestFuture = executor.submit(() ->
+                        commands.sendFriendRequest(second.id(), first.nickname()));
+                LockObservation commandLocks = awaitUserLockWait(observer,
+                        workerLocks.workerConnectionId(), requestId);
+                assertThat(commandLocks.waitingConnectionId())
+                        .as("역방향 명령의 별도 연결이 worker의 사용자 S 잠금 뒤에서 대기해야 한다")
+                        .isNotEqualTo(workerLocks.workerConnectionId());
+                System.out.println("WORKER_FIRST_REQUEST_LOCK_OBSERVATION " + workerLocks);
+                System.out.println("WORKER_FIRST_COMMAND_LOCK_OBSERVATION " + commandLocks);
+
+                // 테스트 barrier만 해제한다. 실제 worker의 커밋이 역방향 명령을 이어 준다.
+                observer.commit();
+                notificationFuture.get(15, TimeUnit.SECONDS);
+                var accepted = requestFuture.get(15, TimeUnit.SECONDS);
+                assertThat(accepted.result()).isInstanceOf(SendFriendRequestResult.BecameFriends.class);
+                accepted.eventIds().forEach(processor::process);
+
+                Map<String, Object> state = jdbc.queryForMap("""
+                        SELECT
+                          (SELECT COUNT(*) FROM friend_requests WHERE friend_request_id = ?) AS pending_count,
+                          (SELECT COUNT(*) FROM friendships WHERE user_low_id = ? AND user_high_id = ?)
+                            AS friendship_count,
+                          (SELECT COUNT(*) FROM notifications WHERE type = 'FRIEND_ACCEPTED'
+                            AND user_id IN (?, ?)) AS accepted_notification_count,
+                          (SELECT COUNT(*) FROM notifications WHERE type = 'FRIEND_REQUEST'
+                            AND source_event_id = ? AND user_id = ?)
+                            AS original_request_notification_count,
+                          (SELECT COUNT(*) FROM notifications WHERE type = 'FRIEND_REQUEST'
+                            AND source_event_id = ? AND friend_request_id IS NULL)
+                            AS closed_request_notification_count
+                        """, requestId, Math.min(first.id(), second.id()), Math.max(first.id(), second.id()),
+                        first.id(), second.id(), requestEventId.toString(), second.id(),
+                        requestEventId.toString());
+                List<Map<String, Object>> events = jdbc.queryForList("""
+                        SELECT event_type, status, retry_count, last_error_code
+                        FROM outbox_events WHERE event_id IN (?, ?)
+                        """, requestEventId.toString(), accepted.eventIds().getFirst().toString());
+                System.out.println("WORKER_FIRST_FINAL_STATE " + state);
+                System.out.println("WORKER_FIRST_OUTBOX_OUTCOMES " + events);
+                assertThat(((Number) state.get("pending_count")).longValue()).isZero();
+                assertThat(((Number) state.get("friendship_count")).longValue()).isEqualTo(1);
+                assertThat(((Number) state.get("accepted_notification_count")).longValue()).isEqualTo(2);
+                assertThat(((Number) state.get("original_request_notification_count")).longValue()).isEqualTo(1);
+                assertThat(((Number) state.get("closed_request_notification_count")).longValue()).isEqualTo(1);
+                assertThat(events).hasSize(2).allSatisfy(event -> {
+                    assertThat(event.get("status")).isEqualTo("COMPLETED");
+                    assertThat(((Number) event.get("retry_count")).longValue()).isZero();
+                    assertThat(event.get("last_error_code")).isNull();
+                });
+            } finally {
+                // 실패 경로에서도 barrier를 풀어 두 작업이 잠금 대기에 남지 않게 한다.
+                observer.rollback();
+            }
+        } finally {
+            executor.shutdownNow();
+            assertThat(executor.awaitTermination(20, TimeUnit.SECONDS)).isTrue();
+        }
+    }
+
+    /** worker가 사용자 S 잠금을 얻은 뒤 요청 INSERT에서 멈추도록 테스트 전용 요청 X 잠금을 잡는다. */
+    private void holdRequestBarrier(Connection observer, long requestId) throws SQLException {
+        try (var statement = observer.prepareStatement("""
+                SELECT friend_request_id FROM friend_requests WHERE friend_request_id = ? FOR UPDATE
+                """)) {
+            statement.setLong(1, requestId);
+            statement.setQueryTimeout(2);
+            try (var rows = statement.executeQuery()) {
+                assertThat(rows.next()).as("barrier 대상 pending 요청이 있어야 한다").isTrue();
+            }
+        }
+    }
+
+    /** 요청 S 잠금 대기와 같은 worker의 수신자 사용자 S 잠금 보유를 제한 시간 안에 관찰한다. */
+    private RequestLockObservation awaitRequestLockWait(Connection observer, long requestId,
+            long recipientId) throws Exception {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        while (System.nanoTime() < deadline) {
+            try (var statement = observer.prepareStatement("""
+                    SELECT waiter.PROCESSLIST_ID,
+                           EXISTS(SELECT 1 FROM performance_schema.data_locks held
+                             WHERE held.ENGINE_TRANSACTION_ID = waiting.ENGINE_TRANSACTION_ID
+                               AND held.OBJECT_SCHEMA = DATABASE() AND held.OBJECT_NAME = 'users'
+                               AND held.INDEX_NAME = 'PRIMARY' AND held.LOCK_STATUS = 'GRANTED'
+                               AND held.LOCK_TYPE = 'RECORD' AND held.LOCK_MODE LIKE 'S%'
+                               AND held.LOCK_DATA = ?) AS recipient_shared
+                    FROM performance_schema.data_lock_waits waits
+                    JOIN performance_schema.data_locks waiting
+                      ON waiting.ENGINE_LOCK_ID = waits.REQUESTING_ENGINE_LOCK_ID
+                    JOIN performance_schema.threads blocker ON blocker.THREAD_ID = waits.BLOCKING_THREAD_ID
+                    JOIN performance_schema.threads waiter ON waiter.THREAD_ID = waits.REQUESTING_THREAD_ID
+                    WHERE blocker.PROCESSLIST_ID = CONNECTION_ID() AND waiting.OBJECT_SCHEMA = DATABASE()
+                      AND waiting.OBJECT_NAME = 'friend_requests' AND waiting.INDEX_NAME = 'PRIMARY'
+                      AND waiting.LOCK_TYPE = 'RECORD' AND waiting.LOCK_STATUS = 'WAITING'
+                      AND waiting.LOCK_MODE LIKE 'S%' AND waiting.LOCK_DATA = ?
+                    """)) {
+                statement.setString(1, Long.toString(recipientId));
+                statement.setString(2, Long.toString(requestId));
+                statement.setQueryTimeout(2);
+                try (var rows = statement.executeQuery()) {
+                    if (rows.next()) {
+                        return new RequestLockObservation(rows.getLong(1), rows.getBoolean(2));
+                    }
+                }
+            }
+            TimeUnit.MILLISECONDS.sleep(20);
+        }
+        throw new AssertionError("10초 내 worker의 요청 S 잠금 대기를 관찰하지 못했다");
     }
 
     /** 관리자 연결도 애플리케이션과 같은 일회용 스키마를 가리키는지 확인한다. */
@@ -223,7 +353,7 @@ class FriendDeadlockMysqlIntegrationTest {
             }
             TimeUnit.MILLISECONDS.sleep(20);
         }
-        throw new AssertionError("10초 내 Outbox의 사용자 잠금 대기를 관찰하지 못했다");
+        throw new AssertionError("10초 내 지정 연결에 의한 사용자 잠금 대기를 관찰하지 못했다");
     }
 
     /** 잠금 그래프와 비교할 수 있도록 최신 InnoDB 데드락 기록을 테스트 출력에 남긴다. */
@@ -265,6 +395,8 @@ class FriendDeadlockMysqlIntegrationTest {
 
     private record TestUser(Long id, String nickname) { }
 
-    private record LockObservation(long commandConnectionId, long notificationConnectionId,
-            String notificationTransactionId, boolean requestSharedLockHeld) { }
+    private record LockObservation(long blockingConnectionId, long waitingConnectionId,
+            String waitingTransactionId, boolean requestSharedLockHeld) { }
+
+    private record RequestLockObservation(long workerConnectionId, boolean recipientSharedLockHeld) { }
 }

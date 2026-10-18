@@ -1,5 +1,7 @@
 # Friend notification lock order implementation plan
 
+> **2026-10-18 policy supersession:** The original plan and results below are historical records. The user-approved [wiki #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) policy now skips new `FRIEND_REQUEST` notifications for missing requests and completes Outbox without increasing retry; already stored history follows service policies `NOTI-007`, `NOTI-008`, and `NOTI-014`.
+
 > **For agentic workers:** Use `superpowers:executing-plans` to implement the tasks in order. The existing failing integration test is the red test for Task 1.
 
 **Goal:** Make friend commands and friend notification processing acquire shared user rows before friend request or friendship rows, removing the reproduced deadlock while preserving each event's intended notification result.
