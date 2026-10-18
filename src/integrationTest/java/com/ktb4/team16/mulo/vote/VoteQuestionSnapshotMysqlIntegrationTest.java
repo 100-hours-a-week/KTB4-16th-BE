@@ -14,8 +14,8 @@ import com.ktb4.team16.mulo.integrationtest.IntegrationTestDatabaseGuard;
 import com.ktb4.team16.mulo.vote.ai.AiVoteQuestion;
 import com.ktb4.team16.mulo.vote.ai.AiVoteReadRepository;
 import com.ktb4.team16.mulo.vote.scheduler.VoteDailySnapshotService;
+import com.ktb4.team16.mulo.vote.scheduler.VoteQuestionPrefetchService;
 import com.ktb4.team16.mulo.vote.snapshot.VoteDailySnapshotWriter;
-import com.ktb4.team16.mulo.vote.snapshot.VoteUserGenreAssignment;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
 import java.time.Clock;
@@ -24,6 +24,7 @@ import java.time.ZoneId;
 import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
+import java.util.Optional;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
@@ -61,6 +62,7 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     @Autowired DataSource dataSource;
     @Autowired JdbcTemplate jdbcTemplate;
     @Autowired VoteDailySnapshotService snapshotService;
+    @Autowired VoteQuestionPrefetchService prefetchService;
     @Autowired VoteDailySnapshotWriter snapshotWriter;
     @Autowired JwtTokenProvider jwtTokenProvider;
     @Autowired MockMvc mockMvc;
@@ -98,6 +100,8 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         long answerId = insertAnswer(questionId, userId, "저장 A");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "재즈", "늦은 AI 질문", "AI A", "AI B")));
 
         createSnapshot(TODAY);
 
@@ -110,7 +114,7 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT vote_answer_id FROM vote_answers WHERE vote_question_id = ? AND user_id = ?",
                 Long.class, questionId, userId)).isEqualTo(answerId);
-        verify(aiVoteReadRepository, never()).findQuestions(TODAY.minusDays(1), TODAY);
+        verify(aiVoteReadRepository).findQuestions(TODAY, TODAY);
 
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "공통"));
         createSnapshot(TODAY);
@@ -130,9 +134,16 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres())
                 .thenReturn(Map.of(firstUserId, "공통", secondUserId, "공통"));
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of(
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "공통", "AI 질문", "AI A", "AI B")));
 
+        prefetchService.prefetchQuestions(TODAY);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("BUILDING");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_user_daily_assignments WHERE vote_date = ? "
+                        + "AND vote_question_id IS NULL", Integer.class, TODAY)).isEqualTo(2);
         createSnapshot(TODAY);
 
         Long questionId = jdbcTemplate.queryForObject(
@@ -148,6 +159,216 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     }
 
     @Test
+    void prefetchPersistsPartialQuestionsAndGenresWithoutPublishingReadySnapshotOrOverwritingThem() {
+        testDates.add(TODAY);
+        long userId = insertUser("재즈");
+        long existingQuestionId = insertQuestion(TODAY, "재즈", "BE 고정 질문", "고정 A", "고정 B");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(
+                List.of(new AiVoteQuestion(TODAY, "재즈", "늦은 AI 질문", "AI A", "AI B"),
+                        new AiVoteQuestion(TODAY, "공통", "사전 질문", "공통 A", "공통 B")),
+                List.of(new AiVoteQuestion(TODAY, "공통", "뒤늦은 교체", "다른 A", "다른 B"),
+                        new AiVoteQuestion(TODAY, "발라드", "추가 질문", "발라드 A", "발라드 B")));
+
+        prefetchService.prefetchQuestions(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_question_id = ?", String.class,
+                existingQuestionId)).isEqualTo("BE 고정 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                String.class, TODAY)).isEqualTo("사전 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("BUILDING");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_user_daily_assignments WHERE vote_date = ?",
+                Integer.class, TODAY)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, userId)).isEqualTo("재즈");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                Long.class, TODAY, userId)).isNull();
+
+        prefetchService.prefetchQuestions(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                String.class, TODAY)).isEqualTo("사전 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '발라드'",
+                Integer.class, TODAY)).isEqualTo(1);
+    }
+
+    @Test
+    void finalizationUsesCommonForUnassignedUserWhenAiGenreViewFails() {
+        long userId = insertUser("재즈");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "공통", "사전 질문", "A", "B")), List.of());
+        when(aiVoteReadRepository.findAllUserGenres()).thenThrow(new IllegalStateException("AI view unavailable"));
+
+        prefetchService.prefetchQuestions(TODAY);
+        createSnapshot(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("READY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, userId)).isEqualTo("공통");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                Long.class, TODAY, userId)).isNotNull();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                Integer.class, TODAY)).isEqualTo(1);
+    }
+
+    @Test
+    void finalizationUsesPrefetchedDataWhenBothFinalAiReadsFail() {
+        testDates.add(TODAY);
+        long userId = insertUser("재즈");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true, true, false, false);
+        when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "재즈", "사전 질문", "A", "B")));
+
+        prefetchService.prefetchQuestions(TODAY);
+        createSnapshot(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("READY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, userId)).isEqualTo("재즈");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
+                String.class, TODAY)).isEqualTo("사전 질문");
+    }
+
+    @Test
+    void finalizationUsesPreviousQuestionForMissingGroupWhenFinalAiReadsFail() {
+        testDates.add(TODAY);
+        LocalDate yesterday = TODAY.minusDays(1);
+        testDates.add(yesterday);
+        long jazzUserId = insertUser("재즈");
+        long commonUserId = insertUser("공통");
+        insertQuestion(yesterday, "공통", "전날 공통 질문", "전날 A", "전날 B");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true, true, false, false);
+        when(aiVoteReadRepository.findAllUserGenres()).thenReturn(
+                Map.of(jazzUserId, "재즈", commonUserId, "공통"));
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "재즈", "사전 재즈 질문", "재즈 A", "재즈 B")));
+
+        prefetchService.prefetchQuestions(TODAY);
+        createSnapshot(TODAY);
+
+        Long commonQuestionId = jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                Long.class, TODAY);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("READY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_question_id = ?",
+                String.class, commonQuestionId)).isEqualTo("전날 공통 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                Long.class, TODAY, commonUserId)).isEqualTo(commonQuestionId);
+    }
+
+    @Test
+    void doesNotCreateReadySnapshotWhenAiAndPreviousQuestionDataAreUnavailable() {
+        testDates.add(TODAY);
+        insertUser("재즈");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(false);
+
+        createSnapshot(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_daily_snapshots WHERE vote_date = ?", Integer.class, TODAY)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ?", Integer.class, TODAY)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_user_daily_assignments WHERE vote_date = ?",
+                Integer.class, TODAY)).isZero();
+    }
+
+    @Test
+    void simultaneousPrefetchesKeepOneQuestionPerGroup() throws Exception {
+        testDates.add(TODAY);
+        CountDownLatch bothReadQuestions = new CountDownLatch(2);
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenAnswer(invocation -> {
+            bothReadQuestions.countDown();
+            if (!bothReadQuestions.await(10, TimeUnit.SECONDS)) {
+                throw new IllegalStateException("Concurrent prefetch calls did not synchronize.");
+            }
+            return List.of(new AiVoteQuestion(TODAY, "공통", "동시 질문", "A", "B"));
+        });
+
+        ExecutorService executor = Executors.newFixedThreadPool(2);
+        try {
+            var first = executor.submit(() -> prefetchService.prefetchQuestions(TODAY));
+            var second = executor.submit(() -> prefetchService.prefetchQuestions(TODAY));
+            first.get(20, TimeUnit.SECONDS);
+            second.get(20, TimeUnit.SECONDS);
+        } finally {
+            executor.shutdownNow();
+        }
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                Integer.class, TODAY)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_daily_snapshots WHERE vote_date = ?",
+                Integer.class, TODAY)).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("BUILDING");
+    }
+
+    @Test
+    void midnightKeepsPrefetchedGroupsAndUsesYesterdayOnlyForMissingGroups() {
+        long jazzUserId = insertUser("재즈");
+        long commonUserId = insertUser("공통");
+        LocalDate yesterday = TODAY.minusDays(1);
+        testDates.add(yesterday);
+        insertQuestion(yesterday, "공통", "전날 공통 질문", "전날 A", "전날 B");
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findAllUserGenres())
+                .thenReturn(Map.of(jazzUserId, "재즈", commonUserId, "공통"));
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "재즈", "사전 적재 재즈 질문", "재즈 A", "재즈 B")));
+
+        prefetchService.prefetchQuestions(TODAY);
+        org.mockito.Mockito.clearInvocations(aiVoteReadRepository);
+        createSnapshot(TODAY);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
+                String.class, TODAY)).isEqualTo("사전 적재 재즈 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                String.class, TODAY)).isEqualTo("전날 공통 질문");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
+                .isEqualTo("READY");
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
+                new AiVoteQuestion(TODAY, "발라드", "늦게 도착한 질문", "늦은 A", "늦은 B")));
+        prefetchService.prefetchQuestions(TODAY);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '발라드'",
+                Integer.class, TODAY)).isZero();
+        verify(aiVoteReadRepository, never()).findQuestions(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any());
+    }
+
+    @Test
     void copiesPreviousDayQuestionIntoNewTodayQuestionWithoutCopyingAnswers() {
         LocalDate yesterday = TODAY.minusDays(1);
         testDates.add(yesterday);
@@ -156,8 +377,6 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         insertAnswer(yesterdayQuestionId, userId, "어제 A");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
-        when(aiVoteReadRepository.findQuestions(yesterday, TODAY)).thenReturn(List.of(
-                new AiVoteQuestion(yesterday, "재즈", "어제 질문", "어제 A", "어제 B")));
 
         createSnapshot(TODAY);
 
@@ -181,8 +400,9 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         long userId = insertUser("재즈");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of(
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "재즈", "질문 내용", "선택 A", "선택 B")));
+        prefetchService.prefetchQuestions(TODAY);
         createSnapshot(TODAY);
         Long questionId = jdbcTemplate.queryForObject(
                 "SELECT vote_question_id FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
@@ -209,8 +429,9 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         long userId = insertUser("재즈");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of(
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "재즈", "질문 내용", "선택 A", "선택 B")));
+        prefetchService.prefetchQuestions(TODAY);
         createSnapshot(TODAY);
 
         mockMvc.perform(get("/api/vote-questions/today")
@@ -225,8 +446,9 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         long userId = insertUserWithoutPreference();
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of());
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of(
+        when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "공통", "공통 질문", "선택 A", "선택 B")));
+        prefetchService.prefetchQuestions(TODAY);
         createSnapshot(TODAY);
 
         Long questionId = jdbcTemplate.queryForObject(
@@ -267,7 +489,6 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         long userId = insertUser("재즈");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of());
         createSnapshot(TODAY);
 
         mockMvc.perform(get("/api/vote-questions/today")
@@ -282,9 +503,9 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
         testDates.add(date);
         long userId = insertUser("재즈");
 
-        org.assertj.core.api.Assertions.assertThatThrownBy(() -> snapshotWriter.write(date,
+        org.assertj.core.api.Assertions.assertThatThrownBy(() -> snapshotWriter.finalizeSnapshot(date,
                         List.of(new AiVoteQuestion(date, "재즈", "질문", "A", "B")),
-                        List.of(new VoteUserGenreAssignment(userId + 999_999L, "재즈"))))
+                        List.of(userId + 999_999L), Optional.of(Map.of(userId + 999_999L, "재즈"))))
                 .isInstanceOf(DataAccessException.class);
 
         assertThat(jdbcTemplate.queryForObject(
@@ -305,8 +526,7 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
             }
             return Map.of(userId, "재즈");
         });
-        when(aiVoteReadRepository.findQuestions(TODAY.minusDays(1), TODAY)).thenReturn(List.of(
-                new AiVoteQuestion(TODAY, "재즈", "질문", "A", "B")));
+        insertQuestion(TODAY, "재즈", "질문", "A", "B");
 
         ExecutorService executor = Executors.newFixedThreadPool(2);
         try {
