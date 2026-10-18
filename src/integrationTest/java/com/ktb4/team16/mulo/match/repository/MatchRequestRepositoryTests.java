@@ -75,6 +75,15 @@ class MatchRequestRepositoryTests {
         long otherQuestionIdRequest = insertWaiting(otherQuestionId, "B", createdAt(2));
         long expiredId = insertRequest(questionId, "B", createdAt(3), "EXPIRED", null);
 
+        long deletedUserId = insertUser();
+        long deletedAnswerId = insertAnswer(questionId, deletedUserId, "B", createdAt(0));
+        long deletedRequestId = insert("""
+                INSERT INTO match_requests (user_id, vote_answer_id, status, match_id, created_at)
+                VALUES (?, ?, 'WAITING', NULL, ?)
+                """, deletedUserId, deletedAnswerId, createdAt(0));
+        jdbcTemplate.update("UPDATE users SET deleted_at = ? WHERE user_id = ?",
+                createdAt(0), deletedUserId);
+
         long matchId = insertMatch(questionId);
         long matchingId = insertRequest(questionId, "B", createdAt(4), "MATCHING", matchId);
 
@@ -92,7 +101,7 @@ class MatchRequestRepositoryTests {
                 .containsExactly(oldestId, tieFirstId, tieSecondId);
         assertThat(fifo)
                 .extracting(MatchRequest::getMatchRequestId)
-                .doesNotContain(sameOptionId, otherQuestionIdRequest, expiredId, matchingId);
+                .doesNotContain(sameOptionId, otherQuestionIdRequest, expiredId, matchingId, deletedRequestId);
 
         List<MatchRequest> firstCandidate = matchRequestRepository.findOppositeWaitingForUpdate(
                 requesterAnswerId, PageRequest.of(0, 1));

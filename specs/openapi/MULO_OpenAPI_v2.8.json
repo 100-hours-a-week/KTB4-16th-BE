@@ -1916,28 +1916,6 @@
               }
             }
           },
-          "500": {
-            "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "INTERNAL_SERVER_ERROR",
-                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
-          },
           "429": {
             "description": "사용자별 또는 Spotify 호출 제한으로 음악 검색을 잠시 처리할 수 없으므로 429. Retry-After 헤더의 초 단위만큼 기다린 뒤 다시 요청한다.",
             "headers": {
@@ -1965,6 +1943,28 @@
                 "example": {
                   "code": "MUSIC_SEARCH_RATE_LIMITED",
                   "message": "음악 검색 요청이 많습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INTERNAL_SERVER_ERROR",
+                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
                 }
               }
             }
@@ -4450,40 +4450,6 @@
         "operationId": "postApiUsersMeFriendRequests",
         "description": "필수\nnickname: String\n\n닉네임으로 요청한다. 반대 방향 pending 요청이 이미 있으면 pending을 삭제하고 바로 friendship을 생성한다. 처음부터 A→B와 B→A 요청이 동시에 들어와도 최종적으로 friendship 한 건을 성립시키고 pending을 남기지 않는다.",
         "responses": {
-          "201": {
-            "description": "새 pending friend_request가 생성되므로 201.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "friendRequestId": {
-                          "type": "integer",
-                          "format": "int64"
-                        },
-                        "message": {
-                          "type": "string"
-                        }
-                      }
-                    }
-                  }
-                },
-                "example": {
-                  "message": "친구 요청 성공",
-                  "data": {
-                    "friendRequestId": 21,
-                    "message": "친구 요청을 보냈습니다."
-                  }
-                }
-              }
-            }
-          },
           "200": {
             "description": "반대 방향 요청이 이미 존재해 새 요청 자원 대신 최종 friendship 상태로 전환되므로 200.",
             "content": {
@@ -4513,6 +4479,40 @@
                   "data": {
                     "friendshipId": 11,
                     "message": "서로의 친구 요청이 확인되어 친구가 되었습니다."
+                  }
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "새 pending friend_request가 생성되므로 201.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "friendRequestId": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "친구 요청 성공",
+                  "data": {
+                    "friendRequestId": 21,
+                    "message": "친구 요청을 보냈습니다."
                   }
                 }
               }
@@ -4939,28 +4939,6 @@
               }
             }
           },
-          "404": {
-            "description": "현재 사용자가 소유한 관계가 존재하지 않으므로 404.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "FRIENDSHIP_NOT_FOUND",
-                  "message": "친구 관계를 찾을 수 없습니다."
-                }
-              }
-            }
-          },
           "401": {
             "description": "친구 삭제는 인증된 사용자만 수행할 수 있으므로 유효한 Access Token이 없거나 인증에 실패한 경우 401.",
             "content": {
@@ -4979,6 +4957,28 @@
                 "example": {
                   "code": "UNAUTHORIZED",
                   "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "현재 사용자가 소유한 관계가 존재하지 않으므로 404.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "FRIENDSHIP_NOT_FOUND",
+                  "message": "친구 관계를 찾을 수 없습니다."
                 }
               }
             }
@@ -5554,6 +5554,30 @@
           }
         },
         "responses": {
+          "200": {
+            "description": "AI가 degraded 상태를 반환했고 응답 tracks가 정확히 5곡이어서 기존 현재 플레이리스트를 유지했으므로 200.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object"
+                    }
+                  }
+                },
+                "example": {
+                  "message": "추천 결과가 없어 기존 플레이리스트 유지",
+                  "data": {
+                    "playlist": null
+                  }
+                }
+              }
+            }
+          },
           "201": {
             "description": "AI 응답의 정확히 5곡으로 새 추천 플레이리스트를 생성하므로 201.",
             "content": {
@@ -5654,30 +5678,6 @@
               }
             }
           },
-          "200": {
-            "description": "AI가 degraded 상태를 반환했고 응답 tracks가 정확히 5곡이어서 기존 현재 플레이리스트를 유지했으므로 200.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "type": "object"
-                    }
-                  }
-                },
-                "example": {
-                  "message": "추천 결과가 없어 기존 플레이리스트 유지",
-                  "data": {
-                    "playlist": null
-                  }
-                }
-              }
-            }
-          },
           "400": {
             "description": "추천 컨텍스트 생성을 위한 현재 위치 좌표가 누락되어 요청 검증에 실패했으므로 400.\n\n추가 케이스: latitude 또는 longitude가 유효한 좌표 범위를 만족하지 않으므로 400.",
             "content": {
@@ -5751,28 +5751,6 @@
               }
             }
           },
-          "502": {
-            "description": "날씨·기온 확보 실패, AI 서비스 통신 실패 또는 AI가 정확히 5곡이 아닌 응답을 반환해 추천을 생성할 수 없으므로 502.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "WEATHER_API_ERROR",
-                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
-          },
           "500": {
             "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
             "content": {
@@ -5791,6 +5769,28 @@
                 "example": {
                   "code": "INTERNAL_SERVER_ERROR",
                   "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          },
+          "502": {
+            "description": "날씨·기온 확보 실패, AI 서비스 통신 실패 또는 AI가 정확히 5곡이 아닌 응답을 반환해 추천을 생성할 수 없으므로 502.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "WEATHER_API_ERROR",
+                  "message": "날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
                 }
               }
             }
@@ -5959,7 +5959,7 @@
         ],
         "summary": "오늘의 투표 조회",
         "operationId": "getApiVoteQuestionsToday",
-        "description": "사용자의 대표 음악 장르(users.music_genre)와 동일한 장르의 오늘 질문 1건을 조회한다. 장르별 하루 1개 질문을 제공한다.\nusers.music_genre가 NULL이면 403 MUSIC_GENRE_REQUIRED를 반환한다.\nmyAnswer는 미응답이면 null이고, 응답한 경우 선택지의 실제 텍스트를 반환한다.\nDB vote_answers.selected_option은 선택지 실제 텍스트를 저장한다.",
+        "description": "BE는 AI DB 읽기 전용 뷰 be_user_music_genres에서 사용자의 music_genre를 조회한다. AI 사용자 뷰에 사용자의 행이 없으면 공통 그룹으로 배정한다. BE는 장르를 직접 계산하거나 소수 장르를 통합하지 않는다. AI가 매일 23:00~23:40 배치로 그룹을 계산하며 BE는 AI 계산 API를 호출하지 않는다.\nBE는 매일 00:00 Asia/Seoul에 해당 날짜의 사용자별 그룹과 질문 ID를 BE DB에 스냅샷으로 고정한다. 준비 완료 전에는 503 VOTE_SNAPSHOT_NOT_READY를 반환한다. 스냅샷 이후 가입한 사용자는 첫 조회 때 AI 그룹을 조회해 당일 배정을 만들며, 이미 존재하는 배정은 변경하지 않는다.\nAI 질문은 (question_date, music_genre)로 식별되고 별도 AI 질문 ID는 사용하지 않는다. BE는 MySQL에 이미 저장된 오늘 날짜·그룹 질문을 최우선으로 사용하며, 질문 ID·문구·선택지·기존 답변을 유지한다. 해당 질문이 없을 때만 AI 뷰에서 오늘 같은 그룹 질문을 조회하고, 없으면 전날 같은 그룹 질문을 오늘 날짜의 새 vote_questions 행으로 복사한다. 양쪽 모두 없으면 해당 그룹의 질문 ID를 배정하지 않고 404 TODAY_VOTE_NOT_FOUND를 반환한다.\n투표·매칭 호환을 위해 BE DB vote_questions에 자체 vote_question_id를 둔다. BE의 (music_genre, vote_date) UNIQUE 제약으로 날짜·그룹별 질문을 한 건만 저장하며, AI 질문 내용이 기존 MySQL 질문과 달라도 기존 MySQL 질문을 변경하지 않고 재사용한다. 최초 동시 저장에서 UNIQUE 충돌이 발생하면 경쟁 트랜잭션이 저장한 기존 행과 ID를 사용한다.\n온보딩 선호 장르 또는 자물쇠 이력이 없는 사용자의 질문 조회를 차단하지 않는다. 그룹 배정은 AI 뷰의 최종 music_genre를 사용하며, AI 사용자 행이 없으면 공통으로 배정한다. 기존 당일 배정은 AI 데이터가 바뀌어도 유지한다.\nmyAnswer는 미응답이면 null이고, 응답한 경우 선택지의 실제 텍스트를 반환한다. voteAnswerId는 미응답이면 null이고, 응답했으면 해당 답변 ID다.\nDB vote_answers.selected_option은 선택지 실제 텍스트를 저장한다.",
         "responses": {
           "200": {
             "description": "오늘 투표가 존재하며 미응답 상태를 정상 반환하므로 200.\n\n추가 케이스: 오늘 투표가 존재하고 사용자의 선택을 정상 반환하므로 200.",
@@ -5988,6 +5988,12 @@
                           "type": "string"
                         },
                         "myAnswer": {
+                          "type": "string",
+                          "nullable": true
+                        },
+                        "voteAnswerId": {
+                          "type": "integer",
+                          "format": "int64",
                           "nullable": true
                         }
                       }
@@ -6001,7 +6007,8 @@
                     "question": "오늘은 어떤 분위기가 좋아요?",
                     "optionA": "산책하면서 듣기",
                     "optionB": "카페에서 듣기",
-                    "myAnswer": null
+                    "myAnswer": null,
+                    "voteAnswerId": null
                   }
                 }
               }
@@ -6030,7 +6037,7 @@
             }
           },
           "404": {
-            "description": "현재 사용자의 대표 음악 장르에 해당하는 오늘 날짜의 활성 질문이 존재하지 않으므로 404.",
+            "description": "오늘 및 같은 그룹의 전날 질문이 모두 없어 404 TODAY_VOTE_NOT_FOUND.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6046,7 +6053,7 @@
                 },
                 "example": {
                   "code": "TODAY_VOTE_NOT_FOUND",
-                  "message": "오늘의 투표를 찾을 수 없습니다."
+                  "message": "오늘의 취향 투표 질문을 찾을 수 없습니다."
                 }
               }
             }
@@ -6073,8 +6080,8 @@
               }
             }
           },
-          "403": {
-            "description": "users.music_genre가 NULL이면 취향 투표를 사용할 수 없으므로 403.",
+          "503": {
+            "description": "오늘 날짜의 스냅샷이 아직 준비되지 않았거나, 질문이 필요한 AI 그룹 조회에 실패했거나, 일일 배정과 질문 날짜·그룹이 일치하지 않음.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6089,14 +6096,19 @@
                   }
                 },
                 "example": {
-                  "code": "MUSIC_GENRE_REQUIRED",
-                  "message": "대표 음악 장르 설정이 필요합니다."
+                  "code": "VOTE_SNAPSHOT_NOT_READY",
+                  "message": "오늘의 취향 투표를 준비 중입니다."
                 }
               }
             }
           }
         },
-        "x-implementation-status": "contract-only"
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "implemented"
       }
     },
     "/api/vote-questions/{voteQuestionId}/answers": {
@@ -6106,7 +6118,7 @@
         ],
         "summary": "투표 답변",
         "operationId": "postApiVoteQuestionsVoteQuestionIdAnswers",
-        "description": "필수\nselectedOption: String (\"A\" | \"B\")\nvoteQuestionId: Long\n\n첫 답변 후 수정 불가. 현재 날짜의 질문만 답변 가능.\n\n정책 및 설명\n- 현재 로그인한 사용자가 자신의 대표 음악 장르에 해당하는 오늘의 활성 투표에 답변한다.\n- users.music_genre가 NULL이면 403 MUSIC_GENRE_REQUIRED를 반환한다.\n- selectedOption은 \"A\" 또는 \"B\"만 허용한다.\n- 서버는 A/B를 해당 질문의 실제 선택지 텍스트로 매핑하고 DB selected_option에는 실제 선택지 텍스트를 저장한다.\n- 첫 답변만 허용하며 이후 수정할 수 없다.\n- 현재 날짜이면서 현재 사용자의 music_genre와 동일한 활성 질문에 대해서만 답변할 수 있다.\n- 성공 시 실제 선택지 텍스트와 현재 A/B 결과 비율을 반환한다.",
+        "description": "Body의 selectedOption은 \"A\" 또는 \"B\"이며, voteQuestionId는 path parameter로 전달한다.\nBE는 매일 00:00 Asia/Seoul에 확정한 사용자 일일 그룹·질문 배정을 사용한다. 사용자가 당일에 이미 배정되었다면 이후 선호 장르, 자물쇠, AI 뷰가 바뀌어도 질문 그룹은 변경되지 않는다. 당일 질문이 없으면 같은 그룹의 전날 질문을 당일 BE 질문으로 복사하며 같은 날짜 공통 질문으로 대체하지 않는다.\nBE는 AI DB 읽기 전용 뷰를 조회하고 AI 그룹을 계산하거나 질문 생성 API/내부 전달 API를 호출하지 않는다. 신규 사용자 등 당일 스냅샷에 배정이 없는 사용자는 첫 조회에서 AI 그룹을 확인해 배정한다. 사용자 행 부재는 취향 정보 부족 판정 사유가 아니며, 이 경우 공통 그룹으로 배정한다.\n서버는 A/B를 실제 선택지 텍스트로 매핑해 vote_answers.selected_option에 저장한다. 사용자당 동일 질문에 한 번만 답변할 수 있고 수정·재투표는 불가하며 중복은 409 VOTE_ALREADY_ANSWERED다.\n성공 시 voteAnswerId, 실제 선택지 텍스트와 현재 누적 답변 기준 결과 비율을 반환한다. A는 정수 반올림, B는 100-A이며 답변이 없으면 두 비율 모두 0이다.\n반환된 voteAnswerId는 기존 POST /api/match-requests 요청에 사용하며 해당 API 계약은 변경하지 않는다.",
         "responses": {
           "201": {
             "description": "새 vote_answer 리소스가 생성되므로 201.",
@@ -6121,6 +6133,10 @@
                     "data": {
                       "type": "object",
                       "properties": {
+                        "voteAnswerId": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
                         "myAnswer": {
                           "type": "string"
                         },
@@ -6144,6 +6160,7 @@
                 "example": {
                   "message": "투표 답변 성공",
                   "data": {
+                    "voteAnswerId": 43,
                     "myAnswer": "산책하면서 듣기",
                     "result": {
                       "optionAPercent": 60,
@@ -6245,7 +6262,7 @@
             }
           },
           "409": {
-            "description": "첫 답변 이후 수정 불가 정책과 충돌하므로 409.\n\n추가 케이스: 현재 날짜 또는 현재 사용자의 대표 음악 장르에 해당하지 않는 질문에 답변하려 하므로 409.",
+            "description": "동일 사용자가 동일 질문에 이미 답변하여 409 VOTE_ALREADY_ANSWERED. 오늘 날짜 또는 사용자가 답변할 수 있는 장르/공통 질문 조건과 맞지 않는 질문도 기존 409 응답 정책을 따른다.",
             "content": {
               "application/json": {
                 "schema": {
@@ -6287,28 +6304,6 @@
                 }
               }
             }
-          },
-          "403": {
-            "description": "users.music_genre가 NULL이면 투표 답변을 제출할 수 없으므로 403.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "MUSIC_GENRE_REQUIRED",
-                  "message": "대표 음악 장르 설정이 필요합니다."
-                }
-              }
-            }
           }
         },
         "parameters": [
@@ -6330,13 +6325,15 @@
                 "type": "object",
                 "properties": {
                   "selectedOption": {
-                    "type": "string"
-                  },
-                  "voteQuestionId": {}
+                    "type": "string",
+                    "enum": [
+                      "A",
+                      "B"
+                    ]
+                  }
                 },
                 "required": [
-                  "selectedOption",
-                  "voteQuestionId"
+                  "selectedOption"
                 ]
               },
               "example": {
@@ -8931,7 +8928,7 @@
                   "data": {
                     "location": {
                       "latitude": 37.5,
-                      "longitude": 127.0,
+                      "longitude": 127,
                       "legalDongCode": "1168010100",
                       "legalDongName": "역삼동"
                     },
@@ -9075,7 +9072,7 @@
               "example": {
                 "location": {
                   "latitude": 37.5,
-                  "longitude": 127.0,
+                  "longitude": 127,
                   "legalDongCode": "1168010100",
                   "legalDongName": "역삼동"
                 },
@@ -9409,6 +9406,156 @@
         },
         "x-implementation-status": "implemented",
         "x-csrf-required": true
+      }
+    },
+    "/api/vote-questions/{voteQuestionId}/results": {
+      "get": {
+        "tags": [
+          "VOTE / 투표"
+        ],
+        "summary": "투표 결과 조회",
+        "operationId": "getApiVoteQuestionsVoteQuestionIdResults",
+        "description": "로그인 사용자는 해당 질문에 답변한 경우에만 결과를 조회할 수 있다. 미투표 사용자는 403 VOTE_REQUIRED_TO_VIEW_RESULTS를 반환한다.\n매 호출 시점의 BE DB 누적 답변을 기준으로 계산하며 서버 실시간 push는 제공하지 않는다. A 비율은 정수로 반올림하고 B 비율은 100-A로 계산한다. 답변이 0건이면 두 비율 모두 0이다.",
+        "parameters": [
+          {
+            "name": "voteQuestionId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "사용자가 투표한 질문의 최신 누적 결과.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "optionAPercent": {
+                          "type": "integer"
+                        },
+                        "optionBPercent": {
+                          "type": "integer"
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "투표 결과 조회 성공",
+                  "data": {
+                    "optionAPercent": 60,
+                    "optionBPercent": 40
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "유효한 Access Token이 없어 인증할 수 없음.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "UNAUTHORIZED",
+                  "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "해당 질문에 투표하지 않은 사용자는 결과를 조회할 수 없음.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "VOTE_REQUIRED_TO_VIEW_RESULTS",
+                  "message": "결과를 확인하려면 먼저 투표해야 합니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "voteQuestionId에 해당하는 질문이 존재하지 않음.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "VOTE_NOT_FOUND",
+                  "message": "투표를 찾을 수 없습니다."
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INTERNAL_SERVER_ERROR",
+                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
+                }
+              }
+            }
+          }
+        },
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "x-implementation-status": "contract-only"
       }
     }
   },

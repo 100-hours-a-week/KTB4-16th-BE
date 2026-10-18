@@ -24,6 +24,8 @@ public interface UserRepository extends JpaRepository<User, Long> {
 
     Optional<User> findByUserIdAndDeletedAtIsNull(Long userId);
 
+    List<User> findAllByDeletedAtIsNull();
+
     /** 탈퇴하지 않은 요청 대상을 닉네임으로 찾는다. */
     Optional<User> findByNicknameAndDeletedAtIsNull(String nickname);
 

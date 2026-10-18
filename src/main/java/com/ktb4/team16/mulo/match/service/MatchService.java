@@ -2,11 +2,13 @@ package com.ktb4.team16.mulo.match.service;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
+import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.dto.response.MatchRequestCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.MatchRequestStatusResponse;
 import com.ktb4.team16.mulo.match.entity.Match;
 import com.ktb4.team16.mulo.match.entity.MatchRequest;
+import com.ktb4.team16.mulo.match.event.MatchCreatedEvent;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
 import com.ktb4.team16.mulo.match.exception.MatchRequestConstraintViolationTranslator;
 import com.ktb4.team16.mulo.match.repository.MatchRepository;
@@ -18,15 +20,17 @@ import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
 import java.time.Clock;
 import java.time.LocalDate;
 import java.time.LocalTime;
+import java.time.OffsetDateTime;
+import java.time.ZoneId;
 import java.util.List;
-import lombok.RequiredArgsConstructor;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@RequiredArgsConstructor
 public class MatchService {
 
     private final MatchRepository matchRepository;
@@ -34,6 +38,35 @@ public class MatchService {
     private final VoteAnswerRepository voteAnswerRepository;
     private final VoteQuestionRepository voteQuestionRepository;
     private final Clock clock;
+    private final ApplicationEventPublisher eventPublisher;
+
+    @Autowired
+    public MatchService(
+            MatchRepository matchRepository,
+            MatchRequestRepository matchRequestRepository,
+            VoteAnswerRepository voteAnswerRepository,
+            VoteQuestionRepository voteQuestionRepository,
+            Clock clock,
+            ApplicationEventPublisher eventPublisher
+    ) {
+        this.matchRepository = matchRepository;
+        this.matchRequestRepository = matchRequestRepository;
+        this.voteAnswerRepository = voteAnswerRepository;
+        this.voteQuestionRepository = voteQuestionRepository;
+        this.clock = clock;
+        this.eventPublisher = eventPublisher;
+    }
+
+    MatchService(
+            MatchRepository matchRepository,
+            MatchRequestRepository matchRequestRepository,
+            VoteAnswerRepository voteAnswerRepository,
+            VoteQuestionRepository voteQuestionRepository,
+            Clock clock
+    ) {
+        this(matchRepository, matchRequestRepository, voteAnswerRepository, voteQuestionRepository, clock,
+                event -> { });
+    }
 
     @Transactional(readOnly = true)
     public MatchRequestStatusResponse getMatchRequestStatus(Long userId, Long matchRequestId) {
@@ -97,13 +130,32 @@ public class MatchService {
                             requester.getMatchRequestId(), requester.getStatus()));
         }
 
-        Match match = matchRepository.save(Match.create(voteQuestion));
+        Match match = matchRepository.saveAndFlush(Match.create(voteQuestion));
         requester.startMatching(match);
-        candidates.getFirst().startMatching(match);
+        MatchRequest candidate = candidates.getFirst();
+        candidate.startMatching(match);
+        eventPublisher.publishEvent(new MatchCreatedEvent(match.getMatchId(), createChatRoomRequest(match, requester, candidate)));
 
         return new MatchRequestCreateResponse(
                 "매칭 요청 생성 성공",
                 new MatchRequestCreateResponse.Data(requester.getMatchRequestId(), requester.getStatus()));
 
+    }
+
+    private ChatRoomCreateRequest createChatRoomRequest(
+            Match match, MatchRequest requester, MatchRequest candidate
+    ) {
+        Long requesterId = requester.getUser().getUserId();
+        Long candidateId = candidate.getUser().getUserId();
+        if (requesterId == null || candidateId == null || requesterId.equals(candidateId)) {
+            throw new IllegalStateException("서로 다른 두 활성 사용자가 필요합니다.");
+        }
+        OffsetDateTime expiresAt = match.getVoteQuestion().getVoteDate()
+                .plusDays(1)
+                .atStartOfDay(ZoneId.of("Asia/Seoul"))
+                .toOffsetDateTime();
+        return new ChatRoomCreateRequest(match.getMatchId(), expiresAt, List.of(
+                new ChatRoomCreateRequest.Participant(requesterId, requester.getUser().getNickname()),
+                new ChatRoomCreateRequest.Participant(candidateId, candidate.getUser().getNickname())));
     }
 }

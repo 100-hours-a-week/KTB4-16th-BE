@@ -4,5 +4,6 @@ public enum MatchRequestStatus {
     WAITING,
     MATCHING,
     MATCHED,
-    EXPIRED
+    EXPIRED,
+    FAILED
 }
