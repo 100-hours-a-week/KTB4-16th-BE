@@ -14,7 +14,7 @@
     [
       "@semantic-release/exec",
       {
-        "prepareCmd": "docker buildx build --platform linux/amd64 -f Dockerfile -t \"$IMAGE_BASE:dev-${nextRelease.version}\" --push ."
+        "prepareCmd": "docker buildx build --platform linux/amd64 --cache-from type=registry,ref=$IMAGE_BASE-cache:build --cache-to type=registry,ref=$IMAGE_BASE-cache:build,mode=max --file Dockerfile.ci -t \"$IMAGE_BASE:dev-${nextRelease.version}\" --push ."
       }
     ]
   ]

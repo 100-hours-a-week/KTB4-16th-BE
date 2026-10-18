@@ -51,4 +51,19 @@ public class Match {
     public static Match create(VoteQuestion voteQuestion) {
         return new Match(voteQuestion);
     }
+
+    /** Chat Server가 확정한 방 식별자와 완료 시각을 함께 기록한다. */
+    public void completeChatRoom(Long chatRoomId, LocalDateTime completedAt) {
+        if (chatRoomId == null || chatRoomId <= 0 || completedAt == null) {
+            throw new IllegalArgumentException("유효한 채팅방 식별자와 완료 시각이 필요합니다.");
+        }
+        if (this.chatRoomId == null) {
+            this.chatRoomId = chatRoomId;
+            this.matchedAt = completedAt;
+            return;
+        }
+        if (!this.chatRoomId.equals(chatRoomId)) {
+            throw new IllegalStateException("기존 채팅방 식별자와 다릅니다.");
+        }
+    }
 }

@@ -1,0 +1,19 @@
+FROM eclipse-temurin:21-jre-noble AS runner
+
+WORKDIR /app
+
+# HEIC(아이폰 사진) → JPEG 변환용 네이티브 의존성 (기존 Dockerfile과 동일)
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    libheif-examples \
+    libheif-plugin-libde265 \
+    libjpeg-turbo-progs \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN adduser --disabled-password --gecos "" springuser
+USER springuser
+
+# CI의 Build jar 스텝이 만든 jar를 그대로 복사한다
+COPY build/libs/*.jar app.jar
+
+EXPOSE 8080
+ENTRYPOINT ["java", "-jar", "app.jar"]

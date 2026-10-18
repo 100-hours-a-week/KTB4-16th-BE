@@ -1,6 +1,9 @@
 package com.ktb4.team16.mulo.match.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.cloud.storage.Storage;
@@ -53,6 +56,8 @@ class MatchConcurrencyMysqlIntegrationTest {
 
     @MockitoBean
     private Clock clock;
+    @MockitoBean
+    private ChatRoomCreationOrchestrator chatRoomCreationOrchestrator;
 
     private Long voteQuestionId;
     private Long waitingUserId;
@@ -122,6 +127,7 @@ class MatchConcurrencyMysqlIntegrationTest {
                 waitingAnswerId)).isEqualTo(1);
         assertThat(responses).extracting(response -> response.data().status())
                 .containsExactlyInAnyOrder(MatchRequestStatus.MATCHING, MatchRequestStatus.WAITING);
+        verify(chatRoomCreationOrchestrator).createAfterMatch(anyLong(), any());
     }
 
     private List<MatchRequestCreateResponse> runConcurrently() throws Exception {

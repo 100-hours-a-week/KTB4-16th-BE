@@ -15,6 +15,7 @@ import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest.Participant;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -26,8 +27,9 @@ import org.springframework.web.client.RestClient;
 
 class ChatRoomClientTest {
     private static final String ENDPOINT = "http://chat.test/internal/chat-rooms";
-    private static final ChatRoomCreateRequest REQUEST = new ChatRoomCreateRequest(50L, java.util.List.of(
-            new Participant(17L, "jettie"), new Participant(28L, "lulu")));
+    private static final ChatRoomCreateRequest REQUEST = new ChatRoomCreateRequest(50L,
+            OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
+                    new Participant(17L, "jettie"), new Participant(28L, "lulu")));
 
     @ParameterizedTest
     @org.junit.jupiter.params.provider.EnumSource(value = HttpStatus.class, names = {"CREATED", "OK"})
@@ -38,7 +40,7 @@ class ChatRoomClientTest {
                 .andExpect(header("X-Internal-Api-Key", "test-api-key"))
                 .andExpect(content().contentType(MediaType.APPLICATION_JSON))
                 .andExpect(content().json("""
-                        {"matchId":50,"participants":[
+                        {"matchId":50,"expiresAt":"2026-10-18T00:00:00+09:00","participants":[
                           {"userId":17,"nickname":"jettie"},
                           {"userId":28,"nickname":"lulu"}
                         ]}
@@ -105,6 +107,34 @@ class ChatRoomClientTest {
     }
 
     @Test
+    void distinguishesExpiredCreationFromExistingRoomConflict() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(ENDPOINT))
+                .andRespond(withStatus(HttpStatus.CONFLICT)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"code\":\"CHAT_ROOM_EXPIRED\",\"message\":\"expired\"}"));
+
+        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.EXPIRED_REQUEST));
+        fixture.server().verify();
+    }
+
+    @Test
+    void classifiesChatServerInternalApiKeyConfigurationAsNonRetryableConfigurationFailure() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(ENDPOINT))
+                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"code\":\"INTERNAL_AUTH_UNAVAILABLE\"}"));
+
+        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.CONFIGURATION_ERROR));
+        fixture.server().verify();
+    }
+
+    @Test
     void doesNotSendRequestWhenInternalApiKeyIsMissing() {
         Fixture fixture = fixture("");
 
@@ -117,8 +147,9 @@ class ChatRoomClientTest {
 
     @Test
     void requestDtoRejectsInvalidParticipantsBeforeHttpCall() {
-        assertThatThrownBy(() -> new ChatRoomCreateRequest(50L, java.util.List.of(
-                new Participant(17L, "jettie"))))
+        assertThatThrownBy(() -> new ChatRoomCreateRequest(50L,
+                OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
+                        new Participant(17L, "jettie"))))
                 .isInstanceOf(IllegalArgumentException.class);
         assertThatThrownBy(() -> new Participant(17L, " "))
                 .isInstanceOf(IllegalArgumentException.class);
@@ -129,8 +160,8 @@ class ChatRoomClientTest {
     private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> httpFailures() {
         return java.util.stream.Stream.of(
                 org.junit.jupiter.params.provider.Arguments.of(400, FailureType.CLIENT_ERROR),
-                org.junit.jupiter.params.provider.Arguments.of(401, FailureType.CLIENT_ERROR),
-                org.junit.jupiter.params.provider.Arguments.of(409, FailureType.PARTICIPANT_CONFLICT),
+                org.junit.jupiter.params.provider.Arguments.of(401, FailureType.AUTHENTICATION_ERROR),
+                org.junit.jupiter.params.provider.Arguments.of(409, FailureType.REQUEST_CONFLICT),
                 org.junit.jupiter.params.provider.Arguments.of(500, FailureType.SERVER_ERROR),
                 org.junit.jupiter.params.provider.Arguments.of(503, FailureType.SERVER_ERROR));
     }
