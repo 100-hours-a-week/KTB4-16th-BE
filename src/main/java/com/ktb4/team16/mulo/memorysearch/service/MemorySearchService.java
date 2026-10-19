@@ -17,7 +17,7 @@ import java.util.Map;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 
-/** 대화 문맥, 임시 AI 결과, 소유권 재검증과 카드 공개를 조정한다. */
+/** 대화 문맥, 실제 AI 결과, 소유권 재검증과 카드 공개를 조정한다. */
 @Service
 @RequiredArgsConstructor
 public class MemorySearchService {

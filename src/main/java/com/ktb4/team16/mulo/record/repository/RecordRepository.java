@@ -142,17 +142,6 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
     List<Long> findActiveOwnedRecordIds(@Param("userId") Long userId,
             @Param("recordIds") List<Long> recordIds);
 
-    /** 로컬 임시 AI가 반환할 현재 사용자의 최신 활성 자물쇠 ID를 최대 요청 건수만큼 조회한다. */
-    @Query("""
-        SELECT r.recordId
-        FROM Record r
-        WHERE r.user.userId = :userId
-            AND r.user.deletedAt IS NULL
-            AND r.deletedAt IS NULL
-        ORDER BY r.createdAt DESC, r.recordId DESC
-        """)
-    List<Long> findLatestActiveOwnedRecordIds(@Param("userId") Long userId, Pageable pageable);
-
     /** 검증된 AI 후보의 카드 필드를 한 번에 읽고 소유권과 활성 상태를 다시 확인한다. */
     @Query("""
         SELECT r

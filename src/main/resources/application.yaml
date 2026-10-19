@@ -112,6 +112,7 @@ spotify:
   global-limit-30-seconds: 80
 
 ai:
+  # 실행 환경의 AI 주소·토큰을 사용한다. 토큰 값은 소스에 기록하지 않는다.
   base-url: ${AI_BASE_URL:http://localhost:8000}
   internal-token: ${AI_INTERNAL_TOKEN}
   connect-timeout: PT5S
