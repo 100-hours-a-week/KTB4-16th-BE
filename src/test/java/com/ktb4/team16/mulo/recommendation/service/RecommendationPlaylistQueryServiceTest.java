@@ -65,5 +65,7 @@ class RecommendationPlaylistQueryServiceTest {
 
         assertThat(result.playlist().tracks()).extracting(RecommendationPlaylistData.Track::title)
                 .containsExactly("first", "second");
+        assertThat(result.playlist().tracks()).extracting(RecommendationPlaylistData.Track::externalTrackId)
+                .containsExactly("1234567890123456789012", "abcdefghijklmnopqrstuv");
     }
 }

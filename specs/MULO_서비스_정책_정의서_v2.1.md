@@ -271,7 +271,11 @@
 | `REC-010` | **현재 설계** | 추천 곡 순서 | 플레이리스트 음악 순번은 1 이상이며 같은 플레이리스트 내에서 순번이 중복되지 않는다. | 테이블 정의서 6차 §15 |
 | `REC-011` | **V1 제외** | Spotify 플레이리스트 저장 | 추천 결과를 Spotify 계정에 저장하는 기능과 관련 API는 V1에서 제외한다. | API 명세 상세2차 정책 요약 R21 / R213 |
 | `REC-012` | **현재 구현** | 추천 곡 앨범 이미지 | 조회·생성 응답의 각 곡은 `music_tracks.album_image_url`을 `albumImageUrl`로 반환한다. AI 응답에서 앨범 이미지 URL이 없으면 추천 결과를 저장하지 않고 AI 연동 오류로 처리한다. | `RecommendationPlaylistData`, `ContextRecommendationAiClient` |
-| `REC-013` | **현재 구현** | 추천 곡 최대 수 | 백엔드는 AI 요청의 `limit`을 10으로 고정해 전달한다. AI가 반환한 정상 곡 목록은 별도 축소 없이 현재 추천 플레이리스트로 저장한다. | `ContextRecommendationAiClient:19,39`, `RecommendationPlaylistWriter:28-39` |
+| `REC-013` | **현재 구현** | 추천 곡 최대 수 | 백엔드는 AI 요청의 `limit`을 5로 고정하고 정확히 5개의 정상 곡 응답만 저장한다. 일부 곡을 잘라 저장하지 않으며 제외 곡 재등장·응답 내 중복 ID는 실패 처리한다. | `ContextRecommendationAiClient:19,39`, `RecommendationPlaylistWriter:28-39` |
+
+| `REC-014` | **확정·구현** | 화면 세션 추천 | 진입 시 이전 추천을 조회하거나 자동 생성하지 않고 최대 3회 안내와 추천 버튼을 표시한다. 새 추천 성공만 최대 3회이며 실패·기존 목록 유지 응답은 차감하지 않는다. 요청 중 버튼 잠금과 동기 실행 가드를 적용하고 초기·진행·완료 상태 모두 X·ESC·배경 닫기는 확인 후 수행한다. 닫았다 다시 열면 빈 추천·0회·빈 제외 목록으로 시작한다. 종료 경로의 최종 UX는 디자인에서 조정한다. | 사용자 확정 / `HomePlaylistSheet` |
+| `REC-015` | **확정·구현** | 세션 곡 중복 제외 | 프론트는 이번 화면에서 받은 externalTrackId를 누적해 POST의 excludeTrackIds로 전달한다. 최초는 빈 배열, 최대 50개이며 백엔드가 AI로 전달한다. 추천 응답은 externalTrackId, POST data는 replaced를 제공한다. 횟수·제외 이력은 프론트 메모리에서만 관리하고 서버 세션·Redis·종료 API는 추가하지 않는다. 기존 DB 저장 및 GET 계약은 유지하되 홈 진입에서는 조회하지 않는다. | 사용자 확정 / 추천 API |
+
 
 ## AI 기억 검색
 

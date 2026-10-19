@@ -56,7 +56,7 @@ class RecommendationPlaylistCommandServiceTest {
                 recommendedTracks(5), false));
         when(writer.replace(eq(7L), any())).thenReturn(created);
 
-        var result = service.create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        var result = service.create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of("previous-track")));
 
         ArgumentCaptor<RecommendationAiClient.RecommendationContext> captor =
                 ArgumentCaptor.forClass(RecommendationAiClient.RecommendationContext.class);
@@ -64,7 +64,7 @@ class RecommendationPlaylistCommandServiceTest {
         assertThat(captor.getValue()).isEqualTo(new RecommendationAiClient.RecommendationContext(7L,
                 WeatherCondition.CLEAR, BigDecimal.valueOf(20),
                 OffsetDateTime.ofInstant(clock.instant(), clock.getZone()),
-                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가"));
+                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가", List.of("previous-track")));
         verify(writer).replace(eq(7L), argThat(tracks -> tracks.size() == 5));
         assertThat(result.replaced()).isTrue();
         assertThat(result.playlist()).isEqualTo(created);
@@ -78,7 +78,7 @@ class RecommendationPlaylistCommandServiceTest {
                 new RecommendationAiClient.RecommendationResult(recommendedTracks(5), true));
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
 
-        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780));
+        var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of()));
 
         verify(writer, never()).replace(any(), any());
         assertThat(result.replaced()).isFalse();
@@ -93,7 +93,7 @@ class RecommendationPlaylistCommandServiceTest {
                 new RecommendationAiClient.RecommendationResult(List.of(), false));
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of())))
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), any());
@@ -117,7 +117,7 @@ class RecommendationPlaylistCommandServiceTest {
         when(recommendationAiClient.recommend(any())).thenThrow(new RecommendationAiException());
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of())))
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), any());
@@ -129,12 +129,24 @@ class RecommendationPlaylistCommandServiceTest {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenThrow(new WeatherApiException());
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of())))
                 .isInstanceOf(WeatherApiException.class);
 
         verify(writer, never()).replace(any(), any());
         verify(nearbyTracksService, never()).findTopTracks(any(), any());
         verify(placeContextService, never()).findLegalDongName(any(), any());
+    }
+
+    // 제외 대상 곡을 AI가 반환하면 DB 교체 전에 실패시킨다.
+    @Test
+    void rejectsAlreadyShownTrackBeforeSaving() {
+        when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
+        when(recommendationAiClient.recommend(any())).thenReturn(
+                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), false));
+        assertThatThrownBy(() -> service().create(7L,
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of("track-1"))))
+                .isInstanceOf(RecommendationAiException.class);
+        verify(writer, never()).replace(any(), any());
     }
 
     // 테스트 대상 서비스의 외부 의존성을 명시적으로 조립한다.
@@ -161,7 +173,7 @@ class RecommendationPlaylistCommandServiceTest {
                 new RecommendationAiClient.RecommendationResult(recommendedTracks(count), false));
 
         assertThatThrownBy(() -> service().create(7L,
-                new CreateRecommendationPlaylistRequest(37.5665, 126.9780)))
+                new CreateRecommendationPlaylistRequest(37.5665, 126.9780, List.of())))
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), any());

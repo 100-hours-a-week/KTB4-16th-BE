@@ -53,12 +53,13 @@ class RecommendationPlaylistControllerTest {
         authenticate(7L);
         when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(
                 new RecommendationPlaylistData.Playlist(3L, List.of(
-                        new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")))));
+                        new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")))));
 
         mvc.perform(get("/api/recommendations/playlists"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("현재 추천 플레이리스트 조회 성공"))
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
+                .andExpect(jsonPath("$.data.playlist.tracks[0].externalTrackId").value("external-10"))
                 .andExpect(jsonPath("$.data.playlist.tracks[0].title").value("밤편지"))
                 // 추천 목록 응답이 화면에 필요한 앨범 이미지 URL을 포함하는지 검증한다.
                 .andExpect(jsonPath("$.data.playlist.tracks[0].albumImageUrl").value("image-url"));
@@ -68,7 +69,7 @@ class RecommendationPlaylistControllerTest {
     void createsPlaylistFromCoordinate() throws Exception {
         authenticate(7L);
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(4L,
-                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")));
+                List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
                 new RecommendationPlaylistCommandService.CreateResult(playlist, true));
 
@@ -77,14 +78,15 @@ class RecommendationPlaylistControllerTest {
                         .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("추천 플레이리스트 생성 성공"))
-                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4));
+                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4))
+                .andExpect(jsonPath("$.data.replaced").value(true));
     }
 
     @Test
     void retainsExistingPlaylistWhenAiReturnsNoRecommendation() throws Exception {
         authenticate(7L);
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(3L,
-                List.of(new RecommendationPlaylistData.Track(10L, "밤편지", "아이유", "image-url", "url")));
+                List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
                 new RecommendationPlaylistCommandService.CreateResult(playlist, false));
 
@@ -93,7 +95,8 @@ class RecommendationPlaylistControllerTest {
                         .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("추천 결과가 없어 기존 플레이리스트 유지"))
-                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3));
+                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
+                .andExpect(jsonPath("$.data.replaced").value(false));
     }
 
     @Test
@@ -143,6 +146,30 @@ class RecommendationPlaylistControllerTest {
                         .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("AI_SERVICE_ERROR"));
+    }
+
+    // 최대 50개 제한은 AI 호출 전에 공개 API 경계에서 검증한다.
+    @Test
+    void rejectsMoreThanFiftyExcludedTracks() throws Exception {
+        String ids = java.util.stream.IntStream.range(0, 51)
+                .mapToObj(index -> "\"track-" + index + "\"")
+                .collect(java.util.stream.Collectors.joining(","));
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5,\"longitude\":127,\"excludeTrackIds\":[" + ids + "]}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+        org.mockito.Mockito.verifyNoInteractions(commandService);
+    }
+
+    // 빈 ID는 제외 필터로 전달하지 않고 입력 오류로 돌려준다.
+    @Test
+    void rejectsBlankExcludedTrackId() throws Exception {
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5,\"longitude\":127,\"excludeTrackIds\":[\" \"]}"))
+                .andExpect(status().isBadRequest());
+        org.mockito.Mockito.verifyNoInteractions(commandService);
     }
 
     // 인증 필터가 저장한 사용자 식별자를 컨트롤러 테스트에 설정한다.
