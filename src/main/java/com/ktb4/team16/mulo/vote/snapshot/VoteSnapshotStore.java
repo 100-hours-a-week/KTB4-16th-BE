@@ -160,6 +160,14 @@ public class VoteSnapshotStore {
                 voteDate);
     }
 
+    public boolean hasAssignmentsWithoutQuestion(LocalDate voteDate) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM vote_user_daily_assignments
+                WHERE vote_date = ? AND vote_question_id IS NULL
+                """, Integer.class, voteDate);
+        return count != null && count > 0;
+    }
+
     public void assignIfMissing(LocalDate voteDate, Long userId, String musicGenre, Long questionId) {
         jdbcTemplate.update("""
                         INSERT INTO vote_user_daily_assignments
