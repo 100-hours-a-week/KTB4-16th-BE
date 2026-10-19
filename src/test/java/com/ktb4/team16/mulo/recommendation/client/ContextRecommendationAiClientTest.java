@@ -33,6 +33,7 @@ class ContextRecommendationAiClientTest {
         ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
         server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
                 .andExpect(method(HttpMethod.POST))
+                .andExpect(jsonPath("$.excludeTrackIds[0]").value("previous-track"))
                 .andExpect(header("X-Internal-Token", "test-token"))
                 .andExpect(content().json("""
                         {"userId":7,"weather":{"condition":"RAIN","temperature":16.0},
@@ -70,7 +71,7 @@ class ContextRecommendationAiClientTest {
                 .andRespond(withSuccess(responseWithTracks(5, false), MediaType.APPLICATION_JSON));
 
         var result = client.recommend(new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
-                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of(), null));
+                BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"), List.of(), null, List.of()));
 
         assertThat(result.tracks()).hasSize(5);
         server.verify();
@@ -204,6 +205,6 @@ class ContextRecommendationAiClientTest {
     private RecommendationAiClient.RecommendationContext context() {
         return new RecommendationAiClient.RecommendationContext(7L, WeatherCondition.RAIN,
                 BigDecimal.valueOf(16.0), OffsetDateTime.parse("2026-09-27T19:30:00+09:00"),
-                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가");
+                List.of(new RecommendationAiClient.NearbyTrack("비도 오고 그래서", "헤이즈", 9)), "태평로1가", List.of("previous-track"));
     }
 }
