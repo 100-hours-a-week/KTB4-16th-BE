@@ -66,10 +66,10 @@ jobs:
       - name: Run Compile
         run: ./gradlew compileJava compileTestJava
 
-      # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
+      # 테스트가 실제 MySQL을 쓴다. 동시성 테스트는 별도 로컬 task로 실행한다.
       - name: Prepare test database
         run: |
-          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
 
       # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
       - name: Run Friend Deadlock Regression
@@ -97,9 +97,6 @@ jobs:
           DB_URL: jdbc:mysql://127.0.0.1:3307/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           DB_USERNAME: mulo
           DB_PASSWORD: mulo
-          MULO_WEATHER_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-          MULO_WEATHER_IT_DB_USERNAME: mulo
-          MULO_WEATHER_IT_DB_PASSWORD: mulo
           JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
           GCP_PROJECT_ID: mulo-ci-test
           GCS_BUCKET_NAME: mulo-ci-test
@@ -188,10 +185,10 @@ jobs:
       - name: Grant execute permission
         run: chmod +x gradlew
 
-      # 테스트가 실제 MySQL을 쓴다. weather-it 테스트는 127.0.0.1:3307의 mulo_weather_it DB만 허용한다.
+      # 테스트가 실제 MySQL을 쓴다. 동시성 테스트는 별도 로컬 task로 실행한다.
       - name: Prepare test database
         run: |
-          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_weather_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_weather_it.* TO 'mulo'@'%'; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
+          mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
 
       # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
       - name: Run Friend Deadlock Regression
@@ -219,9 +216,6 @@ jobs:
           DB_URL: jdbc:mysql://127.0.0.1:3307/mulo?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           DB_USERNAME: mulo
           DB_PASSWORD: mulo
-          MULO_WEATHER_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
-          MULO_WEATHER_IT_DB_USERNAME: mulo
-          MULO_WEATHER_IT_DB_PASSWORD: mulo
           JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
           GCP_PROJECT_ID: mulo-ci-test
           GCS_BUCKET_NAME: mulo-ci-test
