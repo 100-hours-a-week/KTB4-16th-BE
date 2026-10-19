@@ -51,15 +51,12 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.support.TransactionSynchronizationManager;
 
 @SpringBootTest
-@ActiveProfiles("weather-it")
 class RecordCreationWeatherMysqlIntegrationTest {
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-    private static final String EXPECTED_DATABASE = "mulo_weather_it";
 
     @Autowired private DataSource dataSource;
     @Autowired private JdbcTemplate jdbcTemplate;
@@ -203,9 +200,8 @@ class RecordCreationWeatherMysqlIntegrationTest {
     /** 격리 DB 연결과 Flyway 적용 상태를 확인한다. */
     private void assertDatabaseTarget() throws SQLException {
         try (Connection connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
-            assertThat(connection.getMetaData().getURL())
-                    .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
+            assertThat(connection.getMetaData().getURL()).isEqualTo(System.getenv("DB_URL"));
+            assertThat(connection.getCatalog()).isEqualTo(databaseName(System.getenv("DB_URL")));
         }
         flyway.validate();
         assertThat(flyway.info().current()).isNotNull();
@@ -213,6 +209,11 @@ class RecordCreationWeatherMysqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM flyway_schema_history WHERE success = 0", Integer.class))
                 .isZero();
+    }
+
+    private String databaseName(String jdbcUrl) {
+        String urlWithoutQuery = jdbcUrl.split("\\?", 2)[0];
+        return urlWithoutQuery.substring(urlWithoutQuery.lastIndexOf('/') + 1);
     }
 
     private Fixture createFixture(int index, String comment) {

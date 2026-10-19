@@ -81,9 +81,110 @@ ext.coverageExcludes = [
     '**/*Response.class'
 ]
 
+def runningOnGitHubActions = System.getenv('GITHUB_ACTIONS')?.equalsIgnoreCase('true')
+def localTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3313/mulo_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
+def localWeatherTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3314/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
+def localTestJvmEnvironment = [
+    DB_URL: localTestDatabaseUrl,
+    DB_USERNAME: 'mulo_test',
+    DB_PASSWORD: 'mulo_test_only_password',
+    SPRING_DATASOURCE_URL: localTestDatabaseUrl,
+    SPRING_DATASOURCE_USERNAME: 'mulo_test',
+    SPRING_DATASOURCE_PASSWORD: 'mulo_test_only_password',
+    SPRING_PROFILES_ACTIVE: 'test',
+    JWT_SECRET: 'MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=',
+    GCP_PROJECT_ID: 'mulo-local-test',
+    GCS_BUCKET_NAME: 'mulo-local-test',
+    KAKAO_REST_API_KEY: 'local-test-only',
+    KMA_SERVICE_KEY: 'local-test-only',
+    SPOTIFY_CLIENT_ID: 'local-test-only',
+    SPOTIFY_CLIENT_SECRET: 'local-test-only',
+    AI_INTERNAL_TOKEN: 'local-test-only',
+    AI_MOCK_ENABLED: 'true'
+]
+
+def waitForIsolatedMysql = { String containerName, int hostPort, String volumeName, String composeCommand ->
+    def deadline = System.currentTimeMillis() + 60000
+    def inspectTemplate = '{{.Config.Image}}|{{(index (index .NetworkSettings.Ports "3306/tcp") 0).HostIp}}|{{(index (index .NetworkSettings.Ports "3306/tcp") 0).HostPort}}|{{range .Mounts}}{{if eq .Destination "/var/lib/mysql"}}{{.Name}}{{end}}{{end}}|{{.State.Status}}|{{.State.Health.Status}}'
+
+    while (true) {
+        def process = new ProcessBuilder('docker', 'inspect', '--format', inspectTemplate, containerName)
+                .redirectErrorStream(true)
+                .start()
+        def output = process.inputStream.getText('UTF-8').trim()
+        if (process.waitFor() != 0) {
+            throw new GradleException("Isolated MySQL '$containerName' is not running. Start it with: $composeCommand")
+        }
+
+        def values = output.split('\\|', -1)
+        if (values.length != 6
+                || values[0] != 'mysql:8.4'
+                || values[1] != '127.0.0.1'
+                || values[2] != hostPort.toString()
+                || values[3] != volumeName
+                || values[4] != 'running') {
+            throw new GradleException("Refusing to run tests: '$containerName' does not match the isolated MySQL 8.4 port and volume configuration.")
+        }
+        if (values[5] == 'healthy') {
+            return
+        }
+        if (values[5] != 'starting' || System.currentTimeMillis() >= deadline) {
+            throw new GradleException("Isolated MySQL '$containerName' did not become healthy. Check it with: $composeCommand")
+        }
+        Thread.sleep(500)
+    }
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    exclude '**/RecordCreateConcurrencyMysqlIntegrationTest.class'
+    if (!runningOnGitHubActions) {
+        environment(localTestJvmEnvironment)
+        doFirst {
+            if (!(localTestDatabaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:3313\/mulo_test(?:\?.*)?/)) {
+                throw new GradleException('Refusing to run tests: local DB_URL is not the isolated mulo_test database.')
+            }
+            waitForIsolatedMysql('mulo-general-test-mysql', 3313, 'mulo-general-test-data',
+                    'docker compose -f compose.test.yml up -d')
+        }
+    } else {
+        doFirst {
+            def databaseUrl = System.getenv('DB_URL')
+            if (!(databaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:3307\/(mulo|mulo_friend_deadlock_it)(?:\?.*)?/)) {
+                throw new GradleException('CI DB_URL must target the workflow MySQL service on 127.0.0.1:3307; refusing to run tests.')
+            }
+        }
+    }
     finalizedBy jacocoTestReport
+}
+
+tasks.register('recordCreateConcurrencyTest', Test) {
+    description = 'Runs record creation concurrency tests against the isolated Weather integration database.'
+    group = 'verification'
+    dependsOn tasks.named('testClasses')
+    testClassesDirs = sourceSets.test.output.classesDirs
+    classpath = sourceSets.test.runtimeClasspath
+    include '**/RecordCreateConcurrencyMysqlIntegrationTest.class'
+    useJUnitPlatform()
+    def weatherTestJvmEnvironment = new LinkedHashMap(localTestJvmEnvironment)
+    weatherTestJvmEnvironment.putAll([
+        DB_URL: localWeatherTestDatabaseUrl,
+        DB_USERNAME: 'mulo_weather_it',
+        DB_PASSWORD: 'mulo_weather_it_test_only',
+        SPRING_DATASOURCE_URL: localWeatherTestDatabaseUrl,
+        SPRING_DATASOURCE_USERNAME: 'mulo_weather_it',
+        SPRING_DATASOURCE_PASSWORD: 'mulo_weather_it_test_only',
+        SPRING_PROFILES_ACTIVE: 'weather-it',
+        MULO_WEATHER_IT_DB_URL: localWeatherTestDatabaseUrl,
+        MULO_WEATHER_IT_DB_USERNAME: 'mulo_weather_it',
+        MULO_WEATHER_IT_DB_PASSWORD: 'mulo_weather_it_test_only'
+    ])
+    environment(weatherTestJvmEnvironment)
+    doFirst {
+        waitForIsolatedMysql('mulo-weather-concurrency-test-mysql', 3314,
+                'mulo-weather-concurrency-test-data',
+                'docker compose -f compose.weather-it.yml up -d')
+    }
 }
 
 jacocoTestReport {
