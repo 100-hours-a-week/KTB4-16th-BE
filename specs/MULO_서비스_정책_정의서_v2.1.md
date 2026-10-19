@@ -72,6 +72,7 @@
 | `GLB-004` | **현재 설계** | 리소스 존재 여부 은닉 | 소유권 또는 접근권한이 없는 일부 개인 리소스는 존재 여부가 노출되지 않도록 미존재와 동일한 404로 처리한다. | API 명세 상세2차 record/friend/match/chat/notification |
 | `GLB-005` | **현재 구현** | 국내 서비스 범위와 법정동 미확인 | MULO V1은 대한민국 국내에서만 자물쇠 생성을 지원한다. 신규 장소 생성에서 Kakao 법정동(B) 코드·이름을 찾지 못하면 400 `UNSUPPORTED_RECORD_LOCATION`으로 자물쇠 생성을 중단한다. 기존에 저장된 NULL 법정동 데이터의 조회 fallback은 유지한다. | `KakaoRegionClient:38-75`, `GlobalExceptionHandler`, `PLACE-005` |
 | `GLB-006` | **확정** | 서비스 기준 시간대 | `오늘`, 투표 일자, 23:00 매칭 종료, 00:00 채팅방 삭제, 월말 판단 등 모든 비즈니스 날짜·시간은 `Asia/Seoul`(KST, UTC+09:00) 기준으로 계산한다. DB의 물리적 저장 timezone과는 별개의 서비스 규칙이다. | 사용자 확정 |
+| `GLB-007` | **구현됨** | 운영 지표 조회 | Actuator에서 `health`, `prometheus`, `info`, `metrics` 엔드포인트를 노출한다. 이 중 `GET /actuator/health`와 `GET /actuator/prometheus`만 Spring Security에서 인증 없이 허용한다. Prometheus 스크레이프에 애플리케이션 토큰을 요구하지 않으므로 운영망 접근 범위는 배포 인프라에서 관리해야 한다. 이 경로는 서비스 공개 OpenAPI의 사용자 API 범위에 포함하지 않는다. | `application.yaml`의 `management.endpoints.web.exposure`, `SecurityConfig`의 GET 허용 규칙 / PR #112 |
 
 ## 회원·인증
 
@@ -252,6 +253,7 @@
 | `REPORT-014` | **구현 기준** | 대표 장소 동률 처리 | 법정동별 기록 수 내림차순 → 해당 동의 대상 월 최신 기록 시각 내림차순 → 법정동 코드 오름차순으로 선정한다. 코드가 없는 기록은 한 미분류 그룹으로 합산하고, 기록 수·최신 시각까지 같으면 코드가 있는 동을 우선한다. 선정된 동 안에서 저장할 장소 행은 개별 장소 기록 수 내림차순 → 최신 기록 시각 내림차순 → `place_id` 오름차순으로 정한다. 조회 기간은 해당 월 시작 시각 이상, 다음 달 시작 시각 미만이다. | 사용자 확정 법정동 기준 / 구현 계획의 동률 규칙 |
 | `REPORT-015` | **확정** | 대표 아티스트 동률 처리 | 월간 대표 아티스트 후보의 기록 횟수가 같으면 해당 후보 중 **가장 최근 기록이 존재하는 아티스트**를 선정한다. | 사용자 확정 |
 | `REPORT-016` | **확정** | 사진 scene_tag 저장 방식 | `scene_tag`는 AI가 반환한 장면/분위기 문자열을 `VARCHAR`로 저장한다. 별도 ENUM/canonical 목록으로 제한하지 않는다. 현재 테이블의 문자열 컬럼 구조를 유지한다. | 사용자 확정 |
+| `REPORT-017` | **구현됨** | AI 배치 요청 시도 식별 | 월간 리포트 AI 호출 전에 UUID `batchRequestId`를 대상 리포트의 `batch_request_id`에 저장하고 요청 본문에 전달한다. 콜백의 ID가 저장된 ID와 다르면 전체 콜백을 거절하며, 배포 전 생성되어 ID가 NULL인 리포트는 ID가 없는 기존 콜백만 허용한다. 이 ID는 늦은 이전 시도 콜백을 차단하지만, AI 측 중복 요청 병합이나 전달 멱등성은 보장하지 않는다. `jobId`와 청크 완료 체크포인트는 저장하지 않는다. | Flyway V9 / `MonthlyReportGenerationService`, `MonthlyReportAiCallbackTransactionalService` / PR #98 |
 
 ## AI 추천 플레이리스트
 
