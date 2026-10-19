@@ -237,3 +237,31 @@ tasks.register('integrationTest', Test) {
     useJUnitPlatform()
     shouldRunAfter tasks.named('test')
 }
+
+// 일반 test와 분리하여 관리자 권한이 필요한 DB 회귀 검사만 명시적으로 실행한다.
+['friendDeadlockTest': 'com.ktb4.team16.mulo.friend.service.FriendDeadlockMysqlIntegrationTest',
+ 'notificationMigrationTest': 'com.ktb4.team16.mulo.notification.NotificationMigrationMysqlIntegrationTest']
+        .each { taskName, testClass ->
+            tasks.register(taskName, Test) {
+                description = "Runs ${testClass} against a disposable local MySQL database."
+                group = 'verification'
+                dependsOn tasks.named('integrationTestClasses')
+                testClassesDirs = sourceSets.integrationTest.output.classesDirs
+                classpath = sourceSets.integrationTest.runtimeClasspath
+                useJUnitPlatform()
+                filter {
+                    includeTestsMatching testClass
+                    failOnNoMatchingTests = true
+                }
+                // 환경 누락을 skip으로 숨기지 않고 전용 검사 실행 전에 명확히 실패시킨다.
+                doFirst {
+                    def prefix = taskName == 'friendDeadlockTest'
+                            ? 'MULO_DEADLOCK_IT_ADMIN_' : 'MULO_NOTIFICATION_IT_DB_'
+                    ['URL', 'USERNAME', 'PASSWORD'].each { suffix ->
+                        if (!System.getenv(prefix + suffix)?.trim()) {
+                            throw new GradleException("${taskName}: ${prefix}${suffix} 환경변수가 필요합니다.")
+                        }
+                    }
+                }
+            }
+        }

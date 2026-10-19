@@ -71,8 +71,8 @@ jobs:
         run: |
           mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
 
-      # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
-      - name: Run Friend Deadlock Regression
+      # 관리자 권한이 필요한 잠금·migration 회귀 5개는 일반 test와 분리해 먼저 실행한다.
+      - name: Run Dedicated Database Regressions
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           DB_USERNAME: mulo
@@ -80,6 +80,9 @@ jobs:
           MULO_DEADLOCK_IT_ADMIN_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           MULO_DEADLOCK_IT_ADMIN_USERNAME: root
           MULO_DEADLOCK_IT_ADMIN_PASSWORD: root
+          MULO_NOTIFICATION_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/
+          MULO_NOTIFICATION_IT_DB_USERNAME: root
+          MULO_NOTIFICATION_IT_DB_PASSWORD: root
           JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
           GCP_PROJECT_ID: mulo-ci-test
           GCS_BUCKET_NAME: mulo-ci-test
@@ -89,7 +92,7 @@ jobs:
           SPOTIFY_CLIENT_SECRET: ci-test
           AI_INTERNAL_TOKEN: ci-test-token
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
-        run: ./gradlew test --tests com.ktb4.team16.mulo.friend.service.FriendDeadlockMysqlIntegrationTest --rerun-tasks
+        run: ./gradlew friendDeadlockTest notificationMigrationTest --rerun-tasks
 
       # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
       - name: Run Tests and Coverage Verification
@@ -123,7 +126,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: build/reports/tests/test
+          path: build/reports/tests/
           retention-days: 7
 
       - name: Notify result
@@ -190,8 +193,8 @@ jobs:
         run: |
           mysql -h127.0.0.1 -P3307 -uroot -proot -e "CREATE DATABASE IF NOT EXISTS mulo_friend_deadlock_it CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci; GRANT ALL ON mulo_friend_deadlock_it.* TO 'mulo'@'%'; FLUSH PRIVILEGES;"
 
-      # 실제 잠금 대기를 관찰하는 회귀 검사는 전용 스키마에서 먼저 실행한다.
-      - name: Run Friend Deadlock Regression
+      # 관리자 권한이 필요한 잠금·migration 회귀 5개는 일반 test와 분리해 먼저 실행한다.
+      - name: Run Dedicated Database Regressions
         env:
           DB_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           DB_USERNAME: mulo
@@ -199,6 +202,9 @@ jobs:
           MULO_DEADLOCK_IT_ADMIN_URL: jdbc:mysql://127.0.0.1:3307/mulo_friend_deadlock_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul
           MULO_DEADLOCK_IT_ADMIN_USERNAME: root
           MULO_DEADLOCK_IT_ADMIN_PASSWORD: root
+          MULO_NOTIFICATION_IT_DB_URL: jdbc:mysql://127.0.0.1:3307/
+          MULO_NOTIFICATION_IT_DB_USERNAME: root
+          MULO_NOTIFICATION_IT_DB_PASSWORD: root
           JWT_SECRET: MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY=
           GCP_PROJECT_ID: mulo-ci-test
           GCS_BUCKET_NAME: mulo-ci-test
@@ -208,7 +214,7 @@ jobs:
           SPOTIFY_CLIENT_SECRET: ci-test
           AI_INTERNAL_TOKEN: ci-test-token
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
-        run: ./gradlew test --tests com.ktb4.team16.mulo.friend.service.FriendDeadlockMysqlIntegrationTest --rerun-tasks
+        run: ./gradlew friendDeadlockTest notificationMigrationTest --rerun-tasks
 
       # 테스트 실행 + 커버리지 검사 (60% 미만이면 여기서 실패)
       - name: Run Tests and Coverage Verification
@@ -242,7 +248,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: test-report
-          path: build/reports/tests/test
+          path: build/reports/tests/
           retention-days: 7
 
       - name: Build jar

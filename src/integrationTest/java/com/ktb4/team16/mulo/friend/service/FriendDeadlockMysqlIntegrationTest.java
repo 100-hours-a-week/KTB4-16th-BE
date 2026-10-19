@@ -17,7 +17,6 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
-import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
@@ -30,7 +29,6 @@ import org.springframework.transaction.support.TransactionTemplate;
 
 /** 일회용 DB에서 실제 친구 명령과 Outbox의 잠금 순환을 단계별로 재현한다. */
 @SpringBootTest
-@EnabledIfEnvironmentVariable(named = "MULO_DEADLOCK_IT_ADMIN_URL", matches = ".+")
 class FriendDeadlockMysqlIntegrationTest {
 
     @Autowired

@@ -2,7 +2,6 @@ package com.ktb4.team16.mulo.notification;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.junit.jupiter.api.Assumptions.assumeTrue;
 
 import java.util.UUID;
 import java.util.List;
@@ -29,9 +28,11 @@ class NotificationMigrationMysqlIntegrationTest {
         baseUrl = System.getenv("MULO_NOTIFICATION_IT_DB_URL");
         username = System.getenv("MULO_NOTIFICATION_IT_DB_USERNAME");
         password = System.getenv("MULO_NOTIFICATION_IT_DB_PASSWORD");
-        assumeTrue(baseUrl != null && baseUrl.endsWith("/")
-                && username != null && password != null,
-                "A dedicated MySQL server URL ending in / and credentials are required");
+        if (baseUrl == null || !baseUrl.matches("jdbc:mysql://127\\.0\\.0\\.1:[0-9]+/")
+                || username == null || username.isBlank() || password == null || password.isBlank()) {
+            throw new IllegalStateException("알림 migration 검사는 로컬 일회용 MySQL 서버 URL과 계정이 필요합니다. "
+                    + "MULO_NOTIFICATION_IT_DB_URL/USERNAME/PASSWORD를 설정하세요.");
+        }
         schema = "mulo_notification_it_" + UUID.randomUUID().toString().replace("-", "").substring(0, 16);
         admin = new JdbcTemplate(new DriverManagerDataSource(baseUrl, username, password));
         admin.execute("CREATE DATABASE " + schema);
