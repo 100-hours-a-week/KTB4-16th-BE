@@ -216,7 +216,7 @@ class UserControllerTest {
                 .thenReturn(new MyPlaceRecordsResponseDto(
                         List.of(new MyPlaceRecordResponseDto(101L, 10L, 583L,
                                 "밤편지", "아이유", "album-image",
-                                LocalDateTime.of(2026, 9, 19, 15, 30))),
+                                LocalDateTime.of(2026, 9, 19, 15, 30), "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC")),
                         null));
 
         authenticatedUserRequest("{\"placeIds\":[10],\"cursor\":null}")
@@ -225,6 +225,7 @@ class UserControllerTest {
                 .andExpect(jsonPath("$.data.records.length()").value(1))
                 .andExpect(jsonPath("$.data.records[0].placeId").value(10))
                 .andExpect(jsonPath("$.data.records[0].albumImageUrl").value("album-image"))
+                .andExpect(jsonPath("$.data.records[0].externalUrl").value("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"))
                 .andExpect(jsonPath("$.data.nextCursor").doesNotExist());
     }
 
@@ -308,7 +309,7 @@ class UserControllerTest {
         return IntStream.rangeClosed(1, 20)
                 .mapToObj(id -> new MyPlaceRecordResponseDto(
                         (long) id, 10L, 583L, "밤편지", "아이유", "album-image",
-                        LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id)))
+                        LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id), "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"))
                 .toList();
     }
 

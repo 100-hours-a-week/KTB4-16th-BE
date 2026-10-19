@@ -61,7 +61,8 @@ public class PlaceService {
                     aggregate.musicTrackId(),
                     aggregate.title(),
                     aggregate.artistName(),
-                    aggregate.count()
+                    aggregate.count(),
+                    aggregate.externalUrl()
             ));
         }
 

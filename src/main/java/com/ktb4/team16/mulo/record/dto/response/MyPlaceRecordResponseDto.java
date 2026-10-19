@@ -9,6 +9,7 @@ public record MyPlaceRecordResponseDto(
             String title,
             String artistName,
             String albumImageUrl,
-            LocalDateTime createdAt
+            LocalDateTime createdAt,
+            String externalUrl
     ) {
 }

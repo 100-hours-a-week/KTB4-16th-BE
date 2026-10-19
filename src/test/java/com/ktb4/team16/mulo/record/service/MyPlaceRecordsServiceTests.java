@@ -89,7 +89,7 @@ class MyPlaceRecordsServiceTests {
         return java.util.stream.IntStream.rangeClosed(1, count)
                 .mapToObj(id -> new MyPlaceRecordResponseDto(
                         (long) id, 10L, 583L, "밤편지", "아이유", "album-image",
-                        LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id)))
+                        LocalDateTime.of(2026, 9, 19, 15, 30).minusMinutes(id), "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"))
                 .toList();
     }
 }
