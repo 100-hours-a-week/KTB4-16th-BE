@@ -38,22 +38,59 @@ public class VoteQuestionPrefetchService {
     private final VoteQuestionPrefetchWriter prefetchWriter;
     private final Clock clock;
 
-    @Scheduled(cron = "0 45,50 23 * * *", zone = "Asia/Seoul")
+    @Scheduled(cron = "0 45 23 * * *", zone = "Asia/Seoul")
     public void prefetchTomorrowQuestions() {
-        prefetchQuestions(LocalDate.now(clock).plusDays(1));
+        prefetchQuestions(LocalDate.now(clock).plusDays(1), false);
+    }
+
+    @Scheduled(cron = "0 50 23 * * *", zone = "Asia/Seoul")
+    public void retryTomorrowQuestions() {
+        prefetchQuestions(LocalDate.now(clock).plusDays(1), true);
     }
 
     public void prefetchQuestions(LocalDate targetDate) {
+        prefetchQuestions(targetDate, false);
+    }
+
+    private void prefetchQuestions(LocalDate targetDate, boolean retry) {
         if (snapshotStore.isReady(targetDate)) {
+            log.info("취향 투표 사전 적재를 생략했습니다. date={}, reason=SNAPSHOT_READY, retry={}",
+                    targetDate, retry);
+            return;
+        }
+
+        List<User> users = userRepository.findAllByDeletedAtIsNull();
+        Set<Long> savedUserIds = snapshotStore.findAssignments(targetDate).stream()
+                .map(VoteSnapshotStore.AssignmentRow::userId)
+                .collect(Collectors.toSet());
+        Set<String> existingGenres = findExistingGenres(targetDate);
+        long missingUsers = users.stream()
+                .map(User::getUserId)
+                .filter(userId -> !savedUserIds.contains(userId))
+                .count();
+        Set<String> missingGenres = new HashSet<>(ALLOWED_GENRES);
+        missingGenres.removeAll(existingGenres);
+        if (missingUsers == 0 && missingGenres.isEmpty()) {
+            log.info("취향 투표 사전 적재를 생략했습니다. date={}, reason=ALL_DATA_ALREADY_STORED, retry={}",
+                    targetDate, retry);
             return;
         }
 
         List<AiVoteQuestion> questions = readMissingQuestions(targetDate);
-        List<VoteSnapshotStore.AssignmentRow> assignments = readMissingUserAssignments(targetDate);
+        List<VoteSnapshotStore.AssignmentRow> assignments = readMissingUserAssignments(
+                targetDate, users, savedUserIds);
         if (questions.isEmpty() && assignments.isEmpty()) {
+            log.error("취향 투표 사전 적재가 완료되지 않았습니다. date={}, retry={}, "
+                            + "missingQuestionGroups={}, missingUsers={}, outcome=FAILED",
+                    targetDate, retry, missingGenres.size(), missingUsers);
             return;
         }
         prefetchWriter.save(targetDate, questions, assignments);
+        boolean complete = isPrefetchComplete(targetDate);
+        log.info("취향 투표 사전 적재가 종료되었습니다. date={}, retry={}, outcome={}, questionGroupsSaved={}, "
+                        + "userAssignmentsSaved={}, missingQuestionGroupsBefore={}, missingUsersBefore={}",
+                targetDate, retry, complete ? "SUCCESS" : "PARTIAL", questions.size(), assignments.size(),
+                missingGenres.size(), missingUsers);
     }
 
     private List<AiVoteQuestion> readMissingQuestions(LocalDate targetDate) {
@@ -72,11 +109,8 @@ public class VoteQuestionPrefetchService {
         }
     }
 
-    private List<VoteSnapshotStore.AssignmentRow> readMissingUserAssignments(LocalDate targetDate) {
-        List<User> users = userRepository.findAllByDeletedAtIsNull();
-        Set<Long> savedUserIds = snapshotStore.findAssignments(targetDate).stream()
-                .map(VoteSnapshotStore.AssignmentRow::userId)
-                .collect(Collectors.toSet());
+    private List<VoteSnapshotStore.AssignmentRow> readMissingUserAssignments(LocalDate targetDate,
+            List<User> users, Set<Long> savedUserIds) {
         List<User> missingUsers = users.stream()
                 .filter(user -> !savedUserIds.contains(user.getUserId()))
                 .toList();
@@ -116,6 +150,19 @@ public class VoteQuestionPrefetchService {
         return ALLOWED_GENRES.stream()
                 .filter(genre -> snapshotStore.findQuestionContent(targetDate, genre).isPresent())
                 .collect(Collectors.toSet());
+    }
+
+    private boolean isPrefetchComplete(LocalDate targetDate) {
+        Set<String> existingGenres = findExistingGenres(targetDate);
+        if (!existingGenres.containsAll(ALLOWED_GENRES)) {
+            return false;
+        }
+        Set<Long> savedUserIds = snapshotStore.findAssignments(targetDate).stream()
+                .map(VoteSnapshotStore.AssignmentRow::userId)
+                .collect(Collectors.toSet());
+        return userRepository.findAllByDeletedAtIsNull().stream()
+                .map(User::getUserId)
+                .allMatch(savedUserIds::contains);
     }
 
     private List<AiVoteQuestion> validateAndSelect(LocalDate targetDate,

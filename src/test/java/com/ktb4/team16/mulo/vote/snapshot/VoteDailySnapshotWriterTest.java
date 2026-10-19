@@ -107,6 +107,52 @@ class VoteDailySnapshotWriterTest {
     }
 
     @Test
+    void doesNotMarkSnapshotReadyWhenARequiredGroupHasNoTodayOrPreviousQuestion() {
+        when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
+        when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
+                new VoteSnapshotStore.AssignmentRow(17L, "재즈", null),
+                new VoteSnapshotStore.AssignmentRow(18L, "공통", null)));
+        when(store.findQuestionContent(TARGET_DATE, "재즈"))
+                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "오늘 재즈 질문", "A", "B")));
+        when(store.findQuestionContent(TARGET_DATE, "공통")).thenReturn(Optional.empty());
+        when(store.findQuestionContent(TARGET_DATE.minusDays(1), "공통")).thenReturn(Optional.empty());
+        when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
+        when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
+        when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
+        when(store.findQuestionId(TARGET_DATE, "공통")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> writer.finalizeSnapshot(
+                TARGET_DATE, List.of(), List.of(17L, 18L), Optional.empty()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("사용자 배정 그룹의 질문이 없어 스냅샷을 확정할 수 없습니다.");
+
+        verify(store, never()).completeAssignments(ArgumentMatchers.eq(TARGET_DATE), ArgumentMatchers.anyList());
+        verify(store, never()).markReady(TARGET_DATE);
+    }
+
+    @Test
+    void doesNotMarkSnapshotReadyWhenAnyPersistedAssignmentStillHasNoQuestionId() {
+        when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
+        when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
+                new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
+        when(store.findQuestionContent(TARGET_DATE, "재즈"))
+                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "오늘 재즈 질문", "A", "B")));
+        when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
+        when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
+        when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
+        when(store.hasAssignmentsWithoutQuestion(TARGET_DATE)).thenReturn(true);
+
+        assertThatThrownBy(() -> writer.finalizeSnapshot(
+                TARGET_DATE, List.of(), List.of(17L), Optional.empty()))
+                .isInstanceOf(IllegalStateException.class)
+                .hasMessage("질문 ID가 없는 사용자 배정이 있어 스냅샷을 확정할 수 없습니다.");
+
+        verify(store).completeAssignments(TARGET_DATE,
+                List.of(new VoteSnapshotStore.AssignmentRow(17L, "재즈", 41L)));
+        verify(store, never()).markReady(TARGET_DATE);
+    }
+
+    @Test
     void doesNotChangeReadySnapshotWhenFinalizationIsRetried() {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(true);
 

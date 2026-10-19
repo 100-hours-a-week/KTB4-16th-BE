@@ -79,12 +79,24 @@ public class VoteDailySnapshotWriter {
             log.error("당일 질문과 전날 대체 질문이 없어 취향 투표 스냅샷 확정을 중단합니다. date={}", voteDate);
             throw new IllegalStateException("당일 질문과 전날 대체 질문이 없어 스냅샷을 확정할 수 없습니다.");
         }
+        for (String genre : requiredGenres) {
+            Long questionId = questionIds.computeIfAbsent(genre,
+                    key -> store.findQuestionId(voteDate, key).orElse(null));
+            if (questionId == null) {
+                log.error("사용자 배정 그룹의 당일 질문과 전날 대체 질문이 없어 스냅샷 확정을 중단합니다. date={}, genre={}",
+                        voteDate, genre);
+                throw new IllegalStateException("사용자 배정 그룹의 질문이 없어 스냅샷을 확정할 수 없습니다.");
+            }
+        }
         List<VoteSnapshotStore.AssignmentRow> assignments = genresByUser.entrySet().stream()
                 .map(entry -> new VoteSnapshotStore.AssignmentRow(entry.getKey(), entry.getValue(),
-                        questionIds.computeIfAbsent(entry.getValue(), genre ->
-                                store.findQuestionId(voteDate, genre).orElse(null))))
+                        questionIds.get(entry.getValue())))
                 .toList();
         store.completeAssignments(voteDate, assignments);
+        if (store.hasAssignmentsWithoutQuestion(voteDate)) {
+            log.error("질문 ID가 없는 사용자 배정이 남아 스냅샷 확정을 중단합니다. date={}", voteDate);
+            throw new IllegalStateException("질문 ID가 없는 사용자 배정이 있어 스냅샷을 확정할 수 없습니다.");
+        }
         store.markReady(voteDate);
     }
 }
