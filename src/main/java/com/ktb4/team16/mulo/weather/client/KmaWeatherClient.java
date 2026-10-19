@@ -30,6 +30,10 @@ import org.springframework.web.client.RestClientException;
 @Component
 public class KmaWeatherClient {
     private static final String PATH = "/getVilageFcst";
+    /** 기상청 예보 조회를 시작하는 첫 페이지 번호다. */
+    private static final int FIRST_PAGE_NUMBER = 1;
+    /** 같은 시각의 기온·하늘·강수 등이 각각 한 항목인 응답의 페이지당 요청 수다. */
+    private static final int FORECAST_ITEMS_PER_PAGE = 1_000;
     private static final DateTimeFormatter DATE = DateTimeFormatter.ofPattern("yyyyMMdd");
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HHmm");
     private static final Duration REQUEST_TIMEOUT = Duration.ofSeconds(3);
@@ -67,10 +71,14 @@ public class KmaWeatherClient {
         }
     }
 
+    /** 지정한 격자·발표 회차의 예보 첫 페이지를 요청할 주소를 구성한다. */
     private URI buildUri(GridCoordinate grid, ZonedDateTime baseAt) {
         // 중요: 공공데이터포털에서 받은 URL 인코딩 키를 다시 인코딩하지 않는다.
+        // 현재는 첫 페이지만 조회하며 페이지당 요청 수가 전체 예보 수신을 보장하지 않는다.
         String query = "?serviceKey=" + properties.serviceKey()
-                + "&pageNo=1&numOfRows=1000&dataType=JSON"
+                + "&pageNo=" + FIRST_PAGE_NUMBER
+                + "&numOfRows=" + FORECAST_ITEMS_PER_PAGE
+                + "&dataType=JSON"
                 + "&base_date=" + DATE.format(baseAt)
                 + "&base_time=" + TIME.format(baseAt)
                 + "&nx=" + grid.x() + "&ny=" + grid.y();
