@@ -217,14 +217,14 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.place.dto.PopularTrackAggregateDto(
-            m.musicTrackId, m.title, m.artistName, COUNT(r), MAX(r.createdAt)
+            m.musicTrackId, m.title, m.artistName, COUNT(r), MAX(r.createdAt), m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
         WHERE r.place.placeId IN :placeIds
             AND r.deletedAt IS NULL
             AND r.createdAt >= :createdAtFrom
-        GROUP BY m.musicTrackId, m.title, m.artistName
+        GROUP BY m.musicTrackId, m.title, m.artistName, m.externalUrl
         ORDER BY COUNT(r) DESC, MAX(r.createdAt) DESC, m.musicTrackId ASC
         """)
     List<PopularTrackAggregateDto> findPopularTrackAggregates(
@@ -287,7 +287,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -304,7 +304,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -325,7 +325,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -342,7 +342,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -358,7 +358,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m
@@ -379,7 +379,7 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
 
     @Query("""
         SELECT new com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordResponseDto(
-            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt
+            r.recordId, r.place.placeId, m.musicTrackId, m.title, m.artistName, m.albumImageUrl, r.createdAt, m.externalUrl
         )
         FROM Record r
         JOIN r.musicTrack m

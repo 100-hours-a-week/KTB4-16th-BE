@@ -3018,6 +3018,11 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "externalUrl": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "저장된 음악 제공자의 곡 링크. 유효한 Spotify 트랙 링크일 때 미리듣기에 사용한다."
                               }
                             }
                           }
@@ -4050,6 +4055,11 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "externalUrl": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "저장된 음악 제공자의 곡 링크. 유효한 Spotify 트랙 링크일 때 미리듣기에 사용한다."
                               }
                             }
                           }
@@ -8761,6 +8771,11 @@
                               },
                               "count": {
                                 "type": "integer"
+                              },
+                              "externalUrl": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "저장된 음악 제공자의 곡 링크. 유효한 Spotify 트랙 링크일 때 미리듣기에 사용한다."
                               }
                             }
                           }
@@ -9326,6 +9341,11 @@
                               "createdAt": {
                                 "type": "string",
                                 "format": "date-time"
+                              },
+                              "externalUrl": {
+                                "type": "string",
+                                "nullable": true,
+                                "description": "저장된 음악 제공자의 곡 링크. 유효한 Spotify 트랙 링크일 때 미리듣기에 사용한다."
                               }
                             }
                           }

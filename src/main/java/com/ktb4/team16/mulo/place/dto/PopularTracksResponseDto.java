@@ -12,7 +12,8 @@ public record PopularTracksResponseDto(
             Long musicTrackId,
             String title,
             String artistName,
-            Long count
+            Long count,
+            String externalUrl
     ) {
     }
 }
