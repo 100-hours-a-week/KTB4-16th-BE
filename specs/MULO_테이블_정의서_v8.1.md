@@ -2,7 +2,7 @@
 
 > 작성일: 2026-09-21 (KST)  
 > 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
-> 실제 스키마 기준: 현재 백엔드 작업 트리의 Flyway V1~V8
+> 기본 테이블 정의 기준: Flyway V1~V8. 월간 리포트의 V9 추가 컬럼은 아래에 반영했으며, V10~V11 변경은 이 문서 전체에 아직 대조하지 않았다.
 > 설계·정책 기준: 서비스 정책 정의서 v2.1, OpenAPI v2.8, 현재 구현 문서
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
@@ -10,7 +10,7 @@
 
 | 상태 | 의미 |
 | --- | --- |
-| `구현됨` | Flyway V1~V8에 실제 적용되는 구조 |
+| `구현됨` | Flyway V1~V8에 실제 적용되는 구조. §11의 `batch_request_id`는 V9 기준 |
 | `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
 | `V1 제외·V2 구현` | V1 기능에서는 제외됐지만 V2에서 서버 기능으로 구현됨 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
@@ -25,6 +25,7 @@
 - `record_drafts`는 V1 기능 제외 이력을 유지하고, V2 API 및 V5 실제 스키마를 반영
 - 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
 - V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
+- V9 `monthly_reports.batch_request_id`를 AI 배치 요청 시도 식별용 nullable 컬럼으로 반영. 기존 리포트의 값은 NULL이며 V10~V11은 별도 대조 필요
 - 설계 문서와 Flyway 사이의 차이는 문서 끝의 정합성 표에서 원본과 현재 상태를 함께 표시
 
 ### v7.6에서 승계한 핵심 변경 사항
@@ -562,6 +563,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `ai_recap_text` | `VARCHAR` | 100 | NULL | NULL | - | AI가 생성한 월간 요약 문장 | AI가 생성한 월간 회고를 최대 100자로 저장하기 위해 `VARCHAR(100)`을 사용한다. | 월간 리포트의 AI RECAP 문장을 표시한다. |
 | `ai_recap_status` | `ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')` | - | NOT NULL | PENDING | - | AI 월간 요약 생성 상태
 (`PENDING`, `PROCESSING`, `COMPLETED,` `FAILED` ) | AI 요약 상태가 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 네 가지로 제한되므로 `ENUM`을 사용한다. | AI 요약이 준비되었는지 판단하고 화면 상태를 제어한다. |
+| `batch_request_id` | `VARCHAR` | 36 | NULL | NULL | - | AI 배치 요청 시도 ID | Flyway V9에서 추가한 UUID 문자열이다. 이전에 저장된 리포트와 기존 콜백의 호환을 위해 NULL을 허용한다. | 현재 AI 요청과 콜백의 ID를 대조해 이전 시도에서 늦게 도착한 결과의 적용을 막는다. |
 | `created_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 월간 리포트가 최초 생성·저장된 시각 | 리포트는 최초 생성 결과를 스냅샷으로 저장하므로 생성 시각을 기록한다. | 리포트의 최초 생성 시점을 관리한다. |
 
 #### 3. 제약조건
