@@ -88,6 +88,22 @@ class MatchRequestControllerTest {
     }
 
     @Test
+    void returnsMatchRequestStatusByVoteAnswerForAuthenticatedPrincipal() throws Exception {
+        when(matchService.getMatchRequestStatusByVoteAnswer(11L, 101L))
+                .thenReturn(new MatchRequestStatusResponse(
+                        "매칭 요청 상태 조회 성공",
+                        new MatchRequestStatusResponse.Data(301L, MatchRequestStatus.FAILED, null)));
+
+        mvc.perform(get("/api/match-requests/by-vote-answer/{voteAnswerId}", 101L))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.data.matchRequestId").value(301))
+                .andExpect(jsonPath("$.data.status").value("FAILED"))
+                .andExpect(jsonPath("$.data.chatRoomId").value(nullValue()));
+
+        verify(matchService).getMatchRequestStatusByVoteAnswer(11L, 101L);
+    }
+
+    @Test
     void forwardsMatchRequestStatusDomainException() throws Exception {
         when(matchService.getMatchRequestStatus(11L, 301L))
                 .thenThrow(new MatchDomainException(ErrorCode.MATCH_REQUEST_NOT_FOUND));
