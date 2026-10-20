@@ -15,6 +15,19 @@ public interface MatchRequestRepository extends JpaRepository<MatchRequest, Long
 
     Optional<MatchRequest> findByMatchRequestIdAndUser_UserId(Long matchRequestId, Long userId);
 
+    @Query("""
+            SELECT request
+            FROM MatchRequest request
+            JOIN request.voteAnswer answer
+            WHERE answer.voteAnswerId = :voteAnswerId
+                AND answer.user.userId = :userId
+                AND request.user.userId = :userId
+            """)
+    Optional<MatchRequest> findByVoteAnswerIdAndUserId(
+            @Param("voteAnswerId") Long voteAnswerId,
+            @Param("userId") Long userId
+    );
+
     boolean existsByVoteAnswer_VoteAnswerId(Long voteAnswerId);
 
     // 선입선출 후보 하나에만 잠금이 적용되도록 호출 시 페이지 크기를 1로 제한한다.
