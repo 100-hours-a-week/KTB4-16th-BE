@@ -74,6 +74,18 @@ public class MatchService {
                 .findByMatchRequestIdAndUser_UserId(matchRequestId, userId)
                 .orElseThrow(() -> new MatchDomainException(ErrorCode.MATCH_REQUEST_NOT_FOUND));
 
+        return toStatusResponse(matchRequest);
+    }
+
+    @Transactional(readOnly = true)
+    public MatchRequestStatusResponse getMatchRequestStatusByVoteAnswer(Long userId, Long voteAnswerId) {
+        MatchRequest matchRequest = matchRequestRepository.findByVoteAnswerIdAndUserId(voteAnswerId, userId)
+                .orElseThrow(() -> new MatchDomainException(ErrorCode.MATCH_REQUEST_NOT_FOUND));
+
+        return toStatusResponse(matchRequest);
+    }
+
+    private MatchRequestStatusResponse toStatusResponse(MatchRequest matchRequest) {
         if (matchRequest.getStatus() == MatchRequestStatus.MATCHED
                 && (matchRequest.getMatch() == null || matchRequest.getMatch().getChatRoomId() == null)) {
             throw new IllegalStateException("MATCHED 매칭 요청에는 채팅방 식별자가 필요합니다.");

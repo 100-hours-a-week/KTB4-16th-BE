@@ -4,8 +4,11 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.ktb4.team16.mulo.friend.service.FriendCommandService;
+import com.ktb4.team16.mulo.friend.service.FriendCommandTransactionalService;
 import com.ktb4.team16.mulo.friend.service.SendFriendRequestResult;
 import com.ktb4.team16.mulo.notification.exception.NotificationDomainException;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxProcessor;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxScheduler;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
 import com.ktb4.team16.mulo.report.dto.request.MonthlyReportAiCallbackRequest;
 import com.ktb4.team16.mulo.report.service.MonthlyReportAiCallbackService;
@@ -24,6 +27,7 @@ import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
@@ -36,6 +40,16 @@ class NotificationMysqlIntegrationTest {
 
     @Autowired
     private FriendCommandService friendCommandService;
+
+    @Autowired
+    private FriendCommandTransactionalService friendCommands;
+
+    @Autowired
+    private NotificationOutboxProcessor outboxProcessor;
+
+    // 지연 이벤트는 테스트가 지정한 순서로 처리하고 예약 실행의 개입을 막는다.
+    @MockitoBean
+    private NotificationOutboxScheduler scheduler;
 
     @Autowired
     private MonthlyReportAiCallbackService reportCallbackService;
@@ -102,6 +116,76 @@ class NotificationMysqlIntegrationTest {
                 SELECT status FROM outbox_events
                 WHERE event_type = 'FRIEND_ACCEPTED' AND aggregate_id = ?
                 """, String.class, friendshipId)).isEqualTo("COMPLETED");
+    }
+
+    /** 취소 뒤 처리되는 요청 이벤트는 알림 없이 완료되며 반복 처리해도 재시도하지 않는다. */
+    @Test
+    void cancelledRequestSkipsLateNotificationAndCompletesWithoutRetry() {
+        TestUser requester = insertUser("cancelSender");
+        TestUser addressee = insertUser("cancelReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), addressee.nickname());
+        Long requestId = ((SendFriendRequestResult.Pending) pending.result()).friendRequestId();
+        UUID eventId = pending.eventIds().getFirst();
+        friendCommands.deleteFriendRequest(requester.id(), requestId);
+
+        outboxProcessor.process(eventId);
+        outboxProcessor.process(eventId);
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM notifications WHERE source_event_id = ?
+                """, Integer.class, eventId.toString())).isZero();
+        assertThat(jdbcTemplate.queryForMap("""
+                SELECT status, retry_count, last_error_code FROM outbox_events WHERE event_id = ?
+                """, eventId.toString()))
+                .containsEntry("status", "COMPLETED")
+                .containsEntry("retry_count", 0)
+                .containsEntry("last_error_code", null);
+    }
+
+    /** 먼저 저장한 요청 알림은 취소 후에도 원문과 null 대상을 가진 이력으로 조회된다. */
+    @Test
+    void existingRequestNotificationRemainsAfterCancellationWithNullTarget() {
+        TestUser requester = insertUser("historySender");
+        TestUser addressee = insertUser("historyReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), addressee.nickname());
+        Long requestId = ((SendFriendRequestResult.Pending) pending.result()).friendRequestId();
+        outboxProcessor.process(pending.eventIds().getFirst());
+        var original = notificationService.getNotifications(addressee.id(), null, 20)
+                .data().notifications().getFirst();
+        assertThat(original.targetId()).isEqualTo(requestId);
+
+        friendCommands.deleteFriendRequest(requester.id(), requestId);
+
+        var remaining = notificationService.getNotifications(addressee.id(), null, 20)
+                .data().notifications();
+        assertThat(remaining).hasSize(1);
+        assertThat(remaining.getFirst().notificationId()).isEqualTo(original.notificationId());
+        assertThat(remaining.getFirst().targetId()).isNull();
+        assertThat(remaining.getFirst().title()).isEqualTo(original.title());
+        assertThat(remaining.getFirst().content()).isEqualTo(original.content());
+        assertThat(remaining.getFirst().readAt()).isNull();
+    }
+
+    /** 친구 관계가 먼저 삭제돼도 수락 알림은 기존 정책대로 수신자별 이력을 보존한다. */
+    @Test
+    void acceptedNotificationsKeepHistoryWhenFriendshipWasDeletedBeforeProcessing() {
+        TestUser requester = insertUser("acceptedSender");
+        TestUser addressee = insertUser("acceptedReceiver");
+        friendCommands.sendFriendRequest(requester.id(), addressee.nickname());
+        var accepted = friendCommands.sendFriendRequest(addressee.id(), requester.nickname());
+        Long friendshipId = ((SendFriendRequestResult.BecameFriends) accepted.result()).friendshipId();
+        UUID eventId = accepted.eventIds().getFirst();
+        friendCommands.deleteFriendship(requester.id(), friendshipId);
+
+        outboxProcessor.process(eventId);
+
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM notifications
+                WHERE source_event_id = ? AND type = 'FRIEND_ACCEPTED' AND friendship_id IS NULL
+                """, Integer.class, eventId.toString())).isEqualTo(2);
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT status FROM outbox_events WHERE event_id = ?
+                """, String.class, eventId.toString())).isEqualTo("COMPLETED");
     }
 
     /** AI 회고 COMPLETED 변경과 월간 리포트 이벤트 및 알림이 같은 commit에서 연결된다. */

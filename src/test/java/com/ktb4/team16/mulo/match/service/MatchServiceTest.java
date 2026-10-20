@@ -100,6 +100,43 @@ class MatchServiceTest {
     }
 
     @Test
+    void returnsMatchRequestStatusByOwnedVoteAnswer() {
+        MatchRequest failed = matchRequest(305L, MatchRequestStatus.FAILED, null, true);
+        when(matchRequestRepository.findByVoteAnswerIdAndUserId(101L, 11L))
+                .thenReturn(Optional.of(failed));
+
+        var response = matchService.getMatchRequestStatusByVoteAnswer(11L, 101L);
+
+        assertThat(response.data().matchRequestId()).isEqualTo(305L);
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.FAILED);
+        assertThat(response.data().chatRoomId()).isNull();
+    }
+
+    @Test
+    void returnsChatRoomIdWhenVoteAnswerMatchRequestIsMatched() {
+        MatchRequest matched = matchRequest(306L, MatchRequestStatus.MATCHED, 901L, true);
+        when(matchRequestRepository.findByVoteAnswerIdAndUserId(101L, 11L))
+                .thenReturn(Optional.of(matched));
+
+        var response = matchService.getMatchRequestStatusByVoteAnswer(11L, 101L);
+
+        assertThat(response.data().matchRequestId()).isEqualTo(306L);
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.MATCHED);
+        assertThat(response.data().chatRoomId()).isEqualTo(901L);
+    }
+
+    @Test
+    void returnsNotFoundWhenVoteAnswerHasNoOwnedMatchRequest() {
+        when(matchRequestRepository.findByVoteAnswerIdAndUserId(101L, 11L))
+                .thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> matchService.getMatchRequestStatusByVoteAnswer(11L, 101L))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.MATCH_REQUEST_NOT_FOUND);
+    }
+
+    @Test
     void returnsChatRoomIdForMatchedRequest() {
         MatchRequest matched = matchRequest(304L, MatchRequestStatus.MATCHED, 901L, true);
         when(matchRequestRepository.findByMatchRequestIdAndUser_UserId(304L, 11L))

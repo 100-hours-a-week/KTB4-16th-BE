@@ -42,7 +42,7 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
                     .body(new ContextRecommendationAiRequest(context.userId(),
                             new Weather(context.weatherCondition().name(), context.temperature()),
                             context.requestedAt(), context.nearbyTracks(), RECOMMENDATION_LIMIT,
-                            context.placeName() == null ? null : new Place(context.placeName())))
+                            context.placeName() == null ? null : new Place(context.placeName()), context.excludeTrackIds()))
                     .retrieve()
                     .body(ContextRecommendationAiResponse.class);
             if (response == null || response.tracks() == null) {
@@ -86,7 +86,7 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
             java.time.OffsetDateTime localTime,
             @JsonInclude(JsonInclude.Include.NON_EMPTY) List<NearbyTrack> nearbyTracks,
             int limit,
-            @JsonInclude(JsonInclude.Include.NON_NULL) Place place) { }
+            @JsonInclude(JsonInclude.Include.NON_NULL) Place place, List<String> excludeTrackIds) { }
 
     // 요청의 날씨 enum 이름과 섭씨 온도를 중첩 JSON 객체로 전달한다.
     private record Weather(String condition, java.math.BigDecimal temperature) { }

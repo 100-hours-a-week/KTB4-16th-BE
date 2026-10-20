@@ -31,6 +31,14 @@ public class MatchRequestController {
         return matchService.getMatchRequestStatus(userId, matchRequestId);
     }
 
+    @GetMapping("/by-vote-answer/{voteAnswerId}")
+    public MatchRequestStatusResponse getMatchRequestStatusByVoteAnswer(
+            @AuthenticationPrincipal Long userId,
+            @PathVariable Long voteAnswerId
+    ) {
+        return matchService.getMatchRequestStatusByVoteAnswer(userId, voteAnswerId);
+    }
+
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public MatchRequestCreateResponse createMatchRequest(

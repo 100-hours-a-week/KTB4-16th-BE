@@ -6,11 +6,16 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.memorysearch.service.MemorySearchService;
+import com.ktb4.team16.mulo.global.error.ErrorCode;
+import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
+import com.ktb4.team16.mulo.memorysearch.exception.MemorySearchDomainException;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.EnumSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -33,6 +38,7 @@ class MemorySearchControllerTest {
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(new MemorySearchController(service))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
+                .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
         // 인증 주체만 검증하므로 자격 증명 값은 테스트에 필요하지 않다.
         SecurityContextHolder.getContext().setAuthentication(
@@ -77,5 +83,23 @@ class MemorySearchControllerTest {
                         .content("{\"conversationId\":\"550e8400-e29b-41d4-a716-446655440000\","
                                 + "\"query\":\"" + query + "\"}"))
                 .andExpect(status().isBadRequest());
+    }
+
+    /** AI의 계약·설정 오류와 외부 장애를 확정된 공개 HTTP 상태·코드로 응답한다. */
+    @ParameterizedTest
+    @EnumSource(value = ErrorCode.class, names = {"INTERNAL_SERVER_ERROR", "AI_SERVICE_ERROR"})
+    void exposesOnlyPublicErrorCodeForAiFailures(ErrorCode errorCode) throws Exception {
+        String conversationId = "550e8400-e29b-41d4-a716-446655440000";
+        when(service.search(35L, conversationId, "가을 노래"))
+                .thenThrow(new MemorySearchDomainException(errorCode));
+
+        mvc.perform(post("/api/memories/search")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"conversationId\":\"" + conversationId
+                                + "\",\"query\":\"가을 노래\"}"))
+                .andExpect(status().is(errorCode.status().value()))
+                .andExpect(jsonPath("$.code").value(errorCode.name()))
+                .andExpect(jsonPath("$.message").value(errorCode.message()))
+                .andExpect(jsonPath("$.field").doesNotExist());
     }
 }

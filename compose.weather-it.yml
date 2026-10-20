@@ -1,0 +1,26 @@
+name: mulo-weather-concurrency-test
+
+services:
+  mysql:
+    image: mysql:8.4
+    container_name: mulo-weather-concurrency-test-mysql
+    environment:
+      MYSQL_DATABASE: mulo_weather_it
+      MYSQL_ROOT_HOST: "%"
+      MYSQL_USER: mulo_weather_it
+      MYSQL_PASSWORD: mulo_weather_it_test_only
+      MYSQL_ROOT_PASSWORD: mulo_weather_root_test_only
+    ports:
+      - "127.0.0.1:3314:3306"
+    volumes:
+      - weather-concurrency-test-data:/var/lib/mysql
+    healthcheck:
+      test: ["CMD-SHELL", "mysqladmin ping --host=127.0.0.1 --user=root --password=$$MYSQL_ROOT_PASSWORD --silent"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+volumes:
+  weather-concurrency-test-data:
+    name: mulo-weather-concurrency-test-data

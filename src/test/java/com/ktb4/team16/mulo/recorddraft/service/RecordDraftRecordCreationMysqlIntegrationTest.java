@@ -41,14 +41,11 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.mockito.ArgumentMatchers;
 
 @SpringBootTest
-@ActiveProfiles("weather-it")
 class RecordDraftRecordCreationMysqlIntegrationTest {
-    private static final String EXPECTED_DATABASE = "mulo_weather_it";
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
     private static final BigDecimal LATITUDE = new BigDecimal("37.5012345");
     private static final BigDecimal LONGITUDE = new BigDecimal("127.0012345");
@@ -72,9 +69,10 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
     @BeforeEach
     void createIsolatedFixture() throws Exception {
         try (Connection connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
-            assertThat(connection.getMetaData().getURL())
-                    .matches("jdbc:mysql://127\\.0\\.0\\.1:(3307|3309)/" + EXPECTED_DATABASE + ".*");
+            String databaseUrl = System.getenv("DB_URL");
+            assertThat(connection.getMetaData().getURL()).isEqualTo(databaseUrl);
+            assertThat(connection.getCatalog()).isEqualTo(
+                    databaseName(databaseUrl));
         }
         assertThat(AopUtils.isAopProxy(recordService)).isTrue();
         Instant now = Instant.now();
@@ -99,6 +97,11 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
             uploadRepository.delete(invocation.getArgument(0));
             return null;
         }).when(uploadService).deleteMetadata(any(Upload.class));
+    }
+
+    private String databaseName(String jdbcUrl) {
+        String urlWithoutQuery = jdbcUrl.split("\\?", 2)[0];
+        return urlWithoutQuery.substring(urlWithoutQuery.lastIndexOf('/') + 1);
     }
 
     @AfterEach

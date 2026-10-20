@@ -42,6 +42,6 @@ public class RecommendationPlaylistController {
                 ? RecommendationMessage.PLAYLIST_CREATED : RecommendationMessage.PLAYLIST_RETAINED;
         HttpStatus status = result.replaced() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).body(new RecommendationPlaylistResponse(message.message(),
-                new RecommendationPlaylistData(result.playlist())));
+                new RecommendationPlaylistData(result.playlist(), result.replaced())));
     }
 }

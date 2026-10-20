@@ -27,13 +27,10 @@ import org.springframework.aop.support.AopUtils;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.ActiveProfiles;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 @SpringBootTest
-@ActiveProfiles("weather-it")
 class RecordDraftUpsertMysqlIntegrationTest {
-    private static final String EXPECTED_DATABASE = "mulo_weather_it";
     private static final ZoneId KST = ZoneId.of("Asia/Seoul");
 
     @Autowired private DataSource dataSource;
@@ -49,9 +46,10 @@ class RecordDraftUpsertMysqlIntegrationTest {
     @BeforeEach
     void prepareIsolatedMySqlAndUser() throws Exception {
         try (Connection connection = dataSource.getConnection()) {
-            assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
-            assertThat(connection.getMetaData().getURL())
-                    .matches("jdbc:mysql://127\\.0\\.0\\.1:(3307|3309)/" + EXPECTED_DATABASE + ".*");
+            String databaseUrl = System.getenv("DB_URL");
+            assertThat(connection.getMetaData().getURL()).isEqualTo(databaseUrl);
+            assertThat(connection.getCatalog()).isEqualTo(
+                    databaseName(databaseUrl));
         }
         assertThat(AopUtils.isAopProxy(recordDraftService)).isTrue();
         when(clock.instant()).thenReturn(Instant.now());
@@ -59,6 +57,11 @@ class RecordDraftUpsertMysqlIntegrationTest {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 12);
         user = userRepository.saveAndFlush(User.signup(
                 suffix + "@example.test", "test-password-hash", "u" + suffix.substring(0, 8)));
+    }
+
+    private String databaseName(String jdbcUrl) {
+        String urlWithoutQuery = jdbcUrl.split("\\?", 2)[0];
+        return urlWithoutQuery.substring(urlWithoutQuery.lastIndexOf('/') + 1);
     }
 
     @AfterEach

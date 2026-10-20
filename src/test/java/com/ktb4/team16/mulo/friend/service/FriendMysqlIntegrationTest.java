@@ -6,8 +6,10 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.ktb4.team16.mulo.friend.dto.response.FriendListData;
 import com.ktb4.team16.mulo.friend.exception.FriendDomainException;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxScheduler;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Map;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -15,11 +17,13 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 import java.util.concurrent.TimeUnit;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.RepeatedTest;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 
 /** 실제 MySQL 제약과 행 잠금 아래 친구 상태 전이 및 keyset 조회를 검증한다. */
 @SpringBootTest
@@ -33,6 +37,10 @@ class FriendMysqlIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    // 예약 실행만 막고 친구 명령과 커밋 직후 Outbox 처리는 실제 빈으로 검증한다.
+    @MockitoBean
+    private NotificationOutboxScheduler scheduler;
 
     private final List<Long> createdUserIds = new ArrayList<>();
 
@@ -56,8 +64,8 @@ class FriendMysqlIntegrationTest {
         }
     }
 
-    /** 동시에 들어온 역방향 요청 두 개가 하나의 친구 관계로 수렴하는지 확인한다. */
-    @Test
+    /** 역방향 요청 30회에서 친구 상태와 두 Outbox 완료·알림 수신자를 검증한다. */
+    @RepeatedTest(30)
     void concurrentOppositeRequestsBecomeOneFriendship() throws Exception {
         TestUser first = insertUser("a");
         TestUser second = insertUser("b");
@@ -72,6 +80,34 @@ class FriendMysqlIntegrationTest {
                 SendFriendRequestResult.BecameFriends.class);
         assertThat(requestCount(first.id(), second.id())).isZero();
         assertThat(friendshipCount(first.id(), second.id())).isEqualTo(1);
+
+        Long requestId = outcomes.stream()
+                .filter(SendFriendRequestResult.Pending.class::isInstance)
+                .map(SendFriendRequestResult.Pending.class::cast)
+                .findFirst().orElseThrow().friendRequestId();
+        Long friendshipId = outcomes.stream()
+                .filter(SendFriendRequestResult.BecameFriends.class::isInstance)
+                .map(SendFriendRequestResult.BecameFriends.class::cast)
+                .findFirst().orElseThrow().friendshipId();
+        Map<String, Object> requestEvent = outboxEvent("FRIEND_REQUEST", requestId);
+        Map<String, Object> acceptedEvent = outboxEvent("FRIEND_ACCEPTED", friendshipId);
+        for (Map<String, Object> event : List.of(requestEvent, acceptedEvent)) {
+            assertThat(event)
+                    .containsEntry("status", "COMPLETED")
+                    .containsEntry("retry_count", 0)
+                    .containsEntry("last_error_code", null);
+        }
+
+        // 요청 알림은 수락이 먼저 커밋되면 생략되지만, 수락 알림은 양쪽에 하나씩 필요하다.
+        assertThat(jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM notifications
+                WHERE source_event_id = ? AND type = 'FRIEND_REQUEST'
+                """, Integer.class, requestEvent.get("event_id"))).isBetween(0, 1);
+        assertThat(jdbcTemplate.queryForList("""
+                SELECT user_id FROM notifications
+                WHERE source_event_id = ? AND type = 'FRIEND_ACCEPTED'
+                """, Long.class, acceptedEvent.get("event_id")))
+                .containsExactlyInAnyOrder(first.id(), second.id());
     }
 
     /** 동일 방향의 동시 요청은 pending 하나만 남기고 중복 요청을 거절한다. */
@@ -165,23 +201,28 @@ class FriendMysqlIntegrationTest {
         return new TestUser(userId, nickname);
     }
 
-    /** 두 명령이 같은 시작 신호를 받고 독립 트랜잭션에서 실행되게 한다. */
+    /** 두 작업자가 모두 대기한 뒤 같은 시작 신호로 독립 트랜잭션을 실행한다. */
     private List<Object> runTogether(CheckedCommand first, CheckedCommand second) throws Exception {
         ExecutorService executor = Executors.newFixedThreadPool(2);
+        CountDownLatch ready = new CountDownLatch(2);
         CountDownLatch start = new CountDownLatch(1);
         try {
-            Future<Object> firstFuture = executor.submit(() -> runAfterSignal(start, first));
-            Future<Object> secondFuture = executor.submit(() -> runAfterSignal(start, second));
+            Future<Object> firstFuture = executor.submit(() -> runAfterSignal(ready, start, first));
+            Future<Object> secondFuture = executor.submit(() -> runAfterSignal(ready, start, second));
+            assertThat(ready.await(5, TimeUnit.SECONDS)).isTrue();
             start.countDown();
             return List.of(firstFuture.get(15, TimeUnit.SECONDS),
                     secondFuture.get(15, TimeUnit.SECONDS));
         } finally {
+            start.countDown();
             executor.shutdownNow();
         }
     }
 
-    /** 도메인 거절도 결과로 돌려 두 동시 명령의 최종 상태를 함께 검증한다. */
-    private Object runAfterSignal(CountDownLatch start, CheckedCommand command) throws Exception {
+    /** 준비 상태를 알리고 동시에 시작하며 도메인 거절은 검증용 결과로 돌린다. */
+    private Object runAfterSignal(CountDownLatch ready, CountDownLatch start,
+            CheckedCommand command) throws Exception {
+        ready.countDown();
         start.await();
         try {
             return command.execute();
@@ -204,6 +245,15 @@ class FriendMysqlIntegrationTest {
                 SELECT COUNT(*) FROM friendships
                 WHERE user_low_id = LEAST(?, ?) AND user_high_id = GREATEST(?, ?)
                 """, Integer.class, firstId, secondId, firstId, secondId);
+    }
+
+    /** 원본 요청·친구 관계 ID로 생성된 Outbox 사건의 저장·처리 상태를 조회한다. */
+    private Map<String, Object> outboxEvent(String eventType, Long aggregateId) {
+        return jdbcTemplate.queryForMap("""
+                SELECT event_id, status, retry_count, last_error_code
+                FROM outbox_events
+                WHERE event_type = ? AND aggregate_id = ?
+                """, eventType, aggregateId);
     }
 
     /** 테스트 명령이 반환하는 결과를 공통 형태로 받는다. */

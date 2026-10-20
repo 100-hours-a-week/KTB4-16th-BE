@@ -7,6 +7,7 @@ public record PopularTrackAggregateDto(
             String title,
             String artistName,
             Long count,
-            LocalDateTime latestRecordCreatedAt
+            LocalDateTime latestRecordCreatedAt,
+            String externalUrl
     ) {
 }

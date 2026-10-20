@@ -380,7 +380,9 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         try (Connection connection = dataSource.getConnection()) {
             assertThat(connection.getCatalog()).isEqualTo(EXPECTED_DATABASE);
             assertThat(connection.getMetaData().getURL())
-                    .startsWith("jdbc:mysql://127.0.0.1:3307/" + EXPECTED_DATABASE);
+                    .startsWith("jdbc:mysql://127.0.0.1:3314/" + EXPECTED_DATABASE);
+            assertThat(connection.getMetaData().getURL())
+                    .isEqualTo(System.getenv("MULO_WEATHER_IT_DB_URL"));
         }
         flyway.validate();
         assertThat(flyway.info().current()).isNotNull();

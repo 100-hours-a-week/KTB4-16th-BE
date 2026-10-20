@@ -26,6 +26,10 @@ import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
+import java.time.Clock;
+import java.time.Instant;
+import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
@@ -34,6 +38,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.springframework.test.util.ReflectionTestUtils;
 
 class RecordCreateServiceTest {
+    private static final LocalDateTime FIXED_KST_TIME = LocalDateTime.parse("2026-10-16T00:04:05");
 
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final PlaceRepository placeRepository = mock(PlaceRepository.class);
@@ -52,7 +57,7 @@ class RecordCreateServiceTest {
             recordPhotoRepository,
             mock(GcsStorageService.class),
             recordDraftRepository,
-            java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
+            Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );
 
     @BeforeEach
@@ -115,6 +120,7 @@ class RecordCreateServiceTest {
         ArgumentCaptor<Record> recordCaptor = ArgumentCaptor.forClass(Record.class);
         verify(recordRepository).save(recordCaptor.capture());
         assertThat(recordCaptor.getValue().getPlace()).isSameAs(place);
+        assertThat(recordCaptor.getValue().getCreatedAt()).isEqualTo(FIXED_KST_TIME);
         assertThat(recordCaptor.getValue().getTemperature()).isEqualByComparingTo("21.5");
         assertThat(recordCaptor.getValue().getWeatherCondition())
                 .isEqualTo(Record.WeatherCondition.CLEAR);

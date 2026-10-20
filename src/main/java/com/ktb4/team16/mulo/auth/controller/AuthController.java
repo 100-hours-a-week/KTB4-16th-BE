@@ -9,6 +9,7 @@ import com.ktb4.team16.mulo.auth.service.AuthService;
 import com.ktb4.team16.mulo.auth.service.LoginResult;
 import com.ktb4.team16.mulo.global.config.SecurityProperties;
 import jakarta.validation.Valid;
+import java.time.Duration;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpHeaders;
 import org.springframework.http.ResponseCookie;
@@ -23,7 +24,8 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/auth")
 @RequiredArgsConstructor
 public class AuthController {
-    private static final long REFRESH_TOKEN_MAX_AGE_SECONDS = 604800;
+    /** 로그인 시 발급하는 refresh 쿠키의 유지 기간 7일을 초 단위로 표현한다. */
+    private static final long REFRESH_TOKEN_MAX_AGE_SECONDS = Duration.ofDays(7).toSeconds();
 
     private final AuthService authService;
     private final SecurityProperties securityProperties;
