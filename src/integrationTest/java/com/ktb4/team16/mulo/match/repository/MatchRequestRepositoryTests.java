@@ -65,6 +65,46 @@ class MatchRequestRepositoryTests {
     }
 
     @Test
+    void findsMatchRequestByVoteAnswerOnlyForItsOwnerAndReturnsMatchedChatRoomId() {
+        long questionId = insertQuestion("VOTE_ANSWER_" + suffix());
+        long ownerId = insertUser();
+        long ownerAnswerId = insertAnswer(questionId, ownerId, "A", createdAt(10));
+        long ownerRequestId = insert("""
+                INSERT INTO match_requests (user_id, vote_answer_id, status, created_at)
+                VALUES (?, ?, 'WAITING', ?)
+                """, ownerId, ownerAnswerId, createdAt(11));
+        long otherUserId = insertUser();
+
+        assertThat(matchRequestRepository.findByVoteAnswerIdAndUserId(ownerAnswerId, ownerId))
+                .isPresent()
+                .get()
+                .extracting(MatchRequest::getMatchRequestId)
+                .isEqualTo(ownerRequestId);
+        assertThat(matchRequestRepository.findByVoteAnswerIdAndUserId(ownerAnswerId, otherUserId))
+                .isEmpty();
+
+        long answerWithoutRequestId = insertAnswer(questionId, otherUserId, "B", createdAt(12));
+        assertThat(matchRequestRepository.findByVoteAnswerIdAndUserId(answerWithoutRequestId, otherUserId))
+                .isEmpty();
+        assertThat(matchRequestRepository.findByVoteAnswerIdAndUserId(Long.MAX_VALUE, ownerId))
+                .isEmpty();
+
+        long matchedQuestionId = insertQuestion("MATCHED_" + suffix());
+        long matchedUserId = insertUser();
+        long matchedAnswerId = insertAnswer(matchedQuestionId, matchedUserId, "A", createdAt(13));
+        long chatRoomId = 987654L;
+        long matchId = insertMatch(matchedQuestionId, chatRoomId);
+        insertRequest(matchedQuestionId, "A", createdAt(14), "MATCHED", matchId, matchedUserId,
+                matchedAnswerId);
+
+        assertThat(matchRequestRepository.findByVoteAnswerIdAndUserId(matchedAnswerId, matchedUserId))
+                .isPresent()
+                .get()
+                .extracting(request -> request.getMatch().getChatRoomId())
+                .isEqualTo(chatRoomId);
+    }
+
+    @Test
     void findsOnlyOppositeWaitingRequestsForSameQuestionInStableFifoOrderUnderLock() {
         long questionId = insertQuestion("MATCH_" + suffix());
         long otherQuestionId = insertQuestion("OTHER_" + suffix());
@@ -145,6 +185,18 @@ class MatchRequestRepositoryTests {
     ) {
         long userId = insertUser();
         long answerId = insertAnswer(questionId, userId, selectedOption, createdAt);
+        return insertRequest(questionId, selectedOption, createdAt, status, matchId, userId, answerId);
+    }
+
+    private long insertRequest(
+            long questionId,
+            String selectedOption,
+            LocalDateTime createdAt,
+            String status,
+            Long matchId,
+            long userId,
+            long answerId
+    ) {
         return insert("""
                 INSERT INTO match_requests (user_id, vote_answer_id, status, match_id, created_at)
                 VALUES (?, ?, ?, ?, ?)
@@ -153,6 +205,10 @@ class MatchRequestRepositoryTests {
 
     private long insertMatch(long questionId) {
         return insert("INSERT INTO matches (vote_question_id) VALUES (?)", questionId);
+    }
+
+    private long insertMatch(long questionId, long chatRoomId) {
+        return insert("INSERT INTO matches (vote_question_id, chat_room_id) VALUES (?, ?)", questionId, chatRoomId);
     }
 
     private long insert(String sql, Object... values) {

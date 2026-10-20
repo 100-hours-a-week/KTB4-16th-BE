@@ -31,6 +31,18 @@ public class VoteSnapshotStore {
         return count != null && count > 0;
     }
 
+    public boolean beginOrLockSnapshot(LocalDate voteDate) {
+        jdbcTemplate.update("""
+                INSERT INTO vote_daily_snapshots (vote_date, status)
+                VALUES (?, 'BUILDING')
+                ON DUPLICATE KEY UPDATE vote_date = vote_daily_snapshots.vote_date
+                """, voteDate);
+        String status = jdbcTemplate.queryForObject("""
+                SELECT status FROM vote_daily_snapshots WHERE vote_date = ? FOR UPDATE
+                """, String.class, voteDate);
+        return "READY".equals(status);
+    }
+
     public Optional<VoteDailyAssignment> findAssignment(LocalDate voteDate, Long userId) {
         return jdbcTemplate.query("""
                         SELECT music_genre, vote_question_id
@@ -42,6 +54,17 @@ public class VoteSnapshotStore {
                         : Optional.empty(), voteDate, userId);
     }
 
+    public List<AssignmentRow> findAssignments(LocalDate voteDate) {
+        return jdbcTemplate.query("""
+                        SELECT user_id, music_genre, vote_question_id
+                        FROM vote_user_daily_assignments
+                        WHERE vote_date = ?
+                        ORDER BY user_id
+                        """, (resultSet, rowNumber) -> new AssignmentRow(
+                        resultSet.getLong("user_id"), resultSet.getString("music_genre"),
+                        resultSet.getObject("vote_question_id", Long.class)), voteDate);
+    }
+
     public Optional<Long> findQuestionId(LocalDate voteDate, String musicGenre) {
         return jdbcTemplate.query("""
                         SELECT vote_question_id
@@ -50,6 +73,13 @@ public class VoteSnapshotStore {
                         """, resultSet -> resultSet.next()
                         ? Optional.of(resultSet.getLong("vote_question_id")) : Optional.empty(),
                 voteDate, musicGenre);
+    }
+
+    public boolean hasQuestions(LocalDate voteDate) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM vote_questions WHERE vote_date = ?
+                """, Integer.class, voteDate);
+        return count != null && count > 0;
     }
 
     public Optional<VoteQuestionContent> findQuestionContent(LocalDate voteDate, String musicGenre) {
@@ -66,7 +96,8 @@ public class VoteSnapshotStore {
 
     public Map<String, Long> saveQuestions(LocalDate voteDate, List<AiVoteQuestion> questions) {
         Map<String, Long> ids = new LinkedHashMap<>();
-        for (AiVoteQuestion question : questions) {
+        for (AiVoteQuestion question : questions.stream()
+                .sorted(java.util.Comparator.comparing(AiVoteQuestion::musicGenre)).toList()) {
             ids.put(question.musicGenre(), saveQuestion(voteDate, question));
         }
         return ids;
@@ -75,6 +106,19 @@ public class VoteSnapshotStore {
     public void beginSnapshot(LocalDate voteDate) {
         jdbcTemplate.update("INSERT INTO vote_daily_snapshots (vote_date, status) VALUES (?, 'BUILDING')",
                 voteDate);
+    }
+
+    public void savePrefetchedAssignments(LocalDate voteDate, List<AssignmentRow> assignments) {
+        for (AssignmentRow assignment : assignments) {
+            jdbcTemplate.update("""
+                            INSERT INTO vote_user_daily_assignments
+                                (vote_date, user_id, music_genre, vote_question_id)
+                            VALUES (?, ?, ?, NULL)
+                            ON DUPLICATE KEY UPDATE
+                                user_id = vote_user_daily_assignments.user_id
+                            """,
+                    voteDate, assignment.userId(), assignment.musicGenre());
+        }
     }
 
     public void saveAssignments(LocalDate voteDate, List<AssignmentRow> assignments) {
@@ -90,9 +134,38 @@ public class VoteSnapshotStore {
         }
     }
 
+    public void completeAssignments(LocalDate voteDate, List<AssignmentRow> assignments) {
+        for (AssignmentRow assignment : assignments) {
+            int updated = jdbcTemplate.update("""
+                            UPDATE vote_user_daily_assignments
+                            SET vote_question_id = ?
+                            WHERE vote_date = ? AND user_id = ? AND vote_question_id IS NULL
+                            """,
+                    assignment.voteQuestionId(), voteDate, assignment.userId());
+            if (updated == 0 && findAssignment(voteDate, assignment.userId()).isEmpty()) {
+                jdbcTemplate.update("""
+                                INSERT INTO vote_user_daily_assignments
+                                    (vote_date, user_id, music_genre, vote_question_id)
+                                VALUES (?, ?, ?, ?)
+                                ON DUPLICATE KEY UPDATE
+                                    user_id = vote_user_daily_assignments.user_id
+                                """,
+                        voteDate, assignment.userId(), assignment.musicGenre(), assignment.voteQuestionId());
+            }
+        }
+    }
+
     public void markReady(LocalDate voteDate) {
         jdbcTemplate.update("UPDATE vote_daily_snapshots SET status = 'READY' WHERE vote_date = ?",
                 voteDate);
+    }
+
+    public boolean hasAssignmentsWithoutQuestion(LocalDate voteDate) {
+        Integer count = jdbcTemplate.queryForObject("""
+                SELECT COUNT(*) FROM vote_user_daily_assignments
+                WHERE vote_date = ? AND vote_question_id IS NULL
+                """, Integer.class, voteDate);
+        return count != null && count > 0;
     }
 
     public void assignIfMissing(LocalDate voteDate, Long userId, String musicGenre, Long questionId) {
@@ -133,10 +206,23 @@ public class VoteSnapshotStore {
             }
             return key.longValue();
         } catch (DuplicateKeyException exception) {
-            ExistingQuestion concurrent = findQuestion(voteDate, question.musicGenre())
+            ExistingQuestion concurrent = findQuestionForUpdate(voteDate, question.musicGenre())
                     .orElseThrow(() -> exception);
             return concurrent.voteQuestionId();
         }
+    }
+
+    private Optional<ExistingQuestion> findQuestionForUpdate(LocalDate voteDate, String musicGenre) {
+        return jdbcTemplate.query("""
+                        SELECT vote_question_id, question_text, option_a, option_b
+                        FROM vote_questions
+                        WHERE vote_date = ? AND music_genre = ?
+                        FOR UPDATE
+                        """, resultSet -> resultSet.next()
+                        ? Optional.of(new ExistingQuestion(resultSet.getLong("vote_question_id"),
+                                resultSet.getString("question_text"), resultSet.getString("option_a"),
+                                resultSet.getString("option_b")))
+                        : Optional.empty(), voteDate, musicGenre);
     }
 
     private Optional<ExistingQuestion> findQuestion(LocalDate voteDate, String musicGenre) {

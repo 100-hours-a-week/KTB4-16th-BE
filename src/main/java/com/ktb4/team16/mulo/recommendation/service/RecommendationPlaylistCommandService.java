@@ -37,12 +37,19 @@ public class RecommendationPlaylistCommandService {
         String placeName = placeContextService.findLegalDongName(latitude, longitude).orElse(null);
         var recommendation = recommendationAiClient.recommend(new RecommendationAiClient.RecommendationContext(
                 userId, weather.data().weatherCondition(), weather.data().temperature(), requestedAt,
-                nearbyTracks, placeName));
+                nearbyTracks, placeName, request.excludeTrackIds()));
         if (recommendation.tracks() == null || recommendation.tracks().size() != REQUIRED_TRACK_COUNT) {
             throw new RecommendationAiException();
         }
         if (recommendation.degraded()) {
             return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false);
+        }
+        // 이미 보여준 곡이나 한 응답 안의 중복 곡은 성공 추천으로 저장하지 않는다.
+        var trackIds = recommendation.tracks().stream()
+                .map(RecommendationAiClient.RecommendedTrack::externalTrackId).toList();
+        if (new java.util.HashSet<>(trackIds).size() != REQUIRED_TRACK_COUNT
+                || trackIds.stream().anyMatch(request.excludeTrackIds()::contains)) {
+            throw new RecommendationAiException();
         }
         return new CreateResult(writer.replace(userId, recommendation.tracks()), true);
     }

@@ -67,6 +67,46 @@ class TodayVoteQuestionServiceTest {
     }
 
     @Test
+    void usesTheNewKstDateImmediatelyAfterMidnightWhenSnapshotIsReady() {
+        LocalDate newDay = TODAY.plusDays(1);
+        service = new TodayVoteQuestionService(userRepository, snapshotStore,
+                assignmentWriter, aiVoteReadRepository, voteQuestionRepository, voteAnswerRepository,
+                Clock.fixed(Instant.parse("2026-10-16T15:00:01Z"), ZoneId.of("Asia/Seoul")));
+        when(snapshotStore.isReady(newDay)).thenReturn(true);
+        when(snapshotStore.findAssignment(newDay, 17L))
+                .thenReturn(Optional.of(new VoteDailyAssignment("재즈", 97L)));
+        VoteQuestion question = mock(VoteQuestion.class);
+        when(question.getVoteQuestionId()).thenReturn(97L);
+        when(question.getVoteDate()).thenReturn(newDay);
+        when(question.getMusicGenre()).thenReturn("재즈");
+        when(voteQuestionRepository.findById(97L)).thenReturn(Optional.of(question));
+        when(voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(97L, 17L))
+                .thenReturn(Optional.empty());
+
+        var response = service.getToday(17L);
+
+        assertThat(response.data().voteQuestionId()).isEqualTo(97L);
+        verify(snapshotStore).isReady(newDay);
+        verify(snapshotStore, never()).isReady(TODAY);
+    }
+
+    @Test
+    void doesNotExposeTomorrowQuestionBeforeKstMidnight() {
+        service = new TodayVoteQuestionService(userRepository, snapshotStore,
+                assignmentWriter, aiVoteReadRepository, voteQuestionRepository, voteAnswerRepository,
+                Clock.fixed(Instant.parse("2026-10-16T14:59:59Z"), ZoneId.of("Asia/Seoul")));
+        when(snapshotStore.isReady(TODAY)).thenReturn(false);
+
+        assertThatThrownBy(() -> service.getToday(17L))
+                .isInstanceOf(VoteDomainException.class)
+                .extracting(exception -> ((VoteDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.VOTE_SNAPSHOT_NOT_READY);
+
+        verify(snapshotStore, never()).findAssignment(TODAY, 17L);
+        verify(snapshotStore, never()).isReady(TODAY.plusDays(1));
+    }
+
+    @Test
     void returnsQuestionAndNullAnswerForExistingDailyAssignment() {
         when(snapshotStore.isReady(TODAY)).thenReturn(true);
         when(snapshotStore.findAssignment(TODAY, 17L))

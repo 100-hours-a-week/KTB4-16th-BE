@@ -24,9 +24,9 @@ class PopularTracksServiceTests {
     void aggregatesTracksAndAssignsRankFromRepositoryOrder() {
         List<Long> placeIds = List.of(10L, 20L);
         PopularTrackAggregateDto first = new PopularTrackAggregateDto(
-                3L, "first", "artist", 4L, LocalDateTime.now());
+                3L, "first", "artist", 4L, LocalDateTime.now(), "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC");
         PopularTrackAggregateDto second = new PopularTrackAggregateDto(
-                8L, "second", "artist", 2L, LocalDateTime.now().minusHours(1));
+                8L, "second", "artist", 2L, LocalDateTime.now().minusHours(1), "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC");
         when(recordRepository.countActiveRecordsAtPlaces(eq(placeIds), any(LocalDateTime.class)))
                 .thenReturn(6L);
         when(recordRepository.findPopularTrackAggregates(eq(placeIds), any(LocalDateTime.class)))

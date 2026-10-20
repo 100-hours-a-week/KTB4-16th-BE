@@ -1,10 +1,12 @@
 package com.ktb4.team16.mulo.notification.outbox;
 
+import com.ktb4.team16.mulo.notification.event.NotificationEventType;
 import java.sql.Connection;
 import java.sql.Savepoint;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import javax.sql.DataSource;
@@ -65,7 +67,14 @@ public class NotificationOutboxProcessor {
         Connection connection = DataSourceUtils.getConnection(dataSource);
         Savepoint savepoint = createSavepoint(connection);
         try {
-            for (NotificationDraft draft : handler.handle(event.get())) {
+            List<NotificationDraft> drafts = handler.handle(event.get());
+            if (event.get().eventType() == NotificationEventType.FRIEND_REQUEST
+                    || event.get().eventType() == NotificationEventType.FRIEND_ACCEPTED) {
+                // 친구 명령과 같이 사용자 → 요청/친구 대상 순서로 잠그고, 두 수신자를 모두 먼저 잠근다.
+                outbox.lockExistingRecipientsInIdOrder(drafts.stream()
+                        .map(NotificationDraft::recipientUserId).toList());
+            }
+            for (NotificationDraft draft : drafts) {
                 outbox.insertNotification(eventId, draft);
             }
             outbox.markCompleted(eventId, LocalDateTime.now(clock));

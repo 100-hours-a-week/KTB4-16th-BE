@@ -18,6 +18,9 @@ import org.springframework.stereotype.Component;
 @Component
 public class NotificationEventPayloadValidator {
 
+    /** 현재 검증기가 처리할 수 있는 알림 이벤트 payload 형식의 버전이다. */
+    private static final int SUPPORTED_PAYLOAD_VERSION = 1;
+
     private final ObjectMapper objectMapper;
 
     /** 프로젝트 Jackson 설정을 사용해 payload JSON을 읽고 쓴다. */
@@ -39,7 +42,8 @@ public class NotificationEventPayloadValidator {
 
     /** 발행 직전에도 수신자와 유형별 필수 값이 유효한지 확인한다. */
     public void validate(NotificationEventType eventType, Payload payload) {
-        if (eventType == null || payload == null || payload.payloadVersion() != 1) {
+        if (eventType == null || payload == null
+                || payload.payloadVersion() != SUPPORTED_PAYLOAD_VERSION) {
             throw new InvalidNotificationEventPayloadException("UNSUPPORTED_PAYLOAD_VERSION");
         }
         validateRecipients(payload.recipientUserIds());

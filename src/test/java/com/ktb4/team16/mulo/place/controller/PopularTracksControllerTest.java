@@ -45,7 +45,7 @@ class PopularTracksControllerTest {
                 .thenReturn(new PopularTracksResponseDto(
                         3L,
                         List.of(new PopularTracksResponseDto.Music(
-                                1, 7L, "title", "artist", 3L))));
+                                1, 7L, "title", "artist", 3L, "https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"))));
 
         mvc.perform(post("/api/places/popular-tracks/search")
                         .contentType(APPLICATION_JSON)
@@ -55,7 +55,8 @@ class PopularTracksControllerTest {
                         .value(PlaceMessage.POPULAR_TRACKS_RETRIEVED.message()))
                 .andExpect(jsonPath("$.data.recordCount").value(3))
                 .andExpect(jsonPath("$.data.music[0].rank").value(1))
-                .andExpect(jsonPath("$.data.music[0].musicTrackId").value(7));
+                .andExpect(jsonPath("$.data.music[0].musicTrackId").value(7))
+                .andExpect(jsonPath("$.data.music[0].externalUrl").value("https://open.spotify.com/track/4uLU6hMCjMI75M1A2tKUQC"));
 
         verify(placeService).getPopularTracks(List.of(10L, 20L));
     }
