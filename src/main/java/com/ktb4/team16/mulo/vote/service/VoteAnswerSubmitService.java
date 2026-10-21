@@ -24,6 +24,7 @@ public class VoteAnswerSubmitService {
     private final UserRepository userRepository;
     private final VoteAnswerRepository voteAnswerRepository;
     private final VoteQuestionRepository voteQuestionRepository;
+    private final VoteAnswerResultService voteAnswerResultService;
 
     @Transactional
     public VoteAnswerSubmitResponse submit(Long userId, Long voteQuestionId,
@@ -54,15 +55,10 @@ public class VoteAnswerSubmitService {
             throw VoteAnswerConstraintViolationTranslator.translate(exception);
         }
 
-        VoteAnswerRepository.VoteAnswerCounts counts = voteAnswerRepository.aggregateForQuestion(
-                voteQuestionId, assignedQuestion.getOptionA());
-        long total = counts.getTotalCount();
-        long optionACount = counts.getOptionACount();
-        int optionAPercent = total == 0 ? 0 : (int) Math.round(optionACount * 100.0 / total);
-        int optionBPercent = total == 0 ? 0 : 100 - optionAPercent;
+        var result = voteAnswerResultService.getResult(assignedQuestion);
 
         return new VoteAnswerSubmitResponse("투표 답변 성공",
                 new VoteAnswerSubmitResponse.Data(answer.getVoteAnswerId(), answerText,
-                        new VoteAnswerSubmitResponse.Result(optionAPercent, optionBPercent)));
+                        result));
     }
 }
