@@ -91,6 +91,9 @@ jobs:
           # DB에 정상 저장된 KST 값을 9시간 밀려서 읽는 문제가 있었다. JVM 기본시간대 자체를
           # 앱이 실제 쓰는 Asia/Seoul로 맞춰서 이 변환 단계의 시간대 불일치를 없앤다.
           JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Seoul
+          CHAT_AUTH_VERIFY_API_KEY=${{ secrets. CHAT_AUTH_VERIFY_API_KEY_DEVELOP }}
+          CHAT_INTERNAL_API_KEY=${{ secrets. CHAT_INTERNAL_API_KEY_DEVELOP }}
+          CHAT_SERVER_BASE_URL=${{ secrets.CHAT_SERVER_BASE_URL_DEVELOP }}
           ENVEOF
 
       # 4. env 파일을 develop VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
