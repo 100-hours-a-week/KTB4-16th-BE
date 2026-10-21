@@ -1,12 +1,10 @@
 package com.ktb4.team16.mulo.match.service;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
-import com.ktb4.team16.mulo.groupchat.config.GroupChatProperties;
 import com.ktb4.team16.mulo.match.client.ChatRoomClient;
 import com.ktb4.team16.mulo.match.client.ChatServerClientException;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.GroupChatJoinRequest;
-import com.ktb4.team16.mulo.match.dto.response.GroupChatAvailabilityResponse;
 import com.ktb4.team16.mulo.match.dto.response.ChatGroupJoinOrCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.GroupChatJoinResponse;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
@@ -26,26 +24,11 @@ public class GroupChatEntryService {
     private static final int MAX_ATTEMPTS = 3;
     private static final long RETRY_DELAY_MILLIS = 100L;
 
-    private final GroupChatProperties properties;
     private final GroupChatEntryRequestFactory requestFactory;
     private final ChatRoomClient chatRoomClient;
     private final Clock clock;
 
-    public GroupChatAvailabilityResponse getAvailability() {
-        boolean available = properties.isAvailableOn(LocalDate.now(clock));
-        return new GroupChatAvailabilityResponse("채팅 방식 조회 성공",
-                new GroupChatAvailabilityResponse.Data(available));
-    }
-
     public GroupChatJoinResponse join(Long userId, GroupChatJoinRequest request) {
-        LocalDate today = LocalDate.now(clock);
-        if (!properties.isAvailableOn(today)) {
-            ErrorCode errorCode = properties.enabled()
-                    ? ErrorCode.GROUP_CHAT_NOT_STARTED
-                    : ErrorCode.GROUP_CHAT_FEATURE_DISABLED;
-            throw new MatchDomainException(errorCode);
-        }
-
         ChatGroupJoinOrCreateRequest internalRequest = requestFactory.prepare(userId, request.voteAnswerId());
         if (!LocalDate.now(clock).equals(internalRequest.groupDate())) {
             throw new MatchDomainException(ErrorCode.MATCH_VOTE_ANSWER_NOT_TODAY);

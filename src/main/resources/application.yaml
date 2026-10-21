@@ -84,11 +84,6 @@ mulo:
     url: ${MULO_AI_DB_URL:}
     username: ${MULO_AI_DB_USERNAME:}
     password: ${MULO_AI_DB_PASSWORD:}
-  group-chat:
-    # 기능 플래그가 명시적으로 켜지고 KST 시작일이 지난 경우에만 그룹 입장을 허용한다.
-    enabled: ${MULO_GROUP_CHAT_ENABLED:false}
-    # 운영 기본값. 개발 서버 배포 설정은 2026-10-21로 주입한다.
-    start-date: ${MULO_GROUP_CHAT_START_DATE:2026-10-22}
   jwt:
     secret: ${JWT_SECRET}
     access-token-ttl: PT1H

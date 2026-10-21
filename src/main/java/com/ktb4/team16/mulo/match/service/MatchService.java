@@ -1,7 +1,6 @@
 package com.ktb4.team16.mulo.match.service;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
-import com.ktb4.team16.mulo.groupchat.config.GroupChatProperties;
 import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
 import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
@@ -40,7 +39,6 @@ public class MatchService {
     private final VoteQuestionRepository voteQuestionRepository;
     private final Clock clock;
     private final ApplicationEventPublisher eventPublisher;
-    private final GroupChatProperties groupChatProperties;
 
     @Autowired
     public MatchService(
@@ -49,8 +47,7 @@ public class MatchService {
             VoteAnswerRepository voteAnswerRepository,
             VoteQuestionRepository voteQuestionRepository,
             Clock clock,
-            ApplicationEventPublisher eventPublisher,
-            GroupChatProperties groupChatProperties
+            ApplicationEventPublisher eventPublisher
     ) {
         this.matchRepository = matchRepository;
         this.matchRequestRepository = matchRequestRepository;
@@ -58,14 +55,6 @@ public class MatchService {
         this.voteQuestionRepository = voteQuestionRepository;
         this.clock = clock;
         this.eventPublisher = eventPublisher;
-        this.groupChatProperties = groupChatProperties;
-    }
-
-    MatchService(MatchRepository matchRepository, MatchRequestRepository matchRequestRepository,
-            VoteAnswerRepository voteAnswerRepository, VoteQuestionRepository voteQuestionRepository,
-            Clock clock, ApplicationEventPublisher eventPublisher) {
-        this(matchRepository, matchRequestRepository, voteAnswerRepository, voteQuestionRepository, clock,
-                eventPublisher, new GroupChatProperties(false, LocalDate.of(2026, 10, 22)));
     }
 
     MatchService(
@@ -110,7 +99,7 @@ public class MatchService {
             Long userId,
             MatchRequestCreateRequest request
     ) {
-        ensureOneToOneMatchingNotReplaced();
+        rejectNewOneToOneMatchRequest();
         if (!LocalTime.now(clock).isBefore(LocalTime.of(23, 0))) {
             throw new MatchDomainException(ErrorCode.MATCH_REQUEST_CLOSED);
         }
@@ -129,7 +118,6 @@ public class MatchService {
         VoteQuestion voteQuestion = voteQuestionRepository.findByVoteQuestionIdForUpdate(
                         voteAnswer.getVoteQuestion().getVoteQuestionId())
                 .orElseThrow(() -> new IllegalStateException("투표 답변에 연결된 질문이 없습니다."));
-        ensureOneToOneMatchingNotReplaced();
         if (!LocalTime.now(clock).isBefore(LocalTime.of(23, 0))) {
             throw new MatchDomainException(ErrorCode.MATCH_REQUEST_CLOSED);
         }
@@ -167,10 +155,8 @@ public class MatchService {
 
     }
 
-    private void ensureOneToOneMatchingNotReplaced() {
-        if (groupChatProperties.isAvailableOn(LocalDate.now(clock))) {
-            throw new MatchDomainException(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
-        }
+    private void rejectNewOneToOneMatchRequest() {
+        throw new MatchDomainException(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
     }
 
     private ChatRoomCreateRequest createChatRoomRequest(
