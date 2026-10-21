@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.when;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.csrf;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
+import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 
 import com.google.cloud.storage.Storage;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
@@ -104,6 +105,43 @@ class VoteAnswerSubmitMysqlIntegrationTest {
     }
 
     @Test
+    void getBeforeVotingReturnsQuestionWithoutResultPercentages() throws Exception {
+        long userId = prepareAssignedUser("재즈");
+
+        MvcResult result = getToday(userId);
+
+        assertThat(result.getResponse().getStatus()).isEqualTo(200);
+        assertThat(result.getResponse().getContentAsString())
+                .contains("\"voteQuestionId\"", "\"optionA\":\"선택 A\"",
+                        "\"optionB\":\"선택 B\"", "\"myAnswer\":null",
+                        "\"voteAnswerId\":null", "\"result\":null")
+                .doesNotContain("optionAPercent", "optionBPercent");
+    }
+
+    @Test
+    void getAfterPostReturnsTheSameQuestionScopedResult() throws Exception {
+        long userId = prepareAssignedUser("재즈");
+        long questionId = questionIds.getFirst();
+        seedAnswers(questionId, List.of("선택 A", "선택 A", "선택 B", "선택 B"));
+
+        long otherQuestionId = insertQuestion("POP");
+        questionIds.add(otherQuestionId);
+        seedAnswers(otherQuestionId, List.of("선택 A", "선택 A", "선택 A", "선택 A"));
+
+        MvcResult postResult = submit(userId, questionId, "A");
+        MvcResult getResult = getToday(userId);
+
+        assertThat(postResult.getResponse().getStatus()).isEqualTo(201);
+        assertThat(postResult.getResponse().getContentAsString())
+                .contains("\"optionAPercent\":60", "\"optionBPercent\":40");
+        assertThat(getResult.getResponse().getStatus()).isEqualTo(200);
+        assertThat(getResult.getResponse().getContentAsString())
+                .contains("\"voteQuestionId\":" + questionId,
+                        "\"myAnswer\":\"선택 A\"", "\"voteAnswerId\"",
+                        "\"optionAPercent\":60", "\"optionBPercent\":40");
+    }
+
+    @Test
     void simultaneousDuplicateSubmissionsCreateOnlyOneAnswerAndReturnConflictForOther() throws Exception {
         long userId = prepareAssignedUser("인디음악");
         CountDownLatch ready = new CountDownLatch(2);
@@ -181,6 +219,21 @@ class VoteAnswerSubmitMysqlIntegrationTest {
                         .contentType("application/json")
                         .content("{\"selectedOption\":\"" + option + "\"}"))
                 .andReturn();
+    }
+
+    private MvcResult getToday(long userId) throws Exception {
+        return mockMvc.perform(get("/api/vote-questions/today")
+                        .header("Authorization", bearer(userId)))
+                .andReturn();
+    }
+
+    private void seedAnswers(long questionId, List<String> answers) {
+        for (String answer : answers) {
+            long userId = insertUser();
+            userIds.add(userId);
+            jdbcTemplate.update("INSERT INTO vote_answers (user_id, vote_question_id, selected_option) "
+                    + "VALUES (?, ?, ?)", userId, questionId, answer);
+        }
     }
 
     private MvcResult submitAfterGate(long userId, CountDownLatch ready, CountDownLatch start) throws Exception {

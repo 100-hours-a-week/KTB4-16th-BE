@@ -13,6 +13,7 @@ import com.ktb4.team16.mulo.match.repository.VoteQuestionRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.vote.ai.AiVoteReadRepository;
+import com.ktb4.team16.mulo.vote.dto.response.VoteAnswerSubmitResponse;
 import com.ktb4.team16.mulo.vote.entity.VoteAnswer;
 import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
 import com.ktb4.team16.mulo.vote.exception.VoteDomainException;
@@ -41,6 +42,7 @@ class TodayVoteQuestionServiceTest {
     @Mock AiVoteReadRepository aiVoteReadRepository;
     @Mock VoteQuestionRepository voteQuestionRepository;
     @Mock VoteAnswerRepository voteAnswerRepository;
+    @Mock VoteAnswerResultService voteAnswerResultService;
 
     private TodayVoteQuestionService service;
     private User user;
@@ -49,6 +51,7 @@ class TodayVoteQuestionServiceTest {
     void setUp() {
         service = new TodayVoteQuestionService(userRepository, snapshotStore,
                 assignmentWriter, aiVoteReadRepository, voteQuestionRepository, voteAnswerRepository,
+                voteAnswerResultService,
                 Clock.fixed(Instant.parse("2026-10-15T15:00:00Z"), ZoneId.of("Asia/Seoul")));
         user = User.signup("vote@example.com", "hash", "투표사용자");
         ReflectionTestUtils.setField(user, "userId", 17L);
@@ -71,6 +74,7 @@ class TodayVoteQuestionServiceTest {
         LocalDate newDay = TODAY.plusDays(1);
         service = new TodayVoteQuestionService(userRepository, snapshotStore,
                 assignmentWriter, aiVoteReadRepository, voteQuestionRepository, voteAnswerRepository,
+                voteAnswerResultService,
                 Clock.fixed(Instant.parse("2026-10-16T15:00:01Z"), ZoneId.of("Asia/Seoul")));
         when(snapshotStore.isReady(newDay)).thenReturn(true);
         when(snapshotStore.findAssignment(newDay, 17L))
@@ -94,6 +98,7 @@ class TodayVoteQuestionServiceTest {
     void doesNotExposeTomorrowQuestionBeforeKstMidnight() {
         service = new TodayVoteQuestionService(userRepository, snapshotStore,
                 assignmentWriter, aiVoteReadRepository, voteQuestionRepository, voteAnswerRepository,
+                voteAnswerResultService,
                 Clock.fixed(Instant.parse("2026-10-16T14:59:59Z"), ZoneId.of("Asia/Seoul")));
         when(snapshotStore.isReady(TODAY)).thenReturn(false);
 
@@ -122,6 +127,8 @@ class TodayVoteQuestionServiceTest {
         assertThat(response.data().question()).isEqualTo("오늘 질문");
         assertThat(response.data().myAnswer()).isNull();
         assertThat(response.data().voteAnswerId()).isNull();
+        assertThat(response.data().result()).isNull();
+        verify(voteAnswerResultService, never()).getResult(question);
         verify(aiVoteReadRepository, never()).findUserGenre(17L);
     }
 
@@ -135,6 +142,8 @@ class TodayVoteQuestionServiceTest {
         VoteAnswer answer = mock(VoteAnswer.class);
         when(answer.getSelectedOption()).thenReturn("선택 A");
         when(answer.getVoteAnswerId()).thenReturn(101L);
+        when(voteAnswerResultService.getResult(question)).thenReturn(
+                new VoteAnswerSubmitResponse.Result(60, 40));
         when(voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(83L, 17L))
                 .thenReturn(Optional.of(answer));
 
@@ -142,6 +151,8 @@ class TodayVoteQuestionServiceTest {
 
         assertThat(response.data().myAnswer()).isEqualTo("선택 A");
         assertThat(response.data().voteAnswerId()).isEqualTo(101L);
+        assertThat(response.data().result()).isEqualTo(new VoteAnswerSubmitResponse.Result(60, 40));
+        verify(voteAnswerResultService).getResult(question);
     }
 
     @Test

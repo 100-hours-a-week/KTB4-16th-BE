@@ -32,17 +32,19 @@ public class TodayVoteQuestionService {
     private final AiVoteReadRepository aiVoteReadRepository;
     private final VoteQuestionRepository voteQuestionRepository;
     private final VoteAnswerRepository voteAnswerRepository;
+    private final VoteAnswerResultService voteAnswerResultService;
     private final Clock clock;
 
     public TodayVoteQuestionResponse getToday(Long userId) {
         VoteQuestion question = resolveTodayQuestion(userId);
         Optional<VoteAnswer> answer = voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(
                 question.getVoteQuestionId(), userId);
+        var result = answer.map(ignored -> voteAnswerResultService.getResult(question)).orElse(null);
         return new TodayVoteQuestionResponse("투표 조회 성공",
                 new TodayVoteQuestionResponse.Data(question.getVoteQuestionId(),
                         question.getQuestionText(), question.getOptionA(), question.getOptionB(),
                         answer.map(VoteAnswer::getSelectedOption).orElse(null),
-                        answer.map(VoteAnswer::getVoteAnswerId).orElse(null)));
+                        answer.map(VoteAnswer::getVoteAnswerId).orElse(null), result));
     }
 
     public VoteQuestion resolveTodayQuestion(Long userId) {

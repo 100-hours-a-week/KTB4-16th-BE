@@ -152,6 +152,19 @@ class VoteMatchChatRoomMysqlIntegrationTest {
         assertThat(matchedA.path("data").path("chatRoomId").asLong()).isEqualTo(78123L);
         assertThat(matchedB.path("data").path("chatRoomId").asLong()).isEqualTo(78123L);
 
+        JsonNode refreshedVoteA = getToday(fixture.userA());
+        JsonNode refreshedVoteB = getToday(fixture.userB());
+        assertThat(refreshedVoteA.path("data").path("myAnswer").asText()).isEqualTo("선택 A");
+        assertThat(refreshedVoteA.path("data").path("result").path("optionAPercent").asInt())
+                .isEqualTo(50);
+        assertThat(refreshedVoteA.path("data").path("result").path("optionBPercent").asInt())
+                .isEqualTo(50);
+        assertThat(refreshedVoteB.path("data").path("myAnswer").asText()).isEqualTo("선택 B");
+        assertThat(refreshedVoteB.path("data").path("result").path("optionAPercent").asInt())
+                .isEqualTo(50);
+        assertThat(refreshedVoteB.path("data").path("result").path("optionBPercent").asInt())
+                .isEqualTo(50);
+
         assertThat(ChatServerStub.requests).hasSize(1);
         ObservedRequest observed = ChatServerStub.requests.getFirst();
         JsonNode chatRequest = objectMapper.readTree(observed.body());
