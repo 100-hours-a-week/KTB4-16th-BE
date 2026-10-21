@@ -5,17 +5,14 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
-import com.ktb4.team16.mulo.groupchat.config.GroupChatProperties;
 import com.ktb4.team16.mulo.match.client.ChatRoomClient;
 import com.ktb4.team16.mulo.match.client.ChatServerClientException;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.GroupChatJoinRequest;
 import com.ktb4.team16.mulo.match.dto.response.ChatGroupJoinOrCreateResponse;
-import com.ktb4.team16.mulo.match.dto.response.GroupChatAvailabilityResponse;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
 import java.time.Clock;
 import java.time.Instant;
@@ -32,60 +29,8 @@ class GroupChatEntryServiceTest {
     private final ChatRoomClient chatRoomClient = mock(ChatRoomClient.class);
 
     @Test
-    void availabilityIsFalseWhenFeatureFlagIsOff() {
-        GroupChatEntryService service = service(false, LocalDate.of(2026, 10, 21),
-                "2026-10-21T01:00:00+09:00");
-
-        assertAvailability(service, false);
-    }
-
-    @Test
-    void availabilityIsFalseBeforeConfiguredKstTransitionDate() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 22),
-                "2026-10-21T23:59:59+09:00");
-
-        assertAvailability(service, false);
-    }
-
-    @Test
-    void availabilityIsTrueAtKstTransitionMidnight() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-20T15:00:00Z");
-
-        assertAvailability(service, true);
-    }
-
-    @Test
-    void availabilityIsTrueAfterConfiguredKstTransitionDate() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-22T01:00:00+09:00");
-
-        assertAvailability(service, true);
-    }
-
-    @Test
-    void rejectsWhenFeatureFlagIsOffEvenAfterTransitionDate() {
-        GroupChatEntryService service = service(false, LocalDate.of(2026, 10, 21),
-                "2026-10-21T01:00:00+09:00");
-
-        assertError(service, ErrorCode.GROUP_CHAT_FEATURE_DISABLED);
-        verify(requestFactory, never()).prepare(34L, 56L);
-        verify(chatRoomClient, never()).joinOrCreateGroup(INTERNAL_REQUEST);
-    }
-
-    @Test
-    void rejectsBeforeConfiguredTransitionDate() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 22),
-                "2026-10-21T23:59:59+09:00");
-
-        assertError(service, ErrorCode.GROUP_CHAT_NOT_STARTED);
-        verify(requestFactory, never()).prepare(34L, 56L);
-    }
-
-    @Test
     void acceptsAtKstTransitionDateAndReturnsChatServerAssignment() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-20T15:00:00Z");
+        GroupChatEntryService service = service("2026-10-20T15:00:00Z");
         when(requestFactory.prepare(34L, 56L)).thenReturn(INTERNAL_REQUEST);
         when(chatRoomClient.joinOrCreateGroup(INTERNAL_REQUEST)).thenReturn(response(true));
 
@@ -97,12 +42,11 @@ class GroupChatEntryServiceTest {
     }
 
     @Test
-    void acceptsAfterKstTransitionDateWhenFeatureFlagIsEnabled() {
+    void acceptsGroupEntryWithoutFeatureFlagOrStartDateConfiguration() {
         LocalDate groupDate = LocalDate.of(2026, 10, 22);
         ChatGroupJoinOrCreateRequest request = new ChatGroupJoinOrCreateRequest(
                 groupDate, 12L, 34L, "nickname", "A");
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-22T01:00:00+09:00");
+        GroupChatEntryService service = service("2026-10-21T15:00:00Z");
         when(requestFactory.prepare(34L, 56L)).thenReturn(request);
         when(chatRoomClient.joinOrCreateGroup(request)).thenReturn(response(true));
 
@@ -114,8 +58,7 @@ class GroupChatEntryServiceTest {
 
     @Test
     void retriesSameIdempotentRequestAfterTransientFailure() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-21T01:00:00+09:00");
+        GroupChatEntryService service = service("2026-10-21T01:00:00+09:00");
         when(requestFactory.prepare(34L, 56L)).thenReturn(INTERNAL_REQUEST);
         when(chatRoomClient.joinOrCreateGroup(INTERNAL_REQUEST))
                 .thenThrow(new ChatServerClientException(
@@ -130,8 +73,7 @@ class GroupChatEntryServiceTest {
 
     @Test
     void doesNotSendPreviousDaysAssignmentIfKstMidnightPassedDuringPreparation() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-21T15:00:00Z");
+        GroupChatEntryService service = service("2026-10-21T15:00:00Z");
         when(requestFactory.prepare(34L, 56L)).thenReturn(INTERNAL_REQUEST);
 
         assertError(service, ErrorCode.MATCH_VOTE_ANSWER_NOT_TODAY);
@@ -140,8 +82,7 @@ class GroupChatEntryServiceTest {
 
     @Test
     void doesNotRetryAfterExplicitLeaveAndReturnsReentryConflict() {
-        GroupChatEntryService service = service(true, LocalDate.of(2026, 10, 21),
-                "2026-10-21T01:00:00+09:00");
+        GroupChatEntryService service = service("2026-10-21T01:00:00+09:00");
         when(requestFactory.prepare(34L, 56L)).thenReturn(INTERNAL_REQUEST);
         when(chatRoomClient.joinOrCreateGroup(INTERNAL_REQUEST)).thenThrow(new ChatServerClientException(
                 ChatServerClientException.FailureType.GROUP_REENTRY_FORBIDDEN, 409));
@@ -150,10 +91,9 @@ class GroupChatEntryServiceTest {
         verify(chatRoomClient).joinOrCreateGroup(INTERNAL_REQUEST);
     }
 
-    private GroupChatEntryService service(boolean enabled, LocalDate startDate, String now) {
+    private GroupChatEntryService service(String now) {
         when(requestFactory.prepare(34L, 56L)).thenReturn(INTERNAL_REQUEST);
-        return new GroupChatEntryService(new GroupChatProperties(enabled, startDate), requestFactory,
-                chatRoomClient, Clock.fixed(Instant.parse(now), KST));
+        return new GroupChatEntryService(requestFactory, chatRoomClient, Clock.fixed(Instant.parse(now), KST));
     }
 
     private ChatGroupJoinOrCreateResponse response(boolean newlyAssigned) {
@@ -168,11 +108,4 @@ class GroupChatEntryServiceTest {
                 .isEqualTo(expected);
     }
 
-    private void assertAvailability(GroupChatEntryService service, boolean expected) {
-        GroupChatAvailabilityResponse response = service.getAvailability();
-
-        assertThat(response.message()).isEqualTo("채팅 방식 조회 성공");
-        assertThat(response.data().available()).isEqualTo(expected);
-        verifyNoInteractions(requestFactory, chatRoomClient);
-    }
 }

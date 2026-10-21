@@ -13,7 +13,7 @@ public enum ErrorCode {
     MATCH_VOTE_ANSWER_NOT_OWNED(HttpStatus.FORBIDDEN, "해당 투표 답변에 접근할 권한이 없습니다."),
     MATCH_VOTE_ANSWER_NOT_TODAY(HttpStatus.BAD_REQUEST, "오늘의 투표 답변이 아닙니다."),
     MATCH_REQUEST_CLOSED(HttpStatus.CONFLICT, "오늘 매칭 요청 가능 시간이 종료되었습니다."),
-    ONE_TO_ONE_MATCHING_REPLACED(HttpStatus.CONFLICT, "그룹 채팅 전환 후에는 1:1 매칭 요청을 생성할 수 없습니다."),
+    ONE_TO_ONE_MATCHING_REPLACED(HttpStatus.CONFLICT, "신규 채팅 참여는 그룹 채팅을 이용해주세요."),
     GROUP_CHAT_NOT_STARTED(HttpStatus.CONFLICT, "그룹 채팅 시작일이 아닙니다."),
     GROUP_CHAT_FEATURE_DISABLED(HttpStatus.SERVICE_UNAVAILABLE, "그룹 채팅을 사용할 수 없습니다."),
     GROUP_CHAT_VOTE_REQUIRED(HttpStatus.CONFLICT, "오늘의 취향 투표를 완료해야 그룹 채팅에 참여할 수 있습니다."),
