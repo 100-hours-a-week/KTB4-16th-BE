@@ -12,9 +12,11 @@ import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
 import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest.Participant;
+import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import java.io.IOException;
 import java.net.URI;
 import java.time.Duration;
+import java.time.LocalDate;
 import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
@@ -27,6 +29,7 @@ import org.springframework.web.client.RestClient;
 
 class ChatRoomClientTest {
     private static final String ENDPOINT = "http://chat.test/internal/chat-rooms";
+    private static final String GROUP_ENDPOINT = "http://chat.test/internal/chat-rooms/group/join-or-create";
     private static final ChatRoomCreateRequest REQUEST = new ChatRoomCreateRequest(50L,
             OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
                     new Participant(17L, "jettie"), new Participant(28L, "lulu")));
@@ -51,6 +54,72 @@ class ChatRoomClientTest {
 
         assertThat(fixture.client().createChatRoom(REQUEST).chatRoomId()).isEqualTo(30L);
 
+        fixture.server().verify();
+    }
+
+    @ParameterizedTest
+    @org.junit.jupiter.params.provider.EnumSource(value = HttpStatus.class, names = {"CREATED", "OK"})
+    void sendsAuthenticatedGroupJoinRequestAndAcceptsNewOrExistingAssignment(HttpStatus status) {
+        Fixture fixture = fixture("test-api-key");
+        ChatGroupJoinOrCreateRequest request = new ChatGroupJoinOrCreateRequest(
+                LocalDate.of(2026, 10, 21), 41L, 17L, "jettie", "B");
+        fixture.server().expect(requestTo(GROUP_ENDPOINT))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Internal-Api-Key", "test-api-key"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("""
+                        {"groupDate":"2026-10-21","voteQuestionId":41,"userId":17,
+                         "nickname":"jettie","voteChoice":"B"}
+                        """))
+                .andRespond(withStatus(status)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"chatRoomId":30,"roomSequence":2,"newlyAssigned":true,
+                                 "admittedParticipantCount":3,"activeParticipantCount":3,
+                                 "expiresAt":"2026-10-22T00:00:00+09:00"}
+                                """));
+
+        var response = fixture.client().joinOrCreateGroup(request);
+
+        assertThat(response.chatRoomId()).isEqualTo(30L);
+        assertThat(response.roomSequence()).isEqualTo(2);
+        assertThat(response.expiresAt()).isEqualTo(java.time.OffsetDateTime.parse("2026-10-22T00:00:00+09:00"));
+        fixture.server().verify();
+    }
+
+    @Test
+    void mapsExplicitlyLeftParticipantToNonRetryableReentryFailure() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(GROUP_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.FORBIDDEN)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"code\":\"CHAT_REENTRY_FORBIDDEN\"}"));
+
+        assertThatThrownBy(() -> fixture.client().joinOrCreateGroup(
+                new ChatGroupJoinOrCreateRequest(LocalDate.of(2026, 10, 21), 41L, 17L, "jettie", "A")))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(FailureType.GROUP_REENTRY_FORBIDDEN);
+                    assertThat(exception.failureType().isRetryable()).isFalse();
+                });
+        fixture.server().verify();
+    }
+
+    @Test
+    void rejectsGroupResponseOutsideCapacityContract() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(GROUP_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.CREATED)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("""
+                                {"chatRoomId":30,"roomSequence":2,"newlyAssigned":true,
+                                 "admittedParticipantCount":31,"activeParticipantCount":31,
+                                 "expiresAt":"2026-10-22T00:00:00+09:00"}
+                                """));
+
+        assertThatThrownBy(() -> fixture.client().joinOrCreateGroup(
+                new ChatGroupJoinOrCreateRequest(LocalDate.of(2026, 10, 21), 41L, 17L, "jettie", "A")))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.INVALID_RESPONSE));
         fixture.server().verify();
     }
 

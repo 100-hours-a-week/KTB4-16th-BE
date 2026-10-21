@@ -11,6 +11,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.global.error.ErrorCode;
+import com.ktb4.team16.mulo.groupchat.config.GroupChatProperties;
 import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
 import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.entity.Match;
@@ -209,6 +210,73 @@ class MatchServiceTest {
 
         verifyNoInteractions(matchRepository, matchRequestRepository,
                 voteAnswerRepository, voteQuestionRepository);
+    }
+
+    @Test
+    void rejectsNewOneToOneRequestsOnConfiguredKstTransitionDate() {
+        Clock transitionClock = Clock.fixed(
+                LocalDateTime.of(LocalDate.of(2026, 10, 21), LocalTime.MIDNIGHT).atZone(KST).toInstant(), KST);
+        matchService = new MatchService(matchRepository, matchRequestRepository, voteAnswerRepository,
+                voteQuestionRepository, transitionClock, event -> { },
+                new GroupChatProperties(true, LocalDate.of(2026, 10, 21)));
+
+        assertThatThrownBy(() -> matchService.createMatchRequest(
+                11L, new MatchRequestCreateRequest(101L)))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
+        verifyNoInteractions(matchRepository, matchRequestRepository,
+                voteAnswerRepository, voteQuestionRepository);
+    }
+
+    @Test
+    void keepsOneToOneRequestsAvailableOnDayBeforeConfiguredTransition() {
+        LocalDate previousDay = LocalDate.of(2026, 10, 20);
+        Clock previousDayClock = Clock.fixed(
+                LocalDateTime.of(previousDay, LocalTime.NOON).atZone(KST).toInstant(), KST);
+        stubWaitingRequestFor(previousDay);
+        matchService = new MatchService(matchRepository, matchRequestRepository, voteAnswerRepository,
+                voteQuestionRepository, previousDayClock, event -> { },
+                new GroupChatProperties(true, LocalDate.of(2026, 10, 21)));
+
+        var response = matchService.createMatchRequest(11L, new MatchRequestCreateRequest(101L));
+
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.WAITING);
+        verify(matchRequestRepository).saveAndFlush(any(MatchRequest.class));
+    }
+
+    @Test
+    void rejectsNewOneToOneRequestsAfterConfiguredKstTransitionDate() {
+        LocalDate afterTransition = LocalDate.of(2026, 10, 22);
+        Clock afterTransitionClock = Clock.fixed(
+                LocalDateTime.of(afterTransition, LocalTime.MIDNIGHT).atZone(KST).toInstant(), KST);
+        matchService = new MatchService(matchRepository, matchRequestRepository, voteAnswerRepository,
+                voteQuestionRepository, afterTransitionClock, event -> { },
+                new GroupChatProperties(true, LocalDate.of(2026, 10, 21)));
+
+        assertThatThrownBy(() -> matchService.createMatchRequest(
+                11L, new MatchRequestCreateRequest(101L)))
+                .isInstanceOf(MatchDomainException.class)
+                .extracting(exception -> ((MatchDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
+        verifyNoInteractions(matchRepository, matchRequestRepository,
+                voteAnswerRepository, voteQuestionRepository);
+    }
+
+    @Test
+    void allowsNewOneToOneRequestsAfterTransitionWhenGroupChatFeatureIsDisabled() {
+        LocalDate afterTransition = LocalDate.of(2026, 10, 22);
+        Clock afterTransitionClock = Clock.fixed(
+                LocalDateTime.of(afterTransition, LocalTime.NOON).atZone(KST).toInstant(), KST);
+        stubWaitingRequestFor(afterTransition);
+        matchService = new MatchService(matchRepository, matchRequestRepository, voteAnswerRepository,
+                voteQuestionRepository, afterTransitionClock, event -> { },
+                new GroupChatProperties(false, LocalDate.of(2026, 10, 21)));
+
+        var response = matchService.createMatchRequest(11L, new MatchRequestCreateRequest(101L));
+
+        assertThat(response.data().status()).isEqualTo(MatchRequestStatus.WAITING);
+        verify(matchRequestRepository).saveAndFlush(any(MatchRequest.class));
     }
 
     @Test
