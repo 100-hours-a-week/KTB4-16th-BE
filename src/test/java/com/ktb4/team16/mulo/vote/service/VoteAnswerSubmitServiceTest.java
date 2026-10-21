@@ -14,6 +14,7 @@ import com.ktb4.team16.mulo.match.repository.VoteQuestionRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.vote.dto.request.VoteAnswerSubmitRequest;
+import com.ktb4.team16.mulo.vote.dto.response.VoteAnswerSubmitResponse;
 import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
 import com.ktb4.team16.mulo.vote.exception.VoteDomainException;
 import jakarta.validation.Validation;
@@ -33,6 +34,7 @@ class VoteAnswerSubmitServiceTest {
     @Mock UserRepository userRepository;
     @Mock VoteAnswerRepository voteAnswerRepository;
     @Mock VoteQuestionRepository voteQuestionRepository;
+    @Mock VoteAnswerResultService voteAnswerResultService;
     @Mock User user;
     @Mock VoteQuestion question;
 
@@ -41,7 +43,7 @@ class VoteAnswerSubmitServiceTest {
     @BeforeEach
     void setUp() {
         service = new VoteAnswerSubmitService(todayVoteQuestionService, userRepository,
-                voteAnswerRepository, voteQuestionRepository);
+                voteAnswerRepository, voteQuestionRepository, voteAnswerResultService);
         lenient().when(todayVoteQuestionService.resolveTodayQuestion(17L)).thenReturn(question);
         lenient().when(question.getVoteQuestionId()).thenReturn(82L);
         lenient().when(question.getOptionA()).thenReturn("선택 A");
@@ -59,8 +61,8 @@ class VoteAnswerSubmitServiceTest {
             ReflectionTestUtils.setField(answer, "voteAnswerId", 43L);
             return answer;
         });
-        VoteAnswerRepository.VoteAnswerCounts counts = counts(5L, 3L);
-        when(voteAnswerRepository.aggregateForQuestion(82L, "선택 A")).thenReturn(counts);
+        when(voteAnswerResultService.getResult(question)).thenReturn(
+                new VoteAnswerSubmitResponse.Result(60, 40));
 
         var response = service.submit(17L, 82L, new VoteAnswerSubmitRequest("A"));
 
@@ -78,8 +80,8 @@ class VoteAnswerSubmitServiceTest {
             ReflectionTestUtils.setField(answer, "voteAnswerId", 44L);
             return answer;
         });
-        VoteAnswerRepository.VoteAnswerCounts counts = counts(4L, 1L);
-        when(voteAnswerRepository.aggregateForQuestion(82L, "선택 A")).thenReturn(counts);
+        when(voteAnswerResultService.getResult(question)).thenReturn(
+                new VoteAnswerSubmitResponse.Result(25, 75));
 
         var response = service.submit(17L, 82L, new VoteAnswerSubmitRequest("B"));
 
@@ -95,8 +97,8 @@ class VoteAnswerSubmitServiceTest {
             ReflectionTestUtils.setField(answer, "voteAnswerId", 45L);
             return answer;
         });
-        VoteAnswerRepository.VoteAnswerCounts counts = counts(3L, 2L);
-        when(voteAnswerRepository.aggregateForQuestion(82L, "선택 A")).thenReturn(counts);
+        when(voteAnswerResultService.getResult(question)).thenReturn(
+                new VoteAnswerSubmitResponse.Result(67, 33));
 
         var response = service.submit(17L, 82L, new VoteAnswerSubmitRequest("A"));
 
@@ -173,11 +175,4 @@ class VoteAnswerSubmitServiceTest {
         }
     }
 
-    private VoteAnswerRepository.VoteAnswerCounts counts(long total, long optionA) {
-        VoteAnswerRepository.VoteAnswerCounts counts = org.mockito.Mockito.mock(
-                VoteAnswerRepository.VoteAnswerCounts.class);
-        when(counts.getTotalCount()).thenReturn(total);
-        when(counts.getOptionACount()).thenReturn(optionA);
-        return counts;
-    }
 }

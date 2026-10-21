@@ -8,6 +8,7 @@ public record TodayVoteQuestionResponse(String message, Data data) {
             String optionA,
             String optionB,
             String myAnswer,
-            Long voteAnswerId
+            Long voteAnswerId,
+            VoteAnswerSubmitResponse.Result result
     ) { }
 }
