@@ -15,7 +15,6 @@ import com.ktb4.team16.mulo.record.dto.response.RecordDetailData;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionGroupResponse;
 import com.ktb4.team16.mulo.record.dto.response.RecordRegionRecordsData;
 import com.ktb4.team16.mulo.record.entity.Record;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.exception.InvalidRecordIdException;
 import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
@@ -109,27 +108,13 @@ public class RecordService {
     }
 
     @Transactional
-    public RecordEmbeddingSnapshot updateRecordComment(
+    public void updateRecordComment(
             Long userId,
             Long recordId,
             String comment
     ) {
         Record record = findActiveRecordForOwner(userId, recordId);
         record.updateComment(comment, LocalDateTime.now(clock));
-        RecordPhoto recordPhoto = recordPhotoRepository.findByRecord_RecordId(record.getRecordId())
-                .orElseThrow(IllegalStateException::new);
-        MusicTrack musicTrack = record.getMusicTrack();
-
-        return new RecordEmbeddingSnapshot(
-                record.getRecordId(),
-                record.getUser().getUserId(),
-                recordPhoto.getImageUrl(),
-                new RecordEmbeddingSnapshot.Track(
-                        musicTrack.getTitle(),
-                        musicTrack.getArtistName(),
-                        musicTrack.getExternalTrackId()),
-                record.getComment(),
-                record.getCreatedAt());
     }
 
     @Transactional
@@ -286,7 +271,7 @@ public class RecordService {
 
 
     @Transactional
-    public RecordEmbeddingSnapshot createRecord(
+    public Long createRecord(
             Long userId,
             RecordCreateRequest request,
             KakaoRegionClient.LegalRegion preparedRegion,
@@ -370,15 +355,6 @@ public class RecordService {
         recordDraftRepository.flush();
         uploadService.deleteMetadata(upload);
 
-        return new RecordEmbeddingSnapshot(
-                savedRecord.getRecordId(),
-                user.getUserId(),
-                recordPhoto.getImageUrl(),
-                new RecordEmbeddingSnapshot.Track(
-                        musicTrack.getTitle(),
-                        musicTrack.getArtistName(),
-                        musicTrack.getExternalTrackId()),
-                savedRecord.getComment(),
-                savedRecord.getCreatedAt());
+        return savedRecord.getRecordId();
     }
 }

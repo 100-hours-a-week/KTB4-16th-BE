@@ -4,7 +4,6 @@ import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.Mockito.atLeastOnce;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -13,8 +12,6 @@ import static org.mockito.Mockito.when;
 import com.google.cloud.storage.Storage;
 import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSubmitter;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
 import com.ktb4.team16.mulo.user.entity.User;
@@ -72,7 +69,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
     @MockitoBean private Clock clock;
     @MockitoBean private KakaoRegionClient kakaoRegionClient;
     @MockitoBean private KmaWeatherClient kmaWeatherClient;
-    @MockitoBean private RecordEmbeddingSubmitter embeddingSubmitter;
     @MockitoBean private Storage storage;
 
     private Instant fixedInstant;
@@ -102,12 +98,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
                     return List.of(new ForecastSlot(targetAt(), new BigDecimal("23.4"),
                             WeatherCondition.CLEAR));
                 });
-        doAnswer(invocation -> {
-            assertThat(TransactionSynchronizationManager.isActualTransactionActive()).isFalse();
-            RecordEmbeddingSnapshot snapshot = invocation.getArgument(0);
-            assertThat(recordCount(snapshot.userId())).isEqualTo(1);
-            return null;
-        }).when(embeddingSubmitter).submit(any(RecordEmbeddingSnapshot.class));
     }
 
     @AfterEach
@@ -139,7 +129,7 @@ class RecordCreationWeatherMysqlIntegrationTest {
     }
 
     @Test
-    void cacheHitCreatesRecordWithoutCallingKmaAndCommitsBeforeEmbedding() {
+    void cacheHitCreatesRecordWithoutCallingKma() {
         fixture = createFixture(1, "valid comment");
         weatherKey = weatherKeyFor(fixture.request());
         seedWeatherCache(weatherKey);
@@ -148,7 +138,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
 
         assertCommittedRecord(fixture, WeatherCondition.CLEAR, new BigDecimal("23.4"));
         verify(kmaWeatherClient, never()).fetch(any(GridCoordinate.class), any(ZonedDateTime.class));
-        verify(embeddingSubmitter).submit(any(RecordEmbeddingSnapshot.class));
     }
 
     @Test
@@ -161,7 +150,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
         assertCommittedRecord(fixture, WeatherCondition.CLEAR, new BigDecimal("23.4"));
         assertThat(forecastCount(weatherKey)).isEqualTo(1);
         verify(kmaWeatherClient).fetch(any(GridCoordinate.class), any(ZonedDateTime.class));
-        verify(embeddingSubmitter).submit(any(RecordEmbeddingSnapshot.class));
     }
 
     @Test
@@ -178,7 +166,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
         assertThat(uploadCount(fixture.upload().getUploadId())).isEqualTo(1);
         assertThat(forecastCount(weatherKey)).isEqualTo(1);
         verify(kakaoRegionClient).findLegalRegion(any(BigDecimal.class), any(BigDecimal.class));
-        verify(embeddingSubmitter, never()).submit(any(RecordEmbeddingSnapshot.class));
     }
 
     @Test
@@ -194,7 +181,6 @@ class RecordCreationWeatherMysqlIntegrationTest {
         assertThat(forecastCount(weatherKey)).isZero();
         verify(kmaWeatherClient, atLeastOnce())
                 .fetch(any(GridCoordinate.class), any(ZonedDateTime.class));
-        verify(embeddingSubmitter).submit(any(RecordEmbeddingSnapshot.class));
     }
 
     /** 격리 DB 연결과 Flyway 적용 상태를 확인한다. */

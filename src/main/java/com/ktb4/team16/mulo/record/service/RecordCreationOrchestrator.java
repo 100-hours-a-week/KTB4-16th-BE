@@ -2,8 +2,6 @@ package com.ktb4.team16.mulo.record.service;
 
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSubmitter;
 import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import java.util.Set;
 import lombok.RequiredArgsConstructor;
@@ -20,18 +18,15 @@ public class RecordCreationOrchestrator {
 
     private final RecordCreationPreparationService preparationService;
     private final RecordService recordService;
-    private final RecordEmbeddingSubmitter embeddingSubmitter;
-
     public RecordCreateResponse createRecord(Long userId, RecordCreateRequest request) {
         var preparedRegion = preparationService.preparePlace(request);
         PreparedWeather preparedWeather = preparationService.prepareWeather(request);
-        RecordEmbeddingSnapshot snapshot = createRecordWithUniqueConflictRetry(
+        Long recordId = createRecordWithUniqueConflictRetry(
                 userId, request, preparedRegion, preparedWeather);
-        embeddingSubmitter.submit(snapshot);
-        return new RecordCreateResponse(snapshot.recordId());
+        return new RecordCreateResponse(recordId);
     }
 
-    private RecordEmbeddingSnapshot createRecordWithUniqueConflictRetry(
+    private Long createRecordWithUniqueConflictRetry(
             Long userId,
             RecordCreateRequest request,
             KakaoRegionClient.LegalRegion preparedRegion,

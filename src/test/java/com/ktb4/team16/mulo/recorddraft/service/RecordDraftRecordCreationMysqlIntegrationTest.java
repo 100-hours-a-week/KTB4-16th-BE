@@ -13,7 +13,6 @@ import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.service.PreparedWeather;
 import com.ktb4.team16.mulo.record.service.RecordService;
 import com.ktb4.team16.mulo.recorddraft.entity.RecordDraft;
@@ -124,13 +123,13 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
 
     @Test
     void deletesDraftBeforeUploadMetadataAndKeepsRecordPhotoObjectReference() {
-        RecordEmbeddingSnapshot snapshot = recordService.createRecord(user.getUserId(), request(),
+        Long recordId = recordService.createRecord(user.getUserId(), request(),
                 new KakaoRegionClient.LegalRegion("1111010100", "종로1가"),
                 PreparedWeather.withoutWeather());
 
         assertThat(recordDraftRepository.findByUser_UserId(user.getUserId())).isEmpty();
         assertThat(uploadRepository.findById(upload.getUploadId())).isEmpty();
-        RecordPhoto photo = recordPhotoRepository.findByRecord_RecordId(snapshot.recordId())
+        RecordPhoto photo = recordPhotoRepository.findByRecord_RecordId(recordId)
                 .orElseThrow();
         assertThat(photo.getImageUrl()).isEqualTo(upload.getImageUrl());
         assertThat(photo.getImageUrl()).startsWith("uploads/");
@@ -161,7 +160,7 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
         when(uploadService.findValidUpload(user.getUserId(), recordUpload.getUploadId()))
                 .thenReturn(recordUpload);
 
-        RecordEmbeddingSnapshot snapshot = recordService.createRecord(user.getUserId(),
+        Long recordId = recordService.createRecord(user.getUserId(),
                 request(recordUpload.getUploadId()),
                 new KakaoRegionClient.LegalRegion("1111010100", "종로1가"),
                 PreparedWeather.withoutWeather());
@@ -169,7 +168,7 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
         assertThat(recordDraftRepository.findByUser_UserId(user.getUserId())).isEmpty();
         assertThat(uploadRepository.existsById(upload.getUploadId())).isTrue();
         assertThat(uploadRepository.findById(recordUpload.getUploadId())).isEmpty();
-        RecordPhoto photo = recordPhotoRepository.findByRecord_RecordId(snapshot.recordId())
+        RecordPhoto photo = recordPhotoRepository.findByRecord_RecordId(recordId)
                 .orElseThrow();
         assertThat(photo.getImageUrl()).isEqualTo(recordUpload.getImageUrl());
         verify(uploadService).deleteMetadata(recordUpload);
