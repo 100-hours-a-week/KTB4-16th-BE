@@ -13,7 +13,6 @@ import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
 import com.ktb4.team16.mulo.record.entity.Record;
 import com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository;
 import com.ktb4.team16.mulo.recorddraft.entity.RecordDraft;
@@ -98,17 +97,11 @@ class RecordCreateServiceTest {
 
         PreparedWeather preparedWeather = new PreparedWeather(
                 new BigDecimal("21.5"), Record.WeatherCondition.CLEAR);
-        RecordEmbeddingSnapshot response = recordService.createRecord(userId, request,
+        Long recordId = recordService.createRecord(userId, request,
                 new KakaoRegionClient.LegalRegion("region-code", "region-name"),
                 preparedWeather);
 
-        assertThat(response.recordId()).isEqualTo(1024L);
-        assertThat(response.userId()).isEqualTo(userId);
-        assertThat(response.photoObjectKey()).isEqualTo("uploads/7/photo.jpg");
-        assertThat(response.track()).isEqualTo(
-                new RecordEmbeddingSnapshot.Track("title", "artist", "track-id"));
-        assertThat(response.comment()).isEqualTo("comment");
-        assertThat(response.createdAt()).isNotNull();
+        assertThat(recordId).isEqualTo(1024L);
         verify(recordPhotoRepository).save(any(RecordPhoto.class));
         InOrder order = org.mockito.Mockito.inOrder(recordDraftRepository, uploadService);
         order.verify(recordDraftRepository).deleteByUser_UserId(userId);

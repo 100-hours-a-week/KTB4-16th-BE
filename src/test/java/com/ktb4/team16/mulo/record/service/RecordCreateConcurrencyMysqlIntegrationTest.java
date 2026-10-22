@@ -13,7 +13,6 @@ import com.ktb4.team16.mulo.place.entity.Place;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSubmitter;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
 import com.ktb4.team16.mulo.user.entity.User;
@@ -77,7 +76,6 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
     @Autowired private RaceQueryBarrier raceQueryBarrier;
 
     @MockitoBean private RecordCreationPreparationService preparationService;
-    @MockitoBean private RecordEmbeddingSubmitter embeddingSubmitter;
     @MockitoBean private Clock clock;
     @MockitoBean private Storage storage;
 
@@ -181,10 +179,9 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         assertThat(remainingUploads).isZero();
         verify(preparationService, times(requestCount)).preparePlace(any(RecordCreateRequest.class));
         verify(preparationService, times(requestCount)).prepareWeather(any(RecordCreateRequest.class));
-        verify(embeddingSubmitter, times(requestCount)).submit(any());
         System.out.printf("[Place final] requests=%d places=%d records=%d recordPlaceIds=%s "
-                + "remainingUploads=%d embeddingSubmissions=%d%n", requestCount, places, records,
-                placeIds, remainingUploads, requestCount);
+                + "remainingUploads=%d%n", requestCount, places, records,
+                placeIds, remainingUploads);
     }
 
     private void verifyMusicTrackRace(int requestCount) throws Exception {
@@ -223,10 +220,9 @@ class RecordCreateConcurrencyMysqlIntegrationTest {
         assertThat(remainingUploads).isZero();
         verify(preparationService, times(requestCount)).preparePlace(any(RecordCreateRequest.class));
         verify(preparationService, times(requestCount)).prepareWeather(any(RecordCreateRequest.class));
-        verify(embeddingSubmitter, times(requestCount)).submit(any());
         System.out.printf("[MusicTrack final] requests=%d musicTracks=%d records=%d "
-                + "recordMusicTrackIds=%s remainingUploads=%d embeddingSubmissions=%d%n",
-                requestCount, tracks, records, trackIds, remainingUploads, requestCount);
+                + "recordMusicTrackIds=%s remainingUploads=%d%n",
+                requestCount, tracks, records, trackIds, remainingUploads);
     }
 
     private void assertOutcomesAndMetrics(String entityName, List<Outcome> outcomes,
