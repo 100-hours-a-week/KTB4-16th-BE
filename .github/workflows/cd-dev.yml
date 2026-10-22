@@ -84,7 +84,7 @@ jobs:
           MULO_AI_DB_URL=${{ secrets.MULO_AI_DB_URL_Develop }}
           MULO_AI_DB_USERNAME=${{ secrets.MULO_AI_DB_USERNAME_Develop }}
           MULO_AI_DB_PASSWORD=${{ secrets.MULO_AI_DB_PASSWORD_Develop }}
-          MULO_GROUP_CHAT_ENABLED=${{ secrets.MULO_GROUP_CHAT_ENABLED_Develop || 'false' }} //true 시크릿 넣음
+          MULO_GROUP_CHAT_ENABLED=${{ secrets.MULO_GROUP_CHAT_ENABLED_Develop || 'false' }} 
           MULO_GROUP_CHAT_START_DATE_DEVELOP=${{ secrets.MULO_GROUP_CHAT_START_DATE_DEVELOP }}
           # 채팅 서버 연동: 채팅 서버 주소와, 세 서비스가 같은 값을 써야 하는 내부 인증 키
           CHAT_SERVER_BASE_URL=${{ secrets.CHAT_SERVER_BASE_URL_Develop }}
