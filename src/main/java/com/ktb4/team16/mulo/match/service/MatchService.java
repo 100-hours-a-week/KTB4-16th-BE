@@ -99,6 +99,7 @@ public class MatchService {
             Long userId,
             MatchRequestCreateRequest request
     ) {
+        rejectNewOneToOneMatchRequest();
         if (!LocalTime.now(clock).isBefore(LocalTime.of(23, 0))) {
             throw new MatchDomainException(ErrorCode.MATCH_REQUEST_CLOSED);
         }
@@ -152,6 +153,10 @@ public class MatchService {
                 "매칭 요청 생성 성공",
                 new MatchRequestCreateResponse.Data(requester.getMatchRequestId(), requester.getStatus()));
 
+    }
+
+    private void rejectNewOneToOneMatchRequest() {
+        throw new MatchDomainException(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
     }
 
     private ChatRoomCreateRequest createChatRoomRequest(

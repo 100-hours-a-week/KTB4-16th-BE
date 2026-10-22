@@ -84,6 +84,18 @@ ext.coverageExcludes = [
 def runningOnGitHubActions = System.getenv('GITHUB_ACTIONS')?.equalsIgnoreCase('true')
 def localTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3313/mulo_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
 def localWeatherTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3314/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
+def groupTestHostPort = 3318
+def groupTestContainerName = 'mulo-be-group-test-mysql'
+def groupTestVolumeName = 'mulo-be-group-test-data'
+def groupTestNetworkName = 'mulo-be-group-test-network'
+def groupTestDatabaseUrl = System.getenv('MULO_BE_GROUP_TEST_DB_URL') ?: ''
+def groupTestDatabaseUsername = System.getenv('MULO_BE_GROUP_TEST_DB_USERNAME') ?: ''
+def groupTestDatabasePassword = System.getenv('MULO_BE_GROUP_TEST_DB_PASSWORD') ?: ''
+def groupTestOptIn = project.findProperty('muloBeGroupTestMysql')?.toString()
+if (groupTestOptIn != null && !(groupTestOptIn in ['true', 'false'])) {
+    throw new GradleException('Use -PmuloBeGroupTestMysql=true to select the isolated group-test MySQL path.')
+}
+def useGroupTestMysql = groupTestOptIn == 'true'
 def localTestJvmEnvironment = [
     DB_URL: localTestDatabaseUrl,
     DB_USERNAME: 'mulo_test',
@@ -102,6 +114,119 @@ def localTestJvmEnvironment = [
     AI_INTERNAL_TOKEN: 'local-test-only',
     AI_MOCK_ENABLED: 'true'
 ]
+
+def groupTestJvmEnvironment = new LinkedHashMap(localTestJvmEnvironment)
+groupTestJvmEnvironment.putAll([
+    DB_URL: groupTestDatabaseUrl,
+    DB_USERNAME: groupTestDatabaseUsername,
+    DB_PASSWORD: groupTestDatabasePassword,
+    SPRING_DATASOURCE_URL: groupTestDatabaseUrl,
+    SPRING_DATASOURCE_USERNAME: groupTestDatabaseUsername,
+    SPRING_DATASOURCE_PASSWORD: groupTestDatabasePassword
+])
+
+def runReadOnlyDockerCommand = { List<String> command, String description ->
+    def process = new ProcessBuilder(command).redirectErrorStream(true).start()
+    def output = process.inputStream.getText('UTF-8').trim()
+    if (process.waitFor() != 0) {
+        throw new GradleException("Unable to verify isolated group-test MySQL $description.")
+    }
+    output
+}
+
+def verifyGroupTestMysql = {
+    if (runningOnGitHubActions) {
+        throw new GradleException('The local group-test MySQL path cannot be selected in GitHub Actions.')
+    }
+    if (!(groupTestDatabaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:${groupTestHostPort}\/mulo_test(?:\?.*)?/)) {
+        throw new GradleException('MULO_BE_GROUP_TEST_DB_URL must target the isolated mulo_test database on 127.0.0.1:3318.')
+    }
+    if (groupTestDatabaseUsername != 'mulo_test'
+            || groupTestDatabasePassword.length() < 32
+            || groupTestDatabasePassword == 'mulo_test_only_password') {
+        throw new GradleException('Set a random test-only password and the mulo_test account for the isolated group-test database.')
+    }
+
+    def contextName = runReadOnlyDockerCommand(['docker', 'context', 'show'], 'Docker context')
+    def contextEndpoint = runReadOnlyDockerCommand([
+        'docker', 'context', 'inspect', '--format', '{{.Endpoints.docker.Host}}', contextName
+    ], 'Docker context endpoint')
+    def engineIdentity = runReadOnlyDockerCommand(['docker', 'info', '--format', '{{.Name}}|{{.OSType}}'], 'Docker engine')
+    if (contextName != 'desktop-linux'
+            || !contextEndpoint.startsWith('unix://')
+            || !contextEndpoint.endsWith('/.docker/run/docker.sock')
+            || engineIdentity != 'docker-desktop|linux') {
+        throw new GradleException('The isolated group-test database requires the local Mac Docker Desktop engine.')
+    }
+
+    def inspectTemplate = [
+        '{{.Name}}|{{.Config.Image}}|{{(index (index .NetworkSettings.Ports "3306/tcp") 0).HostIp}}',
+        '|{{(index (index .NetworkSettings.Ports "3306/tcp") 0).HostPort}}',
+        '|{{range .Mounts}}{{if eq .Destination "/var/lib/mysql"}}{{.Name}}{{end}}{{end}}',
+        '|{{.State.Status}}|{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}',
+        '|{{range $name, $network := .NetworkSettings.Networks}}{{$name}}{{end}}'
+    ].join('')
+    def container = runReadOnlyDockerCommand([
+        'docker', 'inspect', '--format', inspectTemplate, groupTestContainerName
+    ], 'container metadata')
+    def fields = container.split('\\|', -1)
+    if (fields.length != 8
+            || fields[0] != "/$groupTestContainerName"
+            || fields[1] != 'mysql:8.4'
+            || fields[2] != '127.0.0.1'
+            || fields[3] != groupTestHostPort.toString()
+            || fields[4] != groupTestVolumeName
+            || fields[5] != 'running'
+            || fields[6] != 'healthy'
+            || fields[7] != groupTestNetworkName) {
+        throw new GradleException('Refusing to run tests: the isolated group-test MySQL container, port, volume, network, or health status does not match.')
+    }
+
+    def network = runReadOnlyDockerCommand([
+        'docker', 'network', 'inspect', '--format', '{{.Name}}|{{.Driver}}', groupTestNetworkName
+    ], 'dedicated network')
+    if (network != "$groupTestNetworkName|bridge") {
+        throw new GradleException('The isolated group-test MySQL network must be the dedicated bridge network.')
+    }
+
+    def identity = runReadOnlyDockerCommand([
+        'docker', 'exec', groupTestContainerName, 'sh', '-c',
+        'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=socket --batch --skip-column-names '
+                + '--user="$MYSQL_USER" --database="$MYSQL_DATABASE" '
+                + '-e "SELECT VERSION(), DATABASE(), CURRENT_USER()"'
+    ], 'database identity')
+    def identityFields = identity.split('\\t', -1)
+    if (identityFields.length != 3
+            || !(identityFields[0] ==~ /^8\.4(?:\.\d+)?(?:[-+].*)?$/)
+            || identityFields[1] != 'mulo_test'
+            || !identityFields[2].startsWith('mulo_test@')) {
+        throw new GradleException('The isolated group-test database must report MySQL 8.4, schema mulo_test, and the mulo_test account.')
+    }
+
+    def containerPasswordHash = runReadOnlyDockerCommand([
+        'docker', 'exec', groupTestContainerName, 'sh', '-c',
+        'printf %s "$MYSQL_PASSWORD" | sha256sum | cut -d" " -f1'
+    ], 'test account credential')
+    def configuredPasswordHash = java.security.MessageDigest.getInstance('SHA-256')
+            .digest(groupTestDatabasePassword.getBytes('UTF-8')).encodeHex().toString()
+    if (containerPasswordHash != configuredPasswordHash) {
+        throw new GradleException('The Gradle test password does not match the isolated container test account.')
+    }
+
+    def grants = runReadOnlyDockerCommand([
+        'docker', 'exec', groupTestContainerName, 'sh', '-c',
+        'MYSQL_PWD="$MYSQL_PASSWORD" mysql --protocol=socket --batch --skip-column-names '
+                + '--user="$MYSQL_USER" --database="$MYSQL_DATABASE" -e "SHOW GRANTS FOR CURRENT_USER()"'
+    ], 'test account grants').readLines()
+    def normalizedGrants = grants.collect { grant -> grant.replace('\\', '') }
+    def hasDatabaseGrant = normalizedGrants.any { it.contains(' ON `mulo_test`.*') }
+    def grantsAreTestOnly = normalizedGrants.every { grant ->
+        grant.contains('GRANT USAGE ON *.*') || grant.contains(' ON `mulo_test`.*')
+    } && normalizedGrants.every { grant -> !grant.contains('WITH GRANT OPTION') }
+    if (!hasDatabaseGrant || !grantsAreTestOnly) {
+        throw new GradleException('The isolated test account must be restricted to the mulo_test database.')
+    }
+}
 
 def waitForIsolatedMysql = { String containerName, int hostPort, String volumeName, String composeCommand ->
     def deadline = System.currentTimeMillis() + 60000
@@ -139,13 +264,20 @@ tasks.named('test') {
     useJUnitPlatform()
     exclude '**/RecordCreateConcurrencyMysqlIntegrationTest.class'
     if (!runningOnGitHubActions) {
-        environment(localTestJvmEnvironment)
-        doFirst {
-            if (!(localTestDatabaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:3313\/mulo_test(?:\?.*)?/)) {
-                throw new GradleException('Refusing to run tests: local DB_URL is not the isolated mulo_test database.')
+        if (useGroupTestMysql) {
+            environment(groupTestJvmEnvironment)
+            doFirst {
+                verifyGroupTestMysql()
             }
-            waitForIsolatedMysql('mulo-general-test-mysql', 3313, 'mulo-general-test-data',
-                    'docker compose -f compose.test.yml up -d')
+        } else {
+            environment(localTestJvmEnvironment)
+            doFirst {
+                if (!(localTestDatabaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:3313\/mulo_test(?:\?.*)?/)) {
+                    throw new GradleException('Refusing to run tests: local DB_URL is not the isolated mulo_test database.')
+                }
+                waitForIsolatedMysql('mulo-general-test-mysql', 3313, 'mulo-general-test-data',
+                        'docker compose -f compose.test.yml up -d')
+            }
         }
     } else {
         doFirst {
