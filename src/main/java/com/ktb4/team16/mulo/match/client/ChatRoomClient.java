@@ -4,8 +4,10 @@ import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
 import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
+import com.ktb4.team16.mulo.match.dto.request.ChatParticipantNicknameUpdateRequest;
 import com.ktb4.team16.mulo.match.dto.response.ChatRoomCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.ChatGroupJoinOrCreateResponse;
+import com.ktb4.team16.mulo.match.dto.response.ChatParticipantNicknameUpdateResponse;
 import java.net.http.HttpClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,6 +24,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class ChatRoomClient {
     private static final String CREATE_ENDPOINT = "/internal/chat-rooms";
     private static final String GROUP_JOIN_ENDPOINT = "/internal/chat-rooms/group/join-or-create";
+    private static final String USER_NICKNAME_ENDPOINT = "/internal/users/{userId}/nickname";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
     private final RestClient restClient;
@@ -99,6 +102,41 @@ public class ChatRoomClient {
             int status = response.getStatusCode().value();
             ChatGroupJoinOrCreateResponse body = response.getBody();
             if ((status != 200 && status != 201) || !isValidGroupResponse(body)) {
+                throw new ChatServerClientException(FailureType.INVALID_RESPONSE, status);
+            }
+            return body;
+        } catch (ChatServerClientException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw classifyHttpFailure(exception);
+        } catch (ResourceAccessException exception) {
+            throw new ChatServerClientException(FailureType.COMMUNICATION_ERROR, null);
+        } catch (RestClientException exception) {
+            throw new ChatServerClientException(FailureType.INVALID_RESPONSE, null);
+        }
+    }
+
+    public ChatParticipantNicknameUpdateResponse updateParticipantNickname(Long userId, String nickname) {
+        if (userId == null || userId <= 0 || nickname == null || nickname.isBlank()) {
+            throw new IllegalArgumentException("사용자 ID와 닉네임이 필요합니다.");
+        }
+        if (!properties.hasInternalApiKey()) {
+            throw new ChatServerClientException(FailureType.CONFIGURATION_ERROR, null);
+        }
+
+        try {
+            var response = restClient.patch()
+                    .uri(USER_NICKNAME_ENDPOINT, userId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(INTERNAL_API_KEY_HEADER, properties.internalApiKey())
+                    .body(new ChatParticipantNicknameUpdateRequest(nickname))
+                    .retrieve()
+                    .toEntity(ChatParticipantNicknameUpdateResponse.class);
+
+            int status = response.getStatusCode().value();
+            ChatParticipantNicknameUpdateResponse body = response.getBody();
+            if (status != 200 || body == null || !userId.equals(body.userId())
+                    || body.updatedParticipantCount() < 0) {
                 throw new ChatServerClientException(FailureType.INVALID_RESPONSE, status);
             }
             return body;
