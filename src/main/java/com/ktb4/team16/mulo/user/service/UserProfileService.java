@@ -7,6 +7,7 @@ import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePreferredGenresResponse;
 import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.entity.User;
+import com.ktb4.team16.mulo.user.event.UserNicknameChangedEvent;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.message.UserMessage;
@@ -15,9 +16,11 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Propagation;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
@@ -27,6 +30,7 @@ public class UserProfileService {
 
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
+    private final ApplicationEventPublisher eventPublisher;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getMyProfile(Long userId) {
@@ -54,7 +58,14 @@ public class UserProfileService {
             }
             throw exception;
         }
+        eventPublisher.publishEvent(new UserNicknameChangedEvent(userId));
         return UpdateNicknameResponse.from(user.getNickname());
+    }
+
+    /** 커밋 후 Chat Server에 전달할 최신 닉네임을 짧은 별도 조회 트랜잭션으로 읽는다. */
+    @Transactional(readOnly = true, propagation = Propagation.REQUIRES_NEW)
+    public String getCurrentNicknameForChatSync(Long userId) {
+        return findActiveUser(userId).getNickname();
     }
 
     @Transactional
