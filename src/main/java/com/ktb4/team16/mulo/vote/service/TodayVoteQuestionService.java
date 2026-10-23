@@ -63,7 +63,8 @@ public class TodayVoteQuestionService {
         VoteQuestion question = voteQuestionRepository.findById(assignment.voteQuestionId())
                 .orElseThrow(() -> new VoteDomainException(ErrorCode.TODAY_VOTE_NOT_FOUND));
         if (!today.equals(question.getVoteDate())
-                || !assignment.musicGenre().equals(question.getMusicGenre())) {
+                || (!assignment.musicGenre().equals(question.getMusicGenre())
+                && !COMMON_GENRE.equals(question.getMusicGenre()))) {
             throw new VoteDomainException(ErrorCode.VOTE_SNAPSHOT_NOT_READY);
         }
         return question;
@@ -77,6 +78,12 @@ public class TodayVoteQuestionService {
             String genre = aiVoteReadRepository.findUserGenre(userId).orElse(COMMON_GENRE);
             VoteDailySnapshotService.validateGenre(genre);
             Long questionId = snapshotStore.findQuestionId(today, genre).orElse(null);
+            if (questionId == null && !COMMON_GENRE.equals(genre)) {
+                questionId = snapshotStore.findQuestionId(today, COMMON_GENRE).orElse(null);
+            }
+            if (questionId == null) {
+                throw new VoteDomainException(ErrorCode.TODAY_VOTE_NOT_FOUND);
+            }
             VoteDailyAssignment assignment = assignmentWriter.assignIfMissing(
                     today, userId, genre, questionId);
             if (assignment == null) {

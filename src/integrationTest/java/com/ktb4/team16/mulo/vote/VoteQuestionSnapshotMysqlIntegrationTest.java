@@ -251,18 +251,15 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     }
 
     @Test
-    void finalizationUsesPreviousQuestionForMissingGroupWhenFinalAiReadsFail() {
+    void finalizationSharesSameDayCommonQuestionAcrossMissingAssignedGroupsWhenFinalAiReadsFail() {
         testDates.add(TODAY);
-        LocalDate yesterday = TODAY.minusDays(1);
-        testDates.add(yesterday);
         long jazzUserId = insertUser("재즈");
-        long commonUserId = insertUser("공통");
-        insertQuestion(yesterday, "공통", "전날 공통 질문", "전날 A", "전날 B");
+        long danceUserId = insertUser("댄스");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true, true, false, false);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(
-                Map.of(jazzUserId, "재즈", commonUserId, "공통"));
+                Map.of(jazzUserId, "재즈", danceUserId, "댄스"));
         when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
-                new AiVoteQuestion(TODAY, "재즈", "사전 재즈 질문", "재즈 A", "재즈 B")));
+                new AiVoteQuestion(TODAY, "공통", "사전 공통 질문", "공통 A", "공통 B")));
 
         prefetchService.prefetchQuestions(TODAY);
         createSnapshot(TODAY);
@@ -274,15 +271,24 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
                 "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
                 .isEqualTo("READY");
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT question_text FROM vote_questions WHERE vote_question_id = ?",
-                String.class, commonQuestionId)).isEqualTo("전날 공통 질문");
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
+                Integer.class, TODAY)).isZero();
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, jazzUserId)).isEqualTo("재즈");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, danceUserId)).isEqualTo("댄스");
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
-                Long.class, TODAY, commonUserId)).isEqualTo(commonQuestionId);
+                Long.class, TODAY, jazzUserId)).isEqualTo(commonQuestionId);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                Long.class, TODAY, danceUserId)).isEqualTo(commonQuestionId);
     }
 
     @Test
-    void doesNotCreateReadySnapshotWhenAiAndPreviousQuestionDataAreUnavailable() {
+    void doesNotCreateReadySnapshotWhenAiAndTodayQuestionDataAreUnavailable() {
         testDates.add(TODAY);
         insertUser("재즈");
         when(aiVoteReadRepository.isAvailable()).thenReturn(false);
@@ -333,31 +339,37 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     }
 
     @Test
-    void midnightKeepsPrefetchedGroupsAndUsesYesterdayOnlyForMissingGroups() {
+    void midnightUsesSameDayCommonFallbackAndDoesNotUseYesterdayGenreQuestion() {
         long jazzUserId = insertUser("재즈");
         long commonUserId = insertUser("공통");
         LocalDate yesterday = TODAY.minusDays(1);
         testDates.add(yesterday);
-        insertQuestion(yesterday, "공통", "전날 공통 질문", "전날 A", "전날 B");
+        insertQuestion(yesterday, "재즈", "전날 재즈 질문", "전날 A", "전날 B");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres())
                 .thenReturn(Map.of(jazzUserId, "재즈", commonUserId, "공통"));
         when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
-                new AiVoteQuestion(TODAY, "재즈", "사전 적재 재즈 질문", "재즈 A", "재즈 B")));
+                new AiVoteQuestion(TODAY, "공통", "당일 공통 질문", "공통 A", "공통 B")));
 
         prefetchService.prefetchQuestions(TODAY);
         org.mockito.Mockito.clearInvocations(aiVoteReadRepository);
         createSnapshot(TODAY);
 
+        Long commonQuestionId = jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
+                Long.class, TODAY);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
-                String.class, TODAY)).isEqualTo("사전 적재 재즈 질문");
-        assertThat(jdbcTemplate.queryForObject(
-                "SELECT question_text FROM vote_questions WHERE vote_date = ? AND music_genre = '공통'",
-                String.class, TODAY)).isEqualTo("전날 공통 질문");
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
+                Integer.class, TODAY)).isZero();
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT status FROM vote_daily_snapshots WHERE vote_date = ?", String.class, TODAY))
                 .isEqualTo("READY");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT music_genre FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                String.class, TODAY, jazzUserId)).isEqualTo("재즈");
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
+                Long.class, TODAY, jazzUserId)).isEqualTo(commonQuestionId);
         when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "발라드", "늦게 도착한 질문", "늦은 A", "늦은 B")));
         prefetchService.prefetchQuestions(TODAY);
@@ -369,9 +381,10 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     }
 
     @Test
-    void copiesPreviousDayQuestionIntoNewTodayQuestionWithoutCopyingAnswers() {
+    void doesNotCopyPreviousDayQuestionWhenTodayGenreAndCommonQuestionsAreMissing() {
         LocalDate yesterday = TODAY.minusDays(1);
         testDates.add(yesterday);
+        testDates.add(TODAY);
         long userId = insertUser("재즈");
         long yesterdayQuestionId = insertQuestion(yesterday, "재즈", "어제 질문", "어제 A", "어제 B");
         insertAnswer(yesterdayQuestionId, userId, "어제 A");
@@ -380,19 +393,14 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
 
         createSnapshot(TODAY);
 
-        Long todayQuestionId = jdbcTemplate.queryForObject(
-                "SELECT vote_question_id FROM vote_questions WHERE vote_date = ? AND music_genre = '재즈'",
-                Long.class, TODAY);
-        assertThat(todayQuestionId).isNotEqualTo(yesterdayQuestionId);
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT question_text FROM vote_questions WHERE vote_question_id = ?", String.class, todayQuestionId))
-                .isEqualTo("어제 질문");
+                "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ?", Integer.class, TODAY)).isZero();
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT COUNT(*) FROM vote_answers WHERE vote_question_id = ?", Integer.class, todayQuestionId))
-                .isZero();
+                "SELECT COUNT(*) FROM vote_daily_snapshots WHERE vote_date = ? AND status = 'READY'",
+                Integer.class, TODAY)).isZero();
         assertThat(jdbcTemplate.queryForObject(
-                "SELECT vote_question_id FROM vote_user_daily_assignments WHERE vote_date = ? AND user_id = ?",
-                Long.class, TODAY, userId)).isEqualTo(todayQuestionId);
+                "SELECT COUNT(*) FROM vote_answers WHERE vote_question_id = ?", Integer.class, yesterdayQuestionId))
+                .isEqualTo(1);
     }
 
     @Test
@@ -485,7 +493,7 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
     }
 
     @Test
-    void apiReturnsNotFoundWhenTodaysAndPreviousGroupQuestionsAreMissing() throws Exception {
+    void apiReturnsNotFoundWhenTodaysGenreAndCommonQuestionsAreMissing() throws Exception {
         long userId = insertUser("재즈");
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
