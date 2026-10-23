@@ -80,6 +80,12 @@ public class VoteQuestionPrefetchService {
         List<VoteSnapshotStore.AssignmentRow> assignments = readMissingUserAssignments(
                 targetDate, users, savedUserIds);
         if (questions.isEmpty() && assignments.isEmpty()) {
+            if (snapshotStore.findQuestionContent(targetDate, COMMON_GENRE).isPresent()) {
+                log.info("새 사전 적재 데이터는 없지만 당일 공통 질문 fallback을 사용할 수 있습니다. "
+                                + "date={}, retry={}, missingQuestionGroups={}, missingUsers={}, outcome=PARTIAL",
+                        targetDate, retry, missingGenres.size(), missingUsers);
+                return;
+            }
             log.error("취향 투표 사전 적재가 완료되지 않았습니다. date={}, retry={}, "
                             + "missingQuestionGroups={}, missingUsers={}, outcome=FAILED",
                     targetDate, retry, missingGenres.size(), missingUsers);

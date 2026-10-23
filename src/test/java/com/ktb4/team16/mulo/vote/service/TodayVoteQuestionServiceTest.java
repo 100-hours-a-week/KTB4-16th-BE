@@ -193,6 +193,41 @@ class TodayVoteQuestionServiceTest {
     }
 
     @Test
+    void lateUserKeepsAiGenreAndUsesSameDayCommonQuestionWhenGenreQuestionIsMissing() {
+        when(snapshotStore.isReady(TODAY)).thenReturn(true);
+        when(snapshotStore.findAssignment(TODAY, 17L)).thenReturn(Optional.empty());
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findUserGenre(17L)).thenReturn(Optional.of("댄스"));
+        when(snapshotStore.findQuestionId(TODAY, "댄스")).thenReturn(Optional.empty());
+        when(snapshotStore.findQuestionId(TODAY, "공통")).thenReturn(Optional.of(98L));
+        when(assignmentWriter.assignIfMissing(TODAY, 17L, "댄스", 98L))
+                .thenReturn(new VoteDailyAssignment("댄스", 98L));
+        VoteQuestion question = question(98L, "공통");
+        when(voteQuestionRepository.findById(98L)).thenReturn(Optional.of(question));
+        when(voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(98L, 17L))
+                .thenReturn(Optional.empty());
+
+        assertThat(service.getToday(17L).data().voteQuestionId()).isEqualTo(98L);
+        verify(assignmentWriter).assignIfMissing(TODAY, 17L, "댄스", 98L);
+    }
+
+    @Test
+    void lateUserFailsWhenNeitherAssignedGenreNorCommonQuestionExists() {
+        when(snapshotStore.isReady(TODAY)).thenReturn(true);
+        when(snapshotStore.findAssignment(TODAY, 17L)).thenReturn(Optional.empty());
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findUserGenre(17L)).thenReturn(Optional.of("댄스"));
+        when(snapshotStore.findQuestionId(TODAY, "댄스")).thenReturn(Optional.empty());
+        when(snapshotStore.findQuestionId(TODAY, "공통")).thenReturn(Optional.empty());
+
+        assertThatThrownBy(() -> service.getToday(17L))
+                .isInstanceOf(VoteDomainException.class)
+                .extracting(exception -> ((VoteDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.TODAY_VOTE_NOT_FOUND);
+        verify(assignmentWriter, never()).assignIfMissing(TODAY, 17L, "댄스", null);
+    }
+
+    @Test
     void doesNotReplaceExistingDailyAssignmentWhenAiGenreChanges() {
         when(snapshotStore.isReady(TODAY)).thenReturn(true);
         when(snapshotStore.findAssignment(TODAY, 17L))
@@ -222,12 +257,47 @@ class TodayVoteQuestionServiceTest {
     }
 
     @Test
-    void returnsSnapshotNotReadyWhenAssignmentPointsToAnotherDateOrGenre() {
+    void acceptsSameDayCommonQuestionForDifferentAssignedGenre() {
         when(snapshotStore.isReady(TODAY)).thenReturn(true);
         when(snapshotStore.findAssignment(TODAY, 17L))
                 .thenReturn(Optional.of(new VoteDailyAssignment("재즈", 94L)));
         VoteQuestion question = mock(VoteQuestion.class);
         when(question.getMusicGenre()).thenReturn("공통");
+        when(question.getVoteDate()).thenReturn(TODAY);
+        when(question.getVoteQuestionId()).thenReturn(94L);
+        when(question.getQuestionText()).thenReturn("공통 질문");
+        when(question.getOptionA()).thenReturn("선택 A");
+        when(question.getOptionB()).thenReturn("선택 B");
+        when(voteQuestionRepository.findById(94L)).thenReturn(Optional.of(question));
+        when(voteAnswerRepository.findByVoteQuestion_VoteQuestionIdAndUser_UserId(94L, 17L))
+                .thenReturn(Optional.empty());
+
+        assertThat(service.getToday(17L).data().voteQuestionId()).isEqualTo(94L);
+    }
+
+    @Test
+    void returnsSnapshotNotReadyWhenAssignmentPointsToAnotherDate() {
+        when(snapshotStore.isReady(TODAY)).thenReturn(true);
+        when(snapshotStore.findAssignment(TODAY, 17L))
+                .thenReturn(Optional.of(new VoteDailyAssignment("재즈", 94L)));
+        VoteQuestion question = mock(VoteQuestion.class);
+        when(question.getMusicGenre()).thenReturn("재즈");
+        when(question.getVoteDate()).thenReturn(TODAY.minusDays(1));
+        when(voteQuestionRepository.findById(94L)).thenReturn(Optional.of(question));
+
+        assertThatThrownBy(() -> service.getToday(17L))
+                .isInstanceOf(VoteDomainException.class)
+                .extracting(exception -> ((VoteDomainException) exception).errorCode())
+                .isEqualTo(ErrorCode.VOTE_SNAPSHOT_NOT_READY);
+    }
+
+    @Test
+    void returnsSnapshotNotReadyWhenQuestionGenreIsNeitherAssignedNorCommon() {
+        when(snapshotStore.isReady(TODAY)).thenReturn(true);
+        when(snapshotStore.findAssignment(TODAY, 17L))
+                .thenReturn(Optional.of(new VoteDailyAssignment("재즈", 94L)));
+        VoteQuestion question = mock(VoteQuestion.class);
+        when(question.getMusicGenre()).thenReturn("댄스");
         when(question.getVoteDate()).thenReturn(TODAY);
         when(voteQuestionRepository.findById(94L)).thenReturn(Optional.of(question));
 

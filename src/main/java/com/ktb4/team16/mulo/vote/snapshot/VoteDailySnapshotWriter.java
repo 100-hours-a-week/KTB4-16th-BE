@@ -3,7 +3,6 @@ package com.ktb4.team16.mulo.vote.snapshot;
 import com.ktb4.team16.mulo.vote.ai.AiVoteQuestion;
 import com.ktb4.team16.mulo.vote.scheduler.VoteDailySnapshotService;
 import java.time.LocalDate;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.LinkedHashSet;
 import java.util.List;
@@ -32,7 +31,7 @@ public class VoteDailySnapshotWriter {
             return;
         }
 
-        store.saveQuestions(voteDate, latestQuestions);
+        Map<String, Long> questionIds = new LinkedHashMap<>(store.saveQuestions(voteDate, latestQuestions));
 
         Map<Long, String> genresByUser = new LinkedHashMap<>();
         for (VoteSnapshotStore.AssignmentRow assignment : store.findAssignments(voteDate)) {
@@ -65,28 +64,24 @@ public class VoteDailySnapshotWriter {
         genresByUser.values().forEach(VoteDailySnapshotService::validateGenre);
 
         Set<String> requiredGenres = new LinkedHashSet<>(genresByUser.values());
-        List<AiVoteQuestion> fallbackQuestions = new ArrayList<>();
-        for (String genre : requiredGenres) {
-            if (store.findQuestionContent(voteDate, genre).isPresent()) {
-                continue;
-            }
-            store.findQuestionContent(voteDate.minusDays(1), genre)
-                    .ifPresent(content -> fallbackQuestions.add(new AiVoteQuestion(voteDate, genre,
-                            content.question(), content.optionA(), content.optionB())));
-        }
-        Map<String, Long> questionIds = new LinkedHashMap<>(store.saveQuestions(voteDate, fallbackQuestions));
         if (!store.hasQuestions(voteDate)) {
-            log.error("당일 질문과 전날 대체 질문이 없어 취향 투표 스냅샷 확정을 중단합니다. date={}", voteDate);
-            throw new IllegalStateException("당일 질문과 전날 대체 질문이 없어 스냅샷을 확정할 수 없습니다.");
+            log.error("당일 질문이 없어 취향 투표 스냅샷 확정을 중단합니다. date={}", voteDate);
+            throw new IllegalStateException("당일 질문이 없어 스냅샷을 확정할 수 없습니다.");
         }
+        Long commonQuestionId = questionIds.computeIfAbsent(COMMON_GENRE,
+                key -> store.findQuestionId(voteDate, key).orElse(null));
         for (String genre : requiredGenres) {
             Long questionId = questionIds.computeIfAbsent(genre,
                     key -> store.findQuestionId(voteDate, key).orElse(null));
             if (questionId == null) {
-                log.error("사용자 배정 그룹의 당일 질문과 전날 대체 질문이 없어 스냅샷 확정을 중단합니다. date={}, genre={}",
+                questionId = commonQuestionId;
+            }
+            if (questionId == null) {
+                log.error("사용자 배정 그룹 및 공통 그룹의 당일 질문이 없어 스냅샷 확정을 중단합니다. date={}, genre={}",
                         voteDate, genre);
                 throw new IllegalStateException("사용자 배정 그룹의 질문이 없어 스냅샷을 확정할 수 없습니다.");
             }
+            questionIds.put(genre, questionId);
         }
         List<VoteSnapshotStore.AssignmentRow> assignments = genresByUser.entrySet().stream()
                 .map(entry -> new VoteSnapshotStore.AssignmentRow(entry.getKey(), entry.getValue(),

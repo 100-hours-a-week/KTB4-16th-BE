@@ -192,6 +192,24 @@ class VoteQuestionPrefetchServiceTest {
     }
 
     @Test
+    void doesNotTreatExistingCommonFallbackAsFailedPrefetchWhenNoNewRowsAreAvailable() {
+        when(snapshotStore.isReady(TARGET_DATE)).thenReturn(false);
+        when(snapshotStore.findAssignments(TARGET_DATE)).thenReturn(List.of(
+                new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
+        when(userRepository.findAllByDeletedAtIsNull()).thenReturn(List.of(user(17L)));
+        when(snapshotStore.findQuestionContent(TARGET_DATE, "공통"))
+                .thenReturn(Optional.of(new VoteQuestionContent("공통", "공통 질문", "A", "B")));
+        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
+        when(aiVoteReadRepository.findQuestions(TARGET_DATE, TARGET_DATE)).thenReturn(List.of());
+
+        service.retryTomorrowQuestions();
+
+        verify(prefetchWriter, never()).save(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyList(), org.mockito.ArgumentMatchers.anyList());
+        verify(aiVoteReadRepository, never()).findAllUserGenres();
+    }
+
+    @Test
     void prefetchesMissingQuestionsAndGenreAssignmentsWithoutOverwritingExistingAssignments() {
         User existingUser = user(17L);
         User newUser = user(18L);

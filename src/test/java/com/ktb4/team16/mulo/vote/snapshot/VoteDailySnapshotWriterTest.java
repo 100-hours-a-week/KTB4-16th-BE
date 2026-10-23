@@ -2,7 +2,6 @@ package com.ktb4.team16.mulo.vote.snapshot;
 
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.doAnswer;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -50,28 +49,23 @@ class VoteDailySnapshotWriterTest {
     }
 
     @Test
-    void fallsBackToPreviousDayQuestionForMissingGroupWhenFinalAiReadsFailed() {
+    void usesSameDayCommonQuestionForMissingAssignedGroupsAndSharesItsId() {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
                 new VoteSnapshotStore.AssignmentRow(17L, "재즈", null),
-                new VoteSnapshotStore.AssignmentRow(18L, "공통", null)));
-        when(store.findQuestionContent(TARGET_DATE, "재즈"))
-                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "사전 질문", "재즈 A", "재즈 B")));
-        when(store.findQuestionContent(TARGET_DATE, "공통")).thenReturn(Optional.empty());
-        when(store.findQuestionContent(TARGET_DATE.minusDays(1), "공통"))
-                .thenReturn(Optional.of(new VoteQuestionContent("공통", "전날 질문", "전날 A", "전날 B")));
-        doAnswer(invocation -> invocation.<List<AiVoteQuestion>>getArgument(1).isEmpty()
-                        ? Map.of() : Map.of("공통", 42L))
-                .when(store).saveQuestions(ArgumentMatchers.eq(TARGET_DATE), ArgumentMatchers.anyList());
+                new VoteSnapshotStore.AssignmentRow(18L, "댄스", null)));
+        AiVoteQuestion commonQuestion = new AiVoteQuestion(TARGET_DATE, "공통", "공통 질문", "A", "B");
+        when(store.saveQuestions(TARGET_DATE, List.of(commonQuestion))).thenReturn(Map.of("공통", 42L));
         when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
-        when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
 
-        writer.finalizeSnapshot(TARGET_DATE, List.of(), List.of(17L, 18L), Optional.empty());
+        writer.finalizeSnapshot(TARGET_DATE, List.of(commonQuestion), List.of(17L, 18L), Optional.empty());
 
         verify(store).completeAssignments(TARGET_DATE, List.of(
-                new VoteSnapshotStore.AssignmentRow(17L, "재즈", 41L),
-                new VoteSnapshotStore.AssignmentRow(18L, "공통", 42L)));
+                new VoteSnapshotStore.AssignmentRow(17L, "재즈", 42L),
+                new VoteSnapshotStore.AssignmentRow(18L, "댄스", 42L)));
         verify(store).markReady(TARGET_DATE);
+        verify(store, never()).findQuestionContent(TARGET_DATE.minusDays(1), "재즈");
+        verify(store, never()).findQuestionContent(TARGET_DATE.minusDays(1), "댄스");
     }
 
     @Test
@@ -92,7 +86,7 @@ class VoteDailySnapshotWriterTest {
     }
 
     @Test
-    void doesNotMarkSnapshotReadyWhenNoQuestionOrPreviousDayFallbackExists() {
+    void doesNotMarkSnapshotReadyWhenNoQuestionExistsForToday() {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of());
         when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
@@ -107,15 +101,11 @@ class VoteDailySnapshotWriterTest {
     }
 
     @Test
-    void doesNotMarkSnapshotReadyWhenARequiredGroupHasNoTodayOrPreviousQuestion() {
+    void doesNotMarkSnapshotReadyWhenARequiredGroupAndCommonQuestionAreMissing() {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
                 new VoteSnapshotStore.AssignmentRow(17L, "재즈", null),
                 new VoteSnapshotStore.AssignmentRow(18L, "공통", null)));
-        when(store.findQuestionContent(TARGET_DATE, "재즈"))
-                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "오늘 재즈 질문", "A", "B")));
-        when(store.findQuestionContent(TARGET_DATE, "공통")).thenReturn(Optional.empty());
-        when(store.findQuestionContent(TARGET_DATE.minusDays(1), "공통")).thenReturn(Optional.empty());
         when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
         when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
         when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
@@ -128,6 +118,24 @@ class VoteDailySnapshotWriterTest {
 
         verify(store, never()).completeAssignments(ArgumentMatchers.eq(TARGET_DATE), ArgumentMatchers.anyList());
         verify(store, never()).markReady(TARGET_DATE);
+    }
+
+    @Test
+    void prefersAssignedGenreQuestionOverSameDayCommonQuestion() {
+        when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
+        when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
+                new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
+        AiVoteQuestion jazzQuestion = new AiVoteQuestion(TARGET_DATE, "재즈", "재즈 질문", "A", "B");
+        AiVoteQuestion commonQuestion = new AiVoteQuestion(TARGET_DATE, "공통", "공통 질문", "A", "B");
+        when(store.saveQuestions(TARGET_DATE, List.of(jazzQuestion, commonQuestion)))
+                .thenReturn(Map.of("재즈", 41L, "공통", 42L));
+        when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
+
+        writer.finalizeSnapshot(TARGET_DATE, List.of(jazzQuestion, commonQuestion), List.of(17L), Optional.empty());
+
+        verify(store).completeAssignments(TARGET_DATE,
+                List.of(new VoteSnapshotStore.AssignmentRow(17L, "재즈", 41L)));
+        verify(store).markReady(TARGET_DATE);
     }
 
     @Test
