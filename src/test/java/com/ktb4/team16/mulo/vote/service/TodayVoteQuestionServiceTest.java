@@ -281,7 +281,6 @@ class TodayVoteQuestionServiceTest {
         when(snapshotStore.findAssignment(TODAY, 17L))
                 .thenReturn(Optional.of(new VoteDailyAssignment("재즈", 94L)));
         VoteQuestion question = mock(VoteQuestion.class);
-        when(question.getMusicGenre()).thenReturn("재즈");
         when(question.getVoteDate()).thenReturn(TODAY.minusDays(1));
         when(voteQuestionRepository.findById(94L)).thenReturn(Optional.of(question));
 

@@ -197,8 +197,11 @@ class VoteQuestionPrefetchServiceTest {
         when(snapshotStore.findAssignments(TARGET_DATE)).thenReturn(List.of(
                 new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
         when(userRepository.findAllByDeletedAtIsNull()).thenReturn(List.of(user(17L)));
-        when(snapshotStore.findQuestionContent(TARGET_DATE, "공통"))
-                .thenReturn(Optional.of(new VoteQuestionContent("공통", "공통 질문", "A", "B")));
+        when(snapshotStore.findQuestionContent(
+                org.mockito.ArgumentMatchers.eq(TARGET_DATE), org.mockito.ArgumentMatchers.anyString()))
+                .thenAnswer(invocation -> "공통".equals(invocation.getArgument(1))
+                        ? Optional.of(new VoteQuestionContent("공통", "공통 질문", "A", "B"))
+                        : Optional.empty());
         when(aiVoteReadRepository.isAvailable()).thenReturn(true);
         when(aiVoteReadRepository.findQuestions(TARGET_DATE, TARGET_DATE)).thenReturn(List.of());
 

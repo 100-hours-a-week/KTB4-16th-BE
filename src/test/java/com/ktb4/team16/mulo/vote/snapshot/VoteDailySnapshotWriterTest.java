@@ -35,10 +35,9 @@ class VoteDailySnapshotWriterTest {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
                 new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
-        when(store.findQuestionContent(TARGET_DATE, "재즈"))
-                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "저장 질문", "A", "B")));
         when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
         when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
+        when(store.findQuestionId(TARGET_DATE, "공통")).thenReturn(Optional.empty());
         when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
 
         writer.finalizeSnapshot(TARGET_DATE, List.of(), List.of(17L), Optional.empty());
@@ -73,8 +72,6 @@ class VoteDailySnapshotWriterTest {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of());
         when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
-        when(store.findQuestionContent(TARGET_DATE, "공통"))
-                .thenReturn(Optional.of(new VoteQuestionContent("공통", "사전 질문", "A", "B")));
         when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
         when(store.findQuestionId(TARGET_DATE, "공통")).thenReturn(Optional.of(43L));
 
@@ -143,10 +140,9 @@ class VoteDailySnapshotWriterTest {
         when(store.beginOrLockSnapshot(TARGET_DATE)).thenReturn(false);
         when(store.findAssignments(TARGET_DATE)).thenReturn(List.of(
                 new VoteSnapshotStore.AssignmentRow(17L, "재즈", null)));
-        when(store.findQuestionContent(TARGET_DATE, "재즈"))
-                .thenReturn(Optional.of(new VoteQuestionContent("재즈", "오늘 재즈 질문", "A", "B")));
         when(store.saveQuestions(TARGET_DATE, List.of())).thenReturn(Map.of());
         when(store.hasQuestions(TARGET_DATE)).thenReturn(true);
+        when(store.findQuestionId(TARGET_DATE, "공통")).thenReturn(Optional.empty());
         when(store.findQuestionId(TARGET_DATE, "재즈")).thenReturn(Optional.of(41L));
         when(store.hasAssignmentsWithoutQuestion(TARGET_DATE)).thenReturn(true);
 
