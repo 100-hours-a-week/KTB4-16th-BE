@@ -15,6 +15,7 @@ import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest.Participant;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import java.io.IOException;
 import java.net.URI;
+import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
 import java.time.OffsetDateTime;
@@ -30,6 +31,7 @@ import org.springframework.web.client.RestClient;
 class ChatRoomClientTest {
     private static final String ENDPOINT = "http://chat.test/internal/chat-rooms";
     private static final String GROUP_ENDPOINT = "http://chat.test/internal/chat-rooms/group/join-or-create";
+    private static final String NICKNAME_ENDPOINT = "http://chat.test/internal/users/17/nickname";
     private static final ChatRoomCreateRequest REQUEST = new ChatRoomCreateRequest(50L,
             OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
                     new Participant(17L, "jettie"), new Participant(28L, "lulu")));
@@ -54,6 +56,84 @@ class ChatRoomClientTest {
 
         assertThat(fixture.client().createChatRoom(REQUEST).chatRoomId()).isEqualTo(30L);
 
+        fixture.server().verify();
+    }
+
+    @Test
+    void sendsAuthenticatedNicknameUpdateAndParsesBareResponse() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(header("X-Internal-Api-Key", "test-api-key"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("{\"nickname\":\"새닉네임\"}"))
+                .andRespond(withStatus(HttpStatus.OK)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"userId\":17,\"updatedParticipantCount\":2}"));
+
+        var response = fixture.client().updateParticipantNickname(17L, "새닉네임");
+
+        assertThat(response.userId()).isEqualTo(17L);
+        assertThat(response.updatedParticipantCount()).isEqualTo(2);
+        fixture.server().verify();
+    }
+
+    @ParameterizedTest
+    @MethodSource("nicknameHttpFailures")
+    void classifiesNicknameEndpointHttpFailures(int status, FailureType expectedType) {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.valueOf(status)).body("sensitive response body"));
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(expectedType);
+                    assertThat(exception.failureType().isRetryable())
+                            .isEqualTo(expectedType == FailureType.SERVER_ERROR);
+                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
+                });
+        fixture.server().verify();
+    }
+
+    @Test
+    void classifiesNicknameEndpointTransportFailureAsCommunicationError() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(request -> {
+                    throw new IOException("sensitive transport detail");
+                });
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.COMMUNICATION_ERROR));
+        fixture.server().verify();
+    }
+
+    @Test
+    void classifiesNicknameEndpointTimeoutAsCommunicationError() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(request -> {
+                    throw new SocketTimeoutException("sensitive timeout detail");
+                });
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.COMMUNICATION_ERROR));
+        fixture.server().verify();
+    }
+
+    @Test
+    void rejectsNicknameResponseForDifferentUser() {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.OK)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"userId\":18,\"updatedParticipantCount\":2}"));
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
+                        assertThat(exception.failureType()).isEqualTo(FailureType.INVALID_RESPONSE));
         fixture.server().verify();
     }
 
@@ -233,6 +313,14 @@ class ChatRoomClientTest {
                 org.junit.jupiter.params.provider.Arguments.of(409, FailureType.REQUEST_CONFLICT),
                 org.junit.jupiter.params.provider.Arguments.of(500, FailureType.SERVER_ERROR),
                 org.junit.jupiter.params.provider.Arguments.of(503, FailureType.SERVER_ERROR));
+    }
+
+    private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> nicknameHttpFailures() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of(400, FailureType.CLIENT_ERROR),
+                org.junit.jupiter.params.provider.Arguments.of(401, FailureType.AUTHENTICATION_ERROR),
+                org.junit.jupiter.params.provider.Arguments.of(403, FailureType.AUTHENTICATION_ERROR),
+                org.junit.jupiter.params.provider.Arguments.of(500, FailureType.SERVER_ERROR));
     }
 
     private Fixture fixture(String apiKey) {

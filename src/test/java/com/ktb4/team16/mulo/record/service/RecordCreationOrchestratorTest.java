@@ -10,12 +10,9 @@ import static org.mockito.Mockito.when;
 import com.ktb4.team16.mulo.record.dto.request.RecordCreateRequest;
 import com.ktb4.team16.mulo.record.dto.response.RecordCreateResponse;
 import com.ktb4.team16.mulo.record.entity.Record;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSnapshot;
-import com.ktb4.team16.mulo.record.embedding.RecordEmbeddingSubmitter;
 import com.ktb4.team16.mulo.place.client.KakaoRegionClient;
 import java.math.BigDecimal;
 import java.sql.SQLException;
-import java.time.LocalDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.hibernate.exception.ConstraintViolationException;
@@ -30,36 +27,29 @@ class RecordCreationOrchestratorTest {
             new RecordCreateRequest.Location(BigDecimal.valueOf(37.5), BigDecimal.valueOf(127), null, null),
             new RecordCreateRequest.Music("track-123", "밤편지", "아이유", "album", "external"),
             10, "비 냄새 좋았던 저녁", 11L);
-    private static final RecordEmbeddingSnapshot SNAPSHOT = new RecordEmbeddingSnapshot(
-            1024L, 7L, "records/7/photo.jpg",
-            new RecordEmbeddingSnapshot.Track("밤편지", "아이유", "track-123"),
-            "비 냄새 좋았던 저녁", LocalDateTime.parse("2026-09-30T19:40:00"));
-
     @Mock private RecordService recordService;
     @Mock private RecordCreationPreparationService preparationService;
-    @Mock private RecordEmbeddingSubmitter embeddingSubmitter;
 
     @Test
-    void submitsEmbeddingAfterRecordServiceReturnsAndKeepsCreateResponse() {
+    void createsResponseFromSavedRecordId() {
         KakaoRegionClient.LegalRegion region = new KakaoRegionClient.LegalRegion("code", "name");
         PreparedWeather weather = new PreparedWeather(
                 new BigDecimal("20.0"), Record.WeatherCondition.CLEAR);
         when(preparationService.preparePlace(REQUEST)).thenReturn(region);
         when(preparationService.prepareWeather(REQUEST)).thenReturn(weather);
-        when(recordService.createRecord(7L, REQUEST, region, weather)).thenReturn(SNAPSHOT);
+        when(recordService.createRecord(7L, REQUEST, region, weather)).thenReturn(1024L);
 
         RecordCreateResponse response = orchestrator().createRecord(7L, REQUEST);
 
         assertThat(response).isEqualTo(new RecordCreateResponse(1024L));
-        InOrder order = inOrder(preparationService, recordService, embeddingSubmitter);
+        InOrder order = inOrder(preparationService, recordService);
         order.verify(preparationService).preparePlace(REQUEST);
         order.verify(preparationService).prepareWeather(REQUEST);
         order.verify(recordService).createRecord(7L, REQUEST, region, weather);
-        order.verify(embeddingSubmitter).submit(SNAPSHOT);
     }
 
     @Test
-    void doesNotSubmitEmbeddingWhenRecordTransactionFails() {
+    void propagatesRecordTransactionFailure() {
         KakaoRegionClient.LegalRegion region = new KakaoRegionClient.LegalRegion("code", "name");
         PreparedWeather weather = PreparedWeather.withoutWeather();
         when(preparationService.preparePlace(REQUEST)).thenReturn(region);
@@ -70,7 +60,6 @@ class RecordCreationOrchestratorTest {
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
                 () -> orchestrator().createRecord(7L, REQUEST)))
                 .isInstanceOf(IllegalStateException.class);
-        verifyNoInteractions(embeddingSubmitter);
     }
 
     @Test
@@ -81,7 +70,7 @@ class RecordCreationOrchestratorTest {
         when(preparationService.prepareWeather(REQUEST)).thenReturn(weather);
         when(recordService.createRecord(7L, REQUEST, region, weather))
                 .thenThrow(uniqueConflict("places.uk_places_coordinates"))
-                .thenReturn(SNAPSHOT);
+                .thenReturn(1024L);
 
         assertThat(orchestrator().createRecord(7L, REQUEST))
                 .isEqualTo(new RecordCreateResponse(1024L));
@@ -90,7 +79,6 @@ class RecordCreationOrchestratorTest {
                 .createRecord(7L, REQUEST, region, weather);
         org.mockito.Mockito.verify(preparationService).preparePlace(REQUEST);
         org.mockito.Mockito.verify(preparationService).prepareWeather(REQUEST);
-        org.mockito.Mockito.verify(embeddingSubmitter).submit(SNAPSHOT);
     }
 
     @Test
@@ -107,7 +95,6 @@ class RecordCreationOrchestratorTest {
                 () -> orchestrator().createRecord(7L, REQUEST))).isSameAs(unrelatedUnique);
         org.mockito.Mockito.verify(recordService)
                 .createRecord(7L, REQUEST, region, weather);
-        verifyNoInteractions(embeddingSubmitter);
 
         org.mockito.Mockito.reset(recordService);
         RuntimeException generalDatabaseError = new DataIntegrityViolationException(
@@ -120,11 +107,10 @@ class RecordCreationOrchestratorTest {
                 .isSameAs(generalDatabaseError);
         org.mockito.Mockito.verify(recordService)
                 .createRecord(7L, REQUEST, region, weather);
-        verifyNoInteractions(embeddingSubmitter);
     }
 
     @Test
-    void doesNotRetryMoreThanOnceAndNeverEmbedsAfterFinalFailure() {
+    void doesNotRetryMoreThanOnceAfterUniqueConflict() {
         KakaoRegionClient.LegalRegion region = new KakaoRegionClient.LegalRegion("code", "name");
         PreparedWeather weather = PreparedWeather.withoutWeather();
         when(preparationService.preparePlace(REQUEST)).thenReturn(region);
@@ -141,7 +127,6 @@ class RecordCreationOrchestratorTest {
                 .createRecord(7L, REQUEST, region, weather);
         org.mockito.Mockito.verify(preparationService).preparePlace(REQUEST);
         org.mockito.Mockito.verify(preparationService).prepareWeather(REQUEST);
-        verifyNoInteractions(embeddingSubmitter);
     }
 
     @Test
@@ -152,7 +137,7 @@ class RecordCreationOrchestratorTest {
         assertThat(org.assertj.core.api.Assertions.catchThrowable(
                 () -> orchestrator().createRecord(7L, REQUEST)))
                 .isSameAs(failure);
-        verifyNoInteractions(recordService, embeddingSubmitter);
+        verifyNoInteractions(recordService);
     }
 
     @Test
@@ -161,7 +146,7 @@ class RecordCreationOrchestratorTest {
         PreparedWeather noWeather = PreparedWeather.withoutWeather();
         when(preparationService.preparePlace(REQUEST)).thenReturn(region);
         when(preparationService.prepareWeather(REQUEST)).thenReturn(noWeather);
-        when(recordService.createRecord(7L, REQUEST, region, noWeather)).thenReturn(SNAPSHOT);
+        when(recordService.createRecord(7L, REQUEST, region, noWeather)).thenReturn(1024L);
 
         RecordCreateResponse response = orchestrator().createRecord(7L, REQUEST);
 
@@ -170,7 +155,7 @@ class RecordCreationOrchestratorTest {
     }
 
     private RecordCreationOrchestrator orchestrator() {
-        return new RecordCreationOrchestrator(preparationService, recordService, embeddingSubmitter);
+        return new RecordCreationOrchestrator(preparationService, recordService);
     }
 
     private RuntimeException uniqueConflict(String constraintName) {

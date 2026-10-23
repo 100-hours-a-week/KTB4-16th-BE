@@ -6,6 +6,7 @@ import com.ktb4.team16.mulo.user.dto.response.UserProfileResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdateNicknameResponse;
 import com.ktb4.team16.mulo.user.dto.response.UpdatePasswordResponse;
 import com.ktb4.team16.mulo.user.entity.User;
+import com.ktb4.team16.mulo.user.event.UserNicknameChangedEvent;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
@@ -22,22 +23,26 @@ import org.springframework.dao.DataIntegrityViolationException;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.util.ReflectionTestUtils;
+import org.springframework.context.ApplicationEventPublisher;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.when;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
+import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.verify;
 
 @ExtendWith(MockitoExtension.class)
 class UserProfileServiceTest {
     @Mock UserRepository userRepository;
+    @Mock ApplicationEventPublisher eventPublisher;
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     UserProfileService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserProfileService(userRepository, passwordEncoder);
+        service = new UserProfileService(userRepository, passwordEncoder, eventPublisher);
     }
 
     @Test
@@ -141,6 +146,7 @@ class UserProfileServiceTest {
         assertThat(user.getUpdatedAt()).isAfterOrEqualTo(beforeUpdate);
         assertThat(response.message()).isEqualTo("닉네임이 변경되었습니다.");
         assertThat(response.data().nickname()).isEqualTo("새닉네임");
+        verify(eventPublisher).publishEvent(new UserNicknameChangedEvent(1L));
     }
 
     @Test
@@ -154,6 +160,7 @@ class UserProfileServiceTest {
                         exception -> assertThat(exception.errorCode())
                                 .isEqualTo(ErrorCode.SAME_NICKNAME));
         assertThat(user.getUpdatedAt()).isNull();
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -171,6 +178,7 @@ class UserProfileServiceTest {
                                 .isEqualTo(ErrorCode.NICKNAME_DUPLICATED));
         assertThat(user.getNickname()).isEqualTo("현재닉네임");
         assertThat(user.getUpdatedAt()).isNull();
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
@@ -213,6 +221,7 @@ class UserProfileServiceTest {
 
         assertThatThrownBy(() -> service.updateNickname(1L, "새닉네임"))
                 .isSameAs(databaseException);
+        verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
