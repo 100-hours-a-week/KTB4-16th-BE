@@ -151,6 +151,19 @@ class RecordRepositoryTests {
         assertThat(recordRepository.findActiveRecordVisibleToViewer(owner, active)).isPresent();
     }
 
+    /** Flyway가 인기곡 필터와 곡 ID 순서의 복합 인덱스를 실제 DB에 생성했는지 검증한다. */
+    @Test
+    void popularAggregationIndexIncludesFiltersAndTrackInOrder() {
+        List<String> columns = jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'records'
+                  AND index_name = 'idx_records_popular_place_active_created_track'
+                ORDER BY seq_in_index
+                """, String.class);
+
+        assertThat(columns).containsExactly("place_id", "deleted_at", "created_at", "music_track_id");
+    }
+
     @Test
     void popularTracksUseCountThenLatestRecordThenTrackIdOrder() {
         long userId = insertUser();
