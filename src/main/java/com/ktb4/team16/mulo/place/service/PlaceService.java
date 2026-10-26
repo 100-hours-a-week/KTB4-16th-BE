@@ -46,12 +46,14 @@ public class PlaceService {
                 userId, swLat, swLng, neLat, neLng);
     }
 
+    /** 최근 7일의 전체 곡 집계에서 순위와 전체 기록 건수를 함께 구성한다. */
     @Transactional(readOnly = true)
     public PopularTracksResponseDto getPopularTracks(List<Long> placeIds) {
         LocalDateTime createdAtFrom = LocalDateTime.now().minusDays(7);
-        long recordCount = recordRepository.countActiveRecordsAtPlaces(placeIds, createdAtFrom);
         List<PopularTrackAggregateDto> aggregates = recordRepository.findPopularTrackAggregates(
                 placeIds, createdAtFrom);
+        // LIMIT 없는 전체 집계이므로 각 기록이 포함된 그룹의 건수를 합해 중복 COUNT를 생략한다.
+        long recordCount = aggregates.stream().mapToLong(PopularTrackAggregateDto::count).sum();
 
         List<PopularTracksResponseDto.Music> music = new java.util.ArrayList<>(aggregates.size());
         for (int index = 0; index < aggregates.size(); index++) {
