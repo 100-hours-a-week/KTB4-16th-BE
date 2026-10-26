@@ -190,6 +190,28 @@ class RecordRepositoryTests {
         assertThat(recordRepository.countActiveRecordsAtPlaces(placeIds, createdAtFrom)).isEqualTo(9L);
     }
 
+    /** 캐시 유효기간은 같은 장소·기간의 가장 먼저 만료될 활성 기록을 기준으로 삼는다. */
+    @Test
+    void cacheBoundaryUsesEarliestMatchingActiveRecord() {
+        long userId = insertUser();
+        long includedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.2000000", "-150.2000000");
+        long excludedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.3000000", "-150.3000000");
+        long trackId = insertTrack("boundary");
+        LocalDateTime cutoff = FIRST_DAY.plusDays(3);
+        insertRecord(userId, includedPlace, trackId, cutoff.minusSeconds(1), null);
+        insertRecord(userId, includedPlace, trackId, cutoff, FIRST_DAY.plusDays(4));
+        insertRecord(userId, excludedPlace, trackId, cutoff, null);
+        insertRecord(userId, includedPlace, trackId, cutoff.plusSeconds(2), null);
+        insertRecord(userId, includedPlace, trackId, cutoff.plusSeconds(5), null);
+
+        assertThat(recordRepository.findOldestActiveCreatedAtAtPlaces(List.of(includedPlace), cutoff))
+                .contains(cutoff.plusSeconds(2));
+        assertThat(recordRepository.findOldestActiveCreatedAtAtPlaces(
+                List.of(includedPlace), cutoff.plusDays(30))).isEmpty();
+    }
+
     @Test
     void monthlyAggregationUsesOnlyActiveRecordsInPeriodAndResolvesTiesByLatestRecord() {
         long userId = insertUser();

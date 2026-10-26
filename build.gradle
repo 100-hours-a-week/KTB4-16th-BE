@@ -42,6 +42,10 @@ dependencies {
 
     // Persistence / MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
+    // 명시적으로 켠 인기곡 캐시 프로필에서만 연결하며 Redis 자동 health 구성을 추가하지 않는다.
+    implementation 'io.lettuce:lettuce-core'
+    // 기존 서비스 트랜잭션 바깥에서 선택적으로 집계 결과를 재사용한다.
+    implementation 'org.springframework.boot:spring-boot-starter-aspectj'
     runtimeOnly 'com.mysql:mysql-connector-j'
     runtimeOnly 'org.postgresql:postgresql'
 
