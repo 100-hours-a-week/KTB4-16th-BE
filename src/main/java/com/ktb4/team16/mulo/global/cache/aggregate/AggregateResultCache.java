@@ -16,7 +16,7 @@ import tools.jackson.databind.json.JsonMapper;
 public class AggregateResultCache {
     private static final long POLL_NANOS = Duration.ofMillis(10).toNanos();
     private final AggregateCacheStore store;
-    private final AggregateCacheProperties properties;
+    private final PopularCacheProperties properties;
     private final JsonMapper mapper;
     private final MeterRegistry meters;
     private final Clock clock;
@@ -25,7 +25,7 @@ public class AggregateResultCache {
     private volatile long retryAfterMillis;
 
     /** 캐시 경계의 저장소·설정·직렬화·계측·시계를 주입한다. */
-    public AggregateResultCache(AggregateCacheStore store, AggregateCacheProperties properties,
+    public AggregateResultCache(AggregateCacheStore store, PopularCacheProperties properties,
             JsonMapper mapper, MeterRegistry meters, Clock clock) {
         this.store = store;
         this.properties = properties;

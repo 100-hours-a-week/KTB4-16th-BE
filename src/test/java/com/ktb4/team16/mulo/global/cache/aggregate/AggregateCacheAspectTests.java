@@ -43,9 +43,9 @@ class AggregateCacheAspectTests {
     private final RecordRepository records = mock(RecordRepository.class);
     private final CheckingStore store = new CheckingStore(new TestAggregateCacheStore(clock));
     private final AggregateResultCache cache = new AggregateResultCache(store,
-            new AggregateCacheProperties(true, "127.0.0.1", 16380, "aspect-test",
+            new PopularCacheProperties(true, "aspect-test",
                     Duration.ofSeconds(30), Duration.ofSeconds(10), Duration.ofMillis(500),
-                    Duration.ofSeconds(1), Duration.ofMillis(300), Duration.ofMillis(100)),
+                    Duration.ofSeconds(1)),
             mapper, meters, clock);
     private final AggregateCacheAspect aspect = new AggregateCacheAspect(cache,
             new PopularCacheBoundaryReader(records, clock), mapper, clock, meters);

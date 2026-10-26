@@ -12,7 +12,7 @@ import org.springframework.transaction.annotation.Transactional;
 
 @Service
 @Profile("popular-cache")
-@ConditionalOnProperty(prefix = "mulo.aggregate-cache", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "mulo.popular-cache", name = "enabled", havingValue = "true")
 public class PopularCacheBoundaryReader {
     private final RecordRepository records;
     private final Clock clock;

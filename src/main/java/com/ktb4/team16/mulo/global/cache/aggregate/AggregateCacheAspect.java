@@ -24,7 +24,7 @@ import tools.jackson.databind.json.JsonMapper;
 @Aspect
 @Component
 @Profile("popular-cache")
-@ConditionalOnProperty(prefix = "mulo.aggregate-cache", name = "enabled", havingValue = "true")
+@ConditionalOnProperty(prefix = "mulo.popular-cache", name = "enabled", havingValue = "true")
 @Order(Ordered.HIGHEST_PRECEDENCE + 100)
 public class AggregateCacheAspect {
     private final AggregateResultCache cache;

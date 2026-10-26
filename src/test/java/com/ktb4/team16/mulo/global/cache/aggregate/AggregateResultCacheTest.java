@@ -26,7 +26,7 @@ class AggregateResultCacheTest {
     private final JsonMapper mapper = JsonMapper.builder().build();
     private final SimpleMeterRegistry meters = new SimpleMeterRegistry();
     private final JavaType type = mapper.getTypeFactory().constructCollectionType(List.class, Region.class);
-    private final AggregateCacheProperties properties = enabledProperties(Duration.ofMillis(500));
+    private final PopularCacheProperties properties = enabledProperties(Duration.ofMillis(500));
     private final AggregateResultCache cache = new AggregateResultCache(store, properties, mapper, meters, clock);
 
     /** 캐시가 동일 요청의 DTO 목록을 복원하고 두 번째 DB 실행을 생략하는지 검증한다. */
@@ -240,7 +240,7 @@ class AggregateResultCacheTest {
     @Test
     void disabledCacheNeverUsesRedis() throws Throwable {
         store.unavailable = true;
-        var disabled = new AggregateResultCache(store, new AggregateCacheProperties(), mapper, meters, clock);
+        var disabled = new AggregateResultCache(store, new PopularCacheProperties(), mapper, meters, clock);
         assertThat(disabled.get("regions", "off", type, () -> loaded("기존 경로", Long.MAX_VALUE)))
                 .isEqualTo(List.of(new Region("기존 경로", 3L)));
         assertThat(store.values).isEmpty();
@@ -260,9 +260,9 @@ class AggregateResultCacheTest {
     }
 
     /** 테스트마다 필요한 유한 대기만 조정하고 실제 기본 수명을 유지한다. */
-    private static AggregateCacheProperties enabledProperties(Duration wait) {
-        return new AggregateCacheProperties(true, "127.0.0.1", 16380, "mulo:test", Duration.ofSeconds(30),
-                Duration.ofSeconds(10), wait, Duration.ofSeconds(1), Duration.ofMillis(300), Duration.ofMillis(100));
+    private static PopularCacheProperties enabledProperties(Duration wait) {
+        return new PopularCacheProperties(true, "mulo:test", Duration.ofSeconds(30),
+                Duration.ofSeconds(10), wait, Duration.ofSeconds(1));
     }
 
     record Region(String name, Long count) { }

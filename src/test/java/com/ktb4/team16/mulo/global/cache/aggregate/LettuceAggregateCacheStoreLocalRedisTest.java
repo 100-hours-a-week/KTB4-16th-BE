@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.global.cache.aggregate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ktb4.team16.mulo.global.redis.RedisConfiguration;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -13,6 +14,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.condition.EnabledIfEnvironmentVariable;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import tools.jackson.databind.json.JsonMapper;
 
 /** opt-in 시 compose.redis-local.yml의 전용 Redis만 사용하는 실제 저장소 계약 검증이다. */
@@ -46,6 +48,24 @@ class LettuceAggregateCacheStoreLocalRedisTest {
         }
     }
 
+    /** 인기곡이 꺼져 있어도 공통 연결로 실제 Redis를 사용할 수 있는지 검증한다. */
+    @Test
+    void sharedConnectionWorksWithoutPopularCache() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(RedisConfiguration.class, AggregateCacheConfiguration.class)
+                .withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
+                .withPropertyValues("mulo.redis.host=127.0.0.1", "mulo.redis.port=16382",
+                        "mulo.popular-cache.enabled=false")
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(AggregateResultCache.class);
+                    @SuppressWarnings("unchecked")
+                    StatefulRedisConnection<String, String> shared =
+                            context.getBean("redisConnection", StatefulRedisConnection.class);
+                    assertThat(shared.sync().ping()).isEqualTo("PONG");
+                    assertThat(context.getBean("redisConnection")).isSameAs(shared);
+                });
+    }
+
     /** 실제 NX와 Lua 토큰 비교가 다른 소유자의 잠금을 지우지 않는지 검증한다. */
     @Test
     void lockIsConditionalAndReleasedOnlyByItsOwner() {
@@ -72,9 +92,9 @@ class LettuceAggregateCacheStoreLocalRedisTest {
     @Test
     void realRedisCachesUntilSuccessfulInvalidation() throws Throwable {
         var mapper = JsonMapper.builder().build();
-        var properties = new AggregateCacheProperties(true, "127.0.0.1", 16382, namespace,
+        var properties = new PopularCacheProperties(true, namespace,
                 Duration.ofSeconds(30), Duration.ofSeconds(10), Duration.ofMillis(500),
-                Duration.ofSeconds(1), Duration.ofMillis(300), Duration.ofMillis(100));
+                Duration.ofSeconds(1));
         var cache = new AggregateResultCache(store, properties, mapper,
                 new SimpleMeterRegistry(), Clock.systemUTC());
         var type = mapper.getTypeFactory().constructType(Integer.class);

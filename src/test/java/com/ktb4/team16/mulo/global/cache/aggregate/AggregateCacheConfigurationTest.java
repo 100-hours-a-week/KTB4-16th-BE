@@ -2,6 +2,8 @@ package com.ktb4.team16.mulo.global.cache.aggregate;
 
 import static org.assertj.core.api.Assertions.assertThat;
 
+import com.ktb4.team16.mulo.global.redis.RedisConfiguration;
+import com.ktb4.team16.mulo.global.redis.RedisConnectionProperties;
 import io.lettuce.core.RedisClient;
 import io.micrometer.core.instrument.MeterRegistry;
 import io.micrometer.core.instrument.simple.SimpleMeterRegistry;
@@ -12,37 +14,45 @@ import tools.jackson.databind.json.JsonMapper;
 
 class AggregateCacheConfigurationTest {
 
-    /** 기본 실행에서 캐시와 Redis 클라이언트 자체가 등록되지 않는지 검증한다. */
+    /** 기본 실행에서 인기곡 캐시와 실제 Redis 자원이 생성되지 않는지 검증한다. */
     @Test
-    void defaultContextDoesNotCreateCacheOrRedisClient() {
-        runner().run(context -> assertThat(context)
-                .doesNotHaveBean(AggregateResultCache.class).doesNotHaveBean(RedisClient.class));
+    void defaultContextDoesNotCreateCacheOrOpenRedisResources() {
+        runner().run(context -> {
+            assertThat(context).doesNotHaveBean(AggregateResultCache.class);
+            assertThat(context.getBeanFactory().containsSingleton("redisClient")).isFalse();
+            assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
+        });
     }
 
     /** enabled만 설정해 일반 프로필의 Redis 연결이 생기지 않는지 검증한다. */
     @Test
     void enabledFlagWithoutCacheProfileDoesNotCreateCache() {
-        runner().withPropertyValues("mulo.aggregate-cache.enabled=true")
-                .run(context -> assertThat(context).doesNotHaveBean(AggregateResultCache.class)
-                        .doesNotHaveBean(RedisClient.class));
+        runner().withPropertyValues("mulo.popular-cache.enabled=true")
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(AggregateResultCache.class);
+                    assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
+                });
     }
 
     /** 실험 프로필만으로는 명시적 enabled 요구를 건너뛰지 않는지 검증한다. */
     @Test
     void cacheProfileWithoutEnabledFlagDoesNotCreateCache() {
         runner().withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
-                .run(context -> assertThat(context).doesNotHaveBean(AggregateResultCache.class)
-                        .doesNotHaveBean(RedisClient.class));
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(AggregateResultCache.class);
+                    assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
+                });
     }
 
     /** 두 조건이 맞으면 캐시를 등록하되 첫 요청 전에는 외부 연결을 열지 않는지 검증한다. */
     @Test
     void bothConditionsCreateCacheWithoutOpeningRedisConnectionAtStartup() {
         runner().withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
-                .withPropertyValues("mulo.aggregate-cache.enabled=true")
+                .withPropertyValues("mulo.popular-cache.enabled=true")
                 .run(context -> {
-                    assertThat(context).hasSingleBean(AggregateResultCache.class).hasSingleBean(RedisClient.class);
-                    assertThat(context.getBeanFactory().containsSingleton("aggregateRedisConnection")).isFalse();
+                    assertThat(context).hasSingleBean(AggregateResultCache.class);
+                    assertThat(context.getBeanFactory().containsSingleton("redisClient")).isFalse();
+                    assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
                 });
     }
 
@@ -50,20 +60,46 @@ class AggregateCacheConfigurationTest {
     @Test
     void enabledAndCustomTimeoutBindToImmutableProperties() {
         runner().withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
-                .withPropertyValues("mulo.aggregate-cache.enabled=true", "mulo.aggregate-cache.port=16381",
-                        "mulo.aggregate-cache.namespace=mulo:binding-test", "mulo.aggregate-cache.ttl=17s")
+                .withPropertyValues("mulo.popular-cache.enabled=true", "mulo.redis.port=16381", "mulo.redis.connect-timeout=750ms",
+                        "mulo.popular-cache.namespace=mulo:binding-test", "mulo.popular-cache.ttl=17s")
                 .run(context -> {
-                    AggregateCacheProperties properties = context.getBean(AggregateCacheProperties.class);
+                    PopularCacheProperties properties = context.getBean(PopularCacheProperties.class);
                     assertThat(properties.enabled()).isTrue();
-                    assertThat(properties.port()).isEqualTo(16381);
+                    RedisConnectionProperties connection = context.getBean(RedisConnectionProperties.class);
+                    assertThat(connection.port()).isEqualTo(16381);
+                    assertThat(context.getBean(RedisClient.class).getOptions().getSocketOptions().getConnectTimeout())
+                            .isEqualTo(Duration.ofMillis(750));
                     assertThat(properties.namespace()).isEqualTo("mulo:binding-test");
                     assertThat(properties.ttl()).isEqualTo(Duration.ofSeconds(17));
                 });
     }
 
+    /** 새 기능 설정으로 캐시가 활성화되어 이전 집계 설정에 의존하지 않는지 검증한다. */
+    @Test
+    void popularFeatureUsesItsOwnEnabledProperty() {
+        runner().withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
+                .withPropertyValues("mulo.popular-cache.enabled=true", "mulo.aggregate-cache.enabled=false")
+                .run(context -> assertThat(context).hasSingleBean(AggregateResultCache.class));
+    }
+
+    /** 인기곡을 꺼도 다른 기능이 공통 Redis 자원을 요청할 수 있고 연결은 지연되는지 검증한다. */
+    @Test
+    void sharedRedisRemainsAvailableWhenPopularCacheIsDisabled() {
+        runner().withPropertyValues("mulo.popular-cache.enabled=false")
+                .run(context -> {
+                    assertThat(context).doesNotHaveBean(AggregateResultCache.class);
+                    assertThat(context.containsBeanDefinition("redisClient")).isTrue();
+                    assertThat(context.containsBeanDefinition("redisConnection")).isTrue();
+                    assertThat(context.getBeanFactory().containsSingleton("redisClient")).isFalse();
+                    assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
+                    assertThat(context.getBean(RedisClient.class)).isNotNull();
+                    assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
+                });
+    }
+
     /** 실제 애플리케이션 외부 자원 없이 설정 경계가 소비하는 빈만 제공한다. */
     private ApplicationContextRunner runner() {
-        return new ApplicationContextRunner().withUserConfiguration(AggregateCacheConfiguration.class)
+        return new ApplicationContextRunner().withUserConfiguration(RedisConfiguration.class, AggregateCacheConfiguration.class)
                 .withBean(JsonMapper.class, () -> JsonMapper.builder().build())
                 .withBean(MeterRegistry.class, SimpleMeterRegistry::new);
     }

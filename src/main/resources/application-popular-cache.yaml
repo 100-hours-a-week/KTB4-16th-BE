@@ -1,13 +1,9 @@
 # 로컬 인기곡 캐시를 명시적으로 켤 때만 사용한다. 일반 실행의 기본값은 off다.
 mulo:
-  aggregate-cache:
-    enabled: ${MULO_AGGREGATE_CACHE_ENABLED:false}
-    host: ${MULO_AGGREGATE_CACHE_HOST:127.0.0.1}
-    port: ${MULO_AGGREGATE_CACHE_PORT:16382}
-    namespace: ${MULO_AGGREGATE_CACHE_NAMESPACE:mulo:popular-cache-local}
-    ttl: ${MULO_AGGREGATE_CACHE_TTL:30s}
+  popular-cache:
+    enabled: ${MULO_POPULAR_CACHE_ENABLED:false}
+    namespace: ${MULO_POPULAR_CACHE_NAMESPACE:mulo:popular-cache-local}
+    ttl: ${MULO_POPULAR_CACHE_TTL:30s}
     lock-ttl: 10s
     wait-timeout: 500ms
     retry-backoff: 1s
-    connect-timeout: 300ms
-    command-timeout: 100ms
