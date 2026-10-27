@@ -1,18 +1,18 @@
-# 로컬 인기곡 Redis 캐시
+# 인기곡 Redis 캐시
 
 관련 이슈: [wiki #299](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/299)
 
 ## 범위
 
-기존 인기곡 API에서 동일한 장소 집합의 결과를 Redis에 저장하는 로컬 opt-in 기능이다. 사용자별 지역 통계·대화·알림·Pub/Sub는 포함하지 않는다. SQL COUNT 제거와 V12 인덱스는 #157로 최신 develop에 이미 반영되어 있다. 이 PR의 PlaceService와 migration은 최신 develop과 동일하며, Redis 캐시와 설정 분리만 변경한다.
+기존 인기곡 API에서 동일한 장소 집합의 결과를 Redis에 저장하는 opt-in 기능이다. 별도 캐시 프로필 없이 활성화 환경변수 하나로 켜고 끄며 기본값은 off다. 사용자별 지역 통계·대화·알림·Pub/Sub는 포함하지 않는다. SQL COUNT 제거와 V12 인덱스는 #157로 최신 develop에 이미 반영되어 있다. 이 PR의 PlaceService와 migration은 최신 develop과 동일하며, Redis 캐시와 설정 분리만 변경한다.
 
-활성화한 경우에만 서비스 바깥 aspect가 장소 ID를 정렬·중복 제거해 키를 만든다. hit이면 DTO를 복원하고 miss이면 원래 서비스를 실행한 뒤 결과를 저장한다. 사용자 ID는 인기곡 키에 포함하지 않는다. 일부 장소만 겹치는 다른 조합은 다른 키다.
+MULO_POPULAR_CACHE_ENABLED=true로 활성화한 경우에만 서비스 바깥 aspect가 장소 ID를 정렬·중복 제거해 키를 만든다. hit이면 DTO를 복원하고 miss이면 원래 서비스를 실행한 뒤 결과를 저장한다. 사용자 ID는 인기곡 키에 포함하지 않는다. 일부 장소만 겹치는 다른 조합은 다른 키다.
 
 ## 공통 접속과 기능별 정책
 
-RedisConfiguration / RedisConnectionProperties(mulo.redis)는 REDIS_HOST·REDIS_PORT와 연결 300ms·명령 100ms 제한을 관리한다. 지연 클라이언트와 연결은 인기곡 프로필·활성화 조건에 묶이지 않으므로 다른 기능도 요청할 수 있다. 기본 기동은 실제 Redis 연결 없이 가능하다. 공유 연결을 쓰는 소비자는 연결을 임의로 닫거나 연결 상태를 바꾸는 명령을 사용하지 않도록 별도 검토가 필요하다.
+RedisConfiguration / RedisConnectionProperties(mulo.redis)는 REDIS_HOST·REDIS_PORT와 연결 300ms·명령 100ms 제한을 관리한다. 지연 클라이언트와 연결은 인기곡 활성화 조건에 묶이지 않으므로 다른 기능도 요청할 수 있다. 기본 기동은 실제 Redis 연결 없이 가능하다. 공유 연결을 쓰는 소비자는 연결을 임의로 닫거나 연결 상태를 바꾸는 명령을 사용하지 않도록 별도 검토가 필요하다.
 
-PopularCacheProperties(mulo.popular-cache)는 인기곡 enabled·namespace·TTL·잠금·대기·재시도 정책만 관리한다. 이전 MULO_AGGREGATE_CACHE_* 이름은 새 로컬 설정으로 교체했으며 alias는 제공하지 않는다. 기존 캐시 키 값과 메트릭 이름, 전체 세대 무효화 로직은 유지했다.
+PopularCacheProperties(mulo.popular-cache)는 인기곡 enabled·namespace·TTL·잠금·대기·재시도 정책만 관리한다. 이 정책은 기존 application.yaml의 mulo.popular-cache 아래에 통합했다. 별도 application-popular-cache.yaml과 @Profile("popular-cache") 조건은 제거했다. 이전 MULO_AGGREGATE_CACHE_* 이름은 새 로컬 설정으로 교체했으며 alias는 제공하지 않는다. 기존 캐시 키 값과 메트릭 이름, 전체 세대 무효화 로직은 유지했다.
 
 기능별 설정을 둔다고 Redis 서버를 기능마다 추가하는 것은 아니다. 다른 캐시가 생기면 공통 접속을 재사용하고 필요한 TTL·키·무효화 정책만 해당 기능에 맞게 구성한다. 현재 다른 실제 캐시 기능을 구현한 것은 아니다. 캐시와 세션·분산 상태의 메모리 퇴출 요구가 다르면 Redis 인스턴스를 분리하는 문제는 별도로 판단해야 한다.
 
@@ -22,12 +22,12 @@ PopularCacheProperties(mulo.popular-cache)는 인기곡 enabled·namespace·TTL�
 docker compose -f compose.redis-local.yml up -d --wait
 
 # 신뢰할 수 있는 .env를 먼저 셸에 로드한 뒤 실행한다.
-SPRING_PROFILES_ACTIVE=local,popular-cache \
+SPRING_PROFILES_ACTIVE=local \
 MULO_POPULAR_CACHE_ENABLED=true \
 ./gradlew bootRun
 ```
 
-Gradle은 .env를 자동 로드하지 않는다. DB 연결은 기존 로컬 환경을 따르므로 대상 DB를 확인한다. 자동 DB 초기화 명령은 없다. 일반 실행에서도 공통 Redis 빈 정의는 등록하지만 클라이언트·연결은 실제 소비자가 요청할 때만 생성한다. 인기곡 캐시는 popular-cache 프로필과 mulo.popular-cache.enabled=true가 모두 있어야 동작한다.
+Gradle은 .env를 자동 로드하지 않는다. DB 연결은 기존 로컬 환경을 따르므로 대상 DB를 확인한다. 자동 DB 초기화 명령은 없다. 일반 실행에서도 공통 Redis 빈 정의는 등록하지만 클라이언트·연결은 실제 소비자가 요청할 때만 생성한다. 인기곡 캐시는 mulo.popular-cache.enabled=true만 설정하면 동작한다. 별도 프로필을 추가하거나 기존 배포 프로필을 바꿀 필요가 없다. local 프로필은 로컬 HTTP 개발용 보안 설정이므로 배포 환경에 그대로 추가하지 않는다.
 
 | 환경변수 | 기본값 |
 |---|---|
@@ -36,8 +36,35 @@ Gradle은 .env를 자동 로드하지 않는다. DB 연결은 기존 로컬 환�
 | REDIS_PORT | 16382 |
 | MULO_POPULAR_CACHE_NAMESPACE | mulo:popular-cache-local |
 | MULO_POPULAR_CACHE_TTL | 30s |
+| MULO_REDIS_COMMANDTIMEOUT | 100ms |
 
 Compose는 loopback 16382에만 노출하며 1CPU/512MiB, maxmemory 256MiB/allkeys-lru, 영구 볼륨 없음으로 구성한다. 운영용 인증·TLS·외부 접속 설정은 제공하지 않는다. 같은 환경의 동일 백엔드 인스턴스들은 namespace를 공유한다. 다른 환경·별도 데이터 DB·독립 기능은 namespace를 구분한다. 종료는 `docker compose -f compose.redis-local.yml stop`이다.
+
+## 인프라 전달 설정
+
+기존 DB·JWT와 배포 프로필을 유지하고 아래 값을 실제 백엔드 실행 프로세스·컨테이너에 주입한다. `<...>`는 실제 값으로 교체한다. 캐시 때문에 SPRING_PROFILES_ACTIVE를 새로 설정하거나 popular-cache를 추가할 필요는 없다.
+
+```dotenv
+# Redis 내부 접속 주소와 포트
+REDIS_HOST=<Redis 내부 주소>
+REDIS_PORT=<Redis 포트>
+
+# 인기곡 캐시 활성화: false 또는 미설정이면 기존 DB 경로
+MULO_POPULAR_CACHE_ENABLED=true
+
+# 환경별 구분값, 같은 환경의 백엔드들은 동일하게 설정
+MULO_POPULAR_CACHE_NAMESPACE=mulo:popular-cache:<환경명>
+
+# 캐시 보관 상한: 배포 검증 초기안 1분
+MULO_POPULAR_CACHE_TTL=60s
+
+# Redis 명령 제한시간: 부하 비교에서 사용한 검증용 1초
+MULO_REDIS_COMMANDTIMEOUT=1s
+```
+
+기본 TTL30초·명령100ms는 변경하지 않았다. 후속 TTL 비교의 100ms 조건에서 RedisCommandTimeoutException이 관찰됐고 최종 비교는 1초를 임시 주입했다. 60초는 이전 버전 키의 보관 비용과 재사용을 고려한 초기안이며, 1초 제한시간도 운영 확정값은 아니다. 실제 서버에서 쓰기·조회가 섞인 조건으로 확인해야 한다. 이 PR 설정 단순화로 기존 부하 수치를 새로 측정한 것은 아니다.
+
+인프라에는 Redis 내부 주소/포트·백엔드 접근 가능 여부, 인증/ACL·TLS 필요 여부, 단일/Sentinel/Cluster 구성, 메모리 한도·퇴출 정책·공유 서비스, 쓰기 가능한 접속 대상인지 확인한다. 현재 클라이언트는 인증·TLS·Sentinel·Cluster를 구성하지 않으므로 필요하면 연결 코드를 보완해야 한다. REDIS_PASSWORD 등을 임의로 추가해도 이 커스텀 클라이언트에 자동 적용되지 않는다. GET뿐 아니라 캐시 저장·버전 갱신·잠금에 SET/NX/PX와 Lua/EVAL 및 DEL 등 사용 권한이 필요하다.
 
 ## 만료·무효화·장애 동작
 

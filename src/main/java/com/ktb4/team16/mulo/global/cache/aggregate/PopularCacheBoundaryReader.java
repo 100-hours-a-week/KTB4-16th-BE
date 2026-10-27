@@ -6,12 +6,10 @@ import java.time.LocalDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 @Service
-@Profile("popular-cache")
 @ConditionalOnProperty(prefix = "mulo.popular-cache", name = "enabled", havingValue = "true")
 public class PopularCacheBoundaryReader {
     private final RecordRepository records;

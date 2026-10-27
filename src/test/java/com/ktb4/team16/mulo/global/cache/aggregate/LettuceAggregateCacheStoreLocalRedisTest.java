@@ -53,7 +53,6 @@ class LettuceAggregateCacheStoreLocalRedisTest {
     void sharedConnectionWorksWithoutPopularCache() {
         new ApplicationContextRunner()
                 .withUserConfiguration(RedisConfiguration.class, AggregateCacheConfiguration.class)
-                .withInitializer(context -> context.getEnvironment().setActiveProfiles("popular-cache"))
                 .withPropertyValues("mulo.redis.host=127.0.0.1", "mulo.redis.port=16382",
                         "mulo.popular-cache.enabled=false")
                 .run(context -> {

@@ -11,7 +11,6 @@ import org.aspectj.lang.ProceedingJoinPoint;
 import org.aspectj.lang.annotation.Around;
 import org.aspectj.lang.annotation.Aspect;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.context.annotation.Profile;
 import org.springframework.core.Ordered;
 import org.springframework.core.annotation.Order;
 import org.springframework.stereotype.Component;
@@ -23,7 +22,6 @@ import tools.jackson.databind.json.JsonMapper;
 /** 기존 서비스 경계를 보존하며 선택적으로 캐시를 적용하는 인기곡 전용 aspect다. */
 @Aspect
 @Component
-@Profile("popular-cache")
 @ConditionalOnProperty(prefix = "mulo.popular-cache", name = "enabled", havingValue = "true")
 @Order(Ordered.HIGHEST_PRECEDENCE + 100)
 public class AggregateCacheAspect {

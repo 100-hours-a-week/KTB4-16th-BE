@@ -85,6 +85,14 @@ mulo:
     port: ${REDIS_PORT:16382}
     connect-timeout: 300ms
     command-timeout: 100ms
+  # 별도 프로필 없이 활성화 값으로 인기곡 캐시를 선택한다. 기본 실행은 off다.
+  popular-cache:
+    enabled: ${MULO_POPULAR_CACHE_ENABLED:false}
+    namespace: ${MULO_POPULAR_CACHE_NAMESPACE:mulo:popular-cache-local}
+    ttl: ${MULO_POPULAR_CACHE_TTL:30s}
+    lock-ttl: 10s
+    wait-timeout: 500ms
+    retry-backoff: 1s
   ai-db:
     enabled: ${MULO_AI_DB_ENABLED:false}
     url: ${MULO_AI_DB_URL:}

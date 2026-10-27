@@ -8,12 +8,10 @@ import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
-import org.springframework.context.annotation.Profile;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 공통 Redis 자원을 소비하되 인기곡 프로필과 활성화 설정이 모두 있을 때만 캐시를 등록한다. */
+/** 공통 Redis 자원을 소비하되 인기곡 활성화 설정이 true일 때만 캐시를 등록한다. */
 @Configuration(proxyBeanMethods = false)
-@Profile("popular-cache")
 @ConditionalOnProperty(prefix = "mulo.popular-cache", name = "enabled", havingValue = "true")
 @EnableConfigurationProperties(PopularCacheProperties.class)
 public class AggregateCacheConfiguration {

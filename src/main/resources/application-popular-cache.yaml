@@ -1,9 +1,0 @@
-# 로컬 인기곡 캐시를 명시적으로 켤 때만 사용한다. 일반 실행의 기본값은 off다.
-mulo:
-  popular-cache:
-    enabled: ${MULO_POPULAR_CACHE_ENABLED:false}
-    namespace: ${MULO_POPULAR_CACHE_NAMESPACE:mulo:popular-cache-local}
-    ttl: ${MULO_POPULAR_CACHE_TTL:30s}
-    lock-ttl: 10s
-    wait-timeout: 500ms
-    retry-backoff: 1s
