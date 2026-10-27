@@ -265,6 +265,19 @@ public interface RecordRepository extends JpaRepository<Record, Long> {
             @Param("createdAtFrom") LocalDateTime createdAtFrom
     );
 
+    /** 인기곡 캐시 miss 때 다음 7일 경계에 도달할 가장 오래된 활성 기록을 찾는다. */
+    @Query("""
+        SELECT MIN(r.createdAt)
+        FROM Record r
+        WHERE r.place.placeId IN :placeIds
+            AND r.deletedAt IS NULL
+            AND r.createdAt >= :createdAtFrom
+        """)
+    Optional<LocalDateTime> findOldestActiveCreatedAtAtPlaces(
+            @Param("placeIds") List<Long> placeIds,
+            @Param("createdAtFrom") LocalDateTime createdAtFrom
+    );
+
     @Query("""
         SELECT new com.ktb4.team16.mulo.place.dto.MyPlaceMarkerResponse(
             p.placeId, p.legalDongName, COUNT(r), p.latitude, p.longitude
