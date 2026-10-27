@@ -46,7 +46,10 @@ class FriendMysqlIntegrationTest {
 
     /** 테스트가 남긴 관계와 사용자만 외래 키 순서에 맞춰 정리한다. */
     @AfterEach
-    void cleanUp() {
+    void cleanUp() throws InterruptedException {
+        for (Long userId : createdUserIds) {
+            awaitNoPendingOutboxEvents(userId);
+        }
         for (Long userId : createdUserIds) {
             jdbcTemplate.update("""
                     DELETE FROM outbox_events
@@ -89,8 +92,8 @@ class FriendMysqlIntegrationTest {
                 .filter(SendFriendRequestResult.BecameFriends.class::isInstance)
                 .map(SendFriendRequestResult.BecameFriends.class::cast)
                 .findFirst().orElseThrow().friendshipId();
-        Map<String, Object> requestEvent = outboxEvent("FRIEND_REQUEST", requestId);
-        Map<String, Object> acceptedEvent = outboxEvent("FRIEND_ACCEPTED", friendshipId);
+        Map<String, Object> requestEvent = awaitTerminalOutboxEvent("FRIEND_REQUEST", requestId);
+        Map<String, Object> acceptedEvent = awaitTerminalOutboxEvent("FRIEND_ACCEPTED", friendshipId);
         for (Map<String, Object> event : List.of(requestEvent, acceptedEvent)) {
             assertThat(event)
                     .containsEntry("status", "COMPLETED")
@@ -254,6 +257,41 @@ class FriendMysqlIntegrationTest {
                 FROM outbox_events
                 WHERE event_type = ? AND aggregate_id = ?
                 """, eventType, aggregateId);
+    }
+
+    /** 실제 DB 상태가 종료 상태가 될 때까지 기다리고 기존 상태 assertion에 결과를 전달한다. */
+    private Map<String, Object> awaitTerminalOutboxEvent(String eventType, Long aggregateId)
+            throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        Map<String, Object> event;
+        do {
+            event = outboxEvent(eventType, aggregateId);
+            if (!"PENDING".equals(event.get("status"))) {
+                return event;
+            }
+            TimeUnit.MILLISECONDS.sleep(25);
+        } while (System.nanoTime() < deadline);
+        return event;
+    }
+
+    /** 해당 테스트 사용자의 Worker 처리가 끝난 뒤에만 FK 대상 행을 정리한다. */
+    private void awaitNoPendingOutboxEvents(Long userId) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        int pending;
+        do {
+            pending = jdbcTemplate.queryForObject("""
+                    SELECT COUNT(*) FROM outbox_events
+                    WHERE status = 'PENDING'
+                        AND event_type IN ('FRIEND_REQUEST', 'FRIEND_ACCEPTED')
+                        AND JSON_CONTAINS(payload, JSON_ARRAY(?), '$.recipientUserIds')
+                    """, Integer.class, userId);
+            if (pending == 0) {
+                return;
+            }
+            TimeUnit.MILLISECONDS.sleep(25);
+        } while (System.nanoTime() < deadline);
+        assertThat(pending).as("테스트 사용자 %s의 Outbox 처리가 끝나야 데이터를 정리할 수 있다", userId)
+                .isZero();
     }
 
     /** 테스트 명령이 반환하는 결과를 공통 형태로 받는다. */
