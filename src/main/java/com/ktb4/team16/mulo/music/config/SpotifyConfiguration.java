@@ -5,6 +5,6 @@ import org.springframework.context.annotation.Configuration;
 
 // Spotify 설정 레코드를 Spring Boot의 생성자 바인딩 방식으로 등록한다.
 @Configuration(proxyBeanMethods = false)
-@EnableConfigurationProperties(SpotifyProperties.class)
+@EnableConfigurationProperties({SpotifyProperties.class, MusicSearchRateLimitProperties.class})
 public class SpotifyConfiguration {
 }

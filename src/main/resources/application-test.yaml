@@ -1,0 +1,3 @@
+mulo:
+  music-search-rate-limit:
+    namespace: ${MULO_MUSIC_SEARCH_RATE_LIMIT_NAMESPACE:mulo:music-search-rate-limit:test}

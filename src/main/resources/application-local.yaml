@@ -1,4 +1,6 @@
 mulo:
+  music-search-rate-limit:
+    namespace: ${MULO_MUSIC_SEARCH_RATE_LIMIT_NAMESPACE:mulo:music-search-rate-limit:local}
   security:
     allowed-origins:
       - ${FRONTEND_ORIGIN:http://localhost:3000}
