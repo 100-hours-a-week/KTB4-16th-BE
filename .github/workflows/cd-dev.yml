@@ -95,6 +95,8 @@ jobs:
           # 앱이 실제 쓰는 Asia/Seoul로 맞춰서 이 변환 단계의 시간대 불일치를 없앤다.
           JAVA_TOOL_OPTIONS=-Duser.timezone=Asia/Seoul
           MULO_MUSIC_SEARCH_RATE_LIMIT_NAMESPACE=mulo:music-search-rate-limit:dev
+          REDIS_HOST=redis
+          REDIS_PORT=6379
           ENVEOF
 
       # 4. env 파일을 develop VM으로 전송하고, 새 이미지를 pull해서 backend 컨테이너만 교체한다.
