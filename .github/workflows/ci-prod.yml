@@ -36,6 +36,25 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      # 실제 Redis로 검증하는 테스트용. 테스트마다 포트가 고정돼 있어서 서비스를 둘로 나눈다.
+      redis-popular-cache:
+        image: redis:7-alpine
+        ports:
+          - 16382:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis-music-search-rate-limit:
+        image: redis:7-alpine
+        ports:
+          - 16383:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
 
     permissions:
       contents: read
@@ -108,6 +127,9 @@ jobs:
           SPOTIFY_CLIENT_ID: ci-test
           SPOTIFY_CLIENT_SECRET: ci-test
           AI_INTERNAL_TOKEN: ci-test-token
+          # 실제 Redis가 필요한 테스트를 켠다. 위 services의 Redis(16382, 16383)에 붙는다.
+          MULO_POPULAR_REDIS_TEST: "true"
+          MULO_SPOTIFY_RATE_LIMIT_REDIS_TEST: "true"
           # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
         run: ./gradlew test jacocoTestReport jacocoTestCoverageVerification --rerun-tasks
@@ -156,6 +178,25 @@ jobs:
           --health-interval=5s
           --health-timeout=5s
           --health-retries=20
+      # 실제 Redis로 검증하는 테스트용. 테스트마다 포트가 고정돼 있어서 서비스를 둘로 나눈다.
+      redis-popular-cache:
+        image: redis:7-alpine
+        ports:
+          - 16382:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
+      redis-music-search-rate-limit:
+        image: redis:7-alpine
+        ports:
+          - 16383:6379
+        options: >-
+          --health-cmd="redis-cli ping"
+          --health-interval=5s
+          --health-timeout=3s
+          --health-retries=10
     concurrency:
       group: backend-main-release
       cancel-in-progress: false
@@ -230,6 +271,9 @@ jobs:
           SPOTIFY_CLIENT_ID: ci-test
           SPOTIFY_CLIENT_SECRET: ci-test
           AI_INTERNAL_TOKEN: ci-test-token
+          # 실제 Redis가 필요한 테스트를 켠다. 위 services의 Redis(16382, 16383)에 붙는다.
+          MULO_POPULAR_REDIS_TEST: "true"
+          MULO_SPOTIFY_RATE_LIMIT_REDIS_TEST: "true"
           # 앱 JVM은 운영과 같은 Asia/Seoul로 돌린다. 러너 기본 시간대(UTC)면 시간 기준 테스트가 실패한다.
           JAVA_TOOL_OPTIONS: -Duser.timezone=Asia/Seoul
         run: ./gradlew test jacocoTestReport jacocoTestCoverageVerification --rerun-tasks
