@@ -39,14 +39,15 @@ class PhotoRecommendationControllerTest {
 
     @Test
     void returnsRecommendations() throws Exception {
-        when(service.recommend(7L, 123L)).thenReturn(List.of(
-                new PhotoRecommendationResponse.Track("id", "title", "artist", "album", "url")));
+        when(service.recommend(7L, 123L)).thenReturn(new PhotoRecommendationService.RecommendationResult(44L, List.of(
+                new PhotoRecommendationResponse.Track("id", "title", "artist", "album", "url"))));
 
         mvc.perform(post("/api/recommendations/photo")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"uploadId\":123}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("사진 기반 음악 추천 성공"))
+                .andExpect(jsonPath("$.recommendationId").value(44))
                 .andExpect(jsonPath("$.data[0].externalTrackId").value("id"));
 
         verify(service).recommend(7L, 123L);

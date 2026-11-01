@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AiRecommendationResultRepository extends JpaRepository<AiRecommendationResult, Long> {
     Optional<AiRecommendationResult> findByIdAndUserUserId(Long id, Long userId);
+
+    long countByUserUserId(Long userId);
 }

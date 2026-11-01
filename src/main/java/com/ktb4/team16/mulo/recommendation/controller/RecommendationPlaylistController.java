@@ -29,7 +29,7 @@ public class RecommendationPlaylistController {
     public RecommendationPlaylistResponse getCurrentPlaylist(
             @AuthenticationPrincipal Long userId) {
         return new RecommendationPlaylistResponse(RecommendationMessage.PLAYLIST_RETRIEVED.message(),
-                queryService.getCurrentPlaylist(userId));
+                null, queryService.getCurrentPlaylist(userId));
     }
 
     // 좌표를 검증하고 현재 날씨 기반 추천 플레이리스트 생성을 서비스 계층에 위임한다.
@@ -42,6 +42,6 @@ public class RecommendationPlaylistController {
                 ? RecommendationMessage.PLAYLIST_CREATED : RecommendationMessage.PLAYLIST_RETAINED;
         HttpStatus status = result.replaced() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).body(new RecommendationPlaylistResponse(message.message(),
-                new RecommendationPlaylistData(result.playlist(), result.replaced())));
+                result.recommendationId(), new RecommendationPlaylistData(result.playlist(), result.replaced())));
     }
 }
