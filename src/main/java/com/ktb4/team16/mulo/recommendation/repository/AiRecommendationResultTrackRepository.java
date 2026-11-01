@@ -8,4 +8,6 @@ public interface AiRecommendationResultTrackRepository
         extends JpaRepository<AiRecommendationResultTrack, Long> {
 
     List<AiRecommendationResultTrack> findAllByRecommendationIdOrderByRankAsc(Long recommendationId);
+
+    boolean existsByRecommendationIdAndExternalTrackId(Long recommendationId, String externalTrackId);
 }

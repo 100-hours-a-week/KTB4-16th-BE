@@ -14,6 +14,7 @@ import com.ktb4.team16.mulo.music.exception.MusicSearchInputException;
 import com.ktb4.team16.mulo.music.exception.MusicSearchRateLimitedException;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.exception.AiRecommendationFeedbackException;
 import com.ktb4.team16.mulo.place.exception.InvalidMapBoundsException;
 import com.ktb4.team16.mulo.place.client.KakaoRegionLookupException;
 import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
@@ -276,6 +277,13 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleRecommendationAi(RecommendationAiException exception) {
         return ResponseEntity.status(ErrorCode.AI_SERVICE_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
+    }
+
+    @ExceptionHandler(AiRecommendationFeedbackException.class)
+    public ResponseEntity<ErrorResponse> handleAiRecommendationFeedback(
+            AiRecommendationFeedbackException exception) {
+        ErrorCode errorCode = exception.errorCode();
+        return ResponseEntity.status(errorCode.status()).body(ErrorResponse.of(errorCode));
     }
 
     @ExceptionHandler(MethodArgumentNotValidException.class)

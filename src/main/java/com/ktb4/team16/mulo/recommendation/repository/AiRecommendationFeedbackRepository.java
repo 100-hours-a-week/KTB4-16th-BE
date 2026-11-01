@@ -6,4 +6,6 @@ import org.springframework.data.jpa.repository.JpaRepository;
 
 public interface AiRecommendationFeedbackRepository extends JpaRepository<AiRecommendationFeedback, Long> {
     Optional<AiRecommendationFeedback> findByRecommendationId(Long recommendationId);
+
+    boolean existsByRecommendationId(Long recommendationId);
 }
