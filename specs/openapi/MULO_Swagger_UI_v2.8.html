@@ -2365,6 +2365,28 @@ const spec = {
           }
         ],
         "description": "임시 업로드된 사진을 AI가 분석한다. 추천 성공 시 정확히 5곡을 반환하며, AI 응답이 5곡 미만 또는 초과이면 추천 실패로 처리한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "uploadId": {
+                    "type": "integer",
+                    "format": "int64"
+                  }
+                },
+                "required": [
+                  "uploadId"
+                ]
+              },
+              "example": {
+                "uploadId": 123
+              }
+            }
+          }
+        },
         "responses": {
           "200": {
             "description": "임시 업로드된 사진 분석과 음악 추천 처리가 정상적으로 완료되어 추천 결과를 반환하므로 200.",
@@ -2372,9 +2394,18 @@ const spec = {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "message",
+                    "recommendationId",
+                    "data"
+                  ],
                   "properties": {
                     "message": {
                       "type": "string"
+                    },
+                    "recommendationId": {
+                      "type": "integer",
+                      "format": "int64"
                     },
                     "data": {
                       "type": "array",
@@ -2412,6 +2443,7 @@ const spec = {
                 },
                 "example": {
                   "message": "사진 기반 음악 추천 성공",
+                  "recommendationId": 101,
                   "data": [
                     {
                       "externalTrackId": "6rqhFgbbKwnb9MLmUQDhG6",
@@ -2584,28 +2616,6 @@ const spec = {
                   "code": "AI_SERVICE_ERROR",
                   "message": "AI 추천 서비스를 처리하지 못했습니다."
                 }
-              }
-            }
-          }
-        },
-        "requestBody": {
-          "required": true,
-          "content": {
-            "application/json": {
-              "schema": {
-                "type": "object",
-                "properties": {
-                  "uploadId": {
-                    "type": "integer",
-                    "format": "int64"
-                  }
-                },
-                "required": [
-                  "uploadId"
-                ]
-              },
-              "example": {
-                "uploadId": 123
               }
             }
           }
@@ -5424,7 +5434,7 @@ const spec = {
         ],
         "summary": "현재 추천 플레이리스트 조회",
         "operationId": "getApiRecommendationsPlaylists",
-        "description": "사용자당 현재 추천 플레이리스트 1개. 아직 생성된 플레이리스트가 없으면 playlist=null.\n\n### 미정 정책\n- 필수\n없음\n\n선택\n없음\n\n정책 및 설명\n- 현재 로그인한 사용자의 현재 추천 플레이리스트를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.\n- 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.\n- 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.\n- 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.\n- 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다",
+        "description": "사용자당 현재 추천 플레이리스트 1개. 아직 생성된 플레이리스트가 없으면 playlist=null.\n\n### 미정 정책\n- 필수\n없음\n\n선택\n없음\n\n정책 및 설명\n- 현재 로그인한 사용자의 현재 추천 플레이리스트를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.\n- 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.\n- 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.\n- 조회 DTO의 recommendationId는 null이며 JSON 응답에서는 NON_NULL 직렬화 설정으로 생략된다. playlist.recommendationPlaylistId는 기존 플레이리스트 ID이며 추천 이력 ID로 연결되지 않아 피드백 대상이 아니다.\n- 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.\n- 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다",
         "responses": {
           "200": {
             "description": "리소스가 없는 상태도 현재 추천 상태 조회의 정상 결과이므로 200.\n\n추가 케이스: 현재 추천 플레이리스트가 존재하여 정상 반환하므로 200.",
@@ -5547,7 +5557,7 @@ const spec = {
         ],
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
-        "description": "필수\nlatitude: Double\nlongitude: Double\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 저장하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 정확히 5곡인 정상 추천에 성공한 경우에만 기존 현재 플레이리스트를 교체한다.\n- AI 응답이 degraded이고 tracks가 정확히 5곡이면 기존 현재 플레이리스트를 유지하고 200을 반환한다. tracks가 5곡이 아니면 502 AI_SERVICE_ERROR로 실패 처리한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n\n화면 진입 시 이전 플레이리스트를 조회하지 않는다. 프론트는 화면 세션마다 성공한 새 추천을 최대 3회 허용하고 실패·기존 목록 유지 응답은 차감하지 않는다. 첫 요청의 excludeTrackIds는 빈 배열이며 재추천에서는 이번 세션에 표시한 모든 externalTrackId를 누적한다. 세션 횟수·제외 목록은 프론트 메모리에서 관리하며 서버 세션이나 종료 API를 만들지 않는다.",
+        "description": "필수\nlatitude: Double\nlongitude: Double\nrecommendationAttempt: Integer (1~3)\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 저장하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 정확히 5곡인 정상 추천에 성공한 경우에만 기존 현재 플레이리스트를 교체한다.\n- AI 응답이 degraded이고 tracks가 정확히 5곡이면 기존 현재 플레이리스트를 유지하고 200을 반환한다. tracks가 5곡이 아니면 502 AI_SERVICE_ERROR로 실패 처리한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n\n화면 진입 시 이전 플레이리스트를 조회하지 않는다. 프론트는 화면 세션마다 성공한 새 추천을 최대 3회 허용하고 실패·기존 목록 유지 응답은 차감하지 않는다. 첫 요청의 excludeTrackIds는 빈 배열이며 재추천에서는 이번 세션에 표시한 모든 externalTrackId를 누적한다. 세션 횟수·제외 목록은 프론트 메모리에서 관리하며 서버 세션이나 종료 API를 만들지 않는다.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5556,7 +5566,8 @@ const spec = {
                 "type": "object",
                 "required": [
                   "latitude",
-                  "longitude"
+                  "longitude",
+                  "recommendationAttempt"
                 ],
                 "properties": {
                   "latitude": {
@@ -5572,6 +5583,12 @@ const spec = {
                     "minimum": -180,
                     "maximum": 180,
                     "description": "현재 위치의 경도"
+                  },
+                  "recommendationAttempt": {
+                    "type": "integer",
+                    "minimum": 1,
+                    "maximum": 3,
+                    "description": "현재 플레이리스트 화면 세션에서의 추천 회차. 최초 추천 1, 재추천 2~3."
                   },
                   "excludeTrackIds": {
                     "type": "array",
@@ -5589,6 +5606,7 @@ const spec = {
               "example": {
                 "latitude": 37.5665,
                 "longitude": 126.978,
+                "recommendationAttempt": 1,
                 "excludeTrackIds": []
               }
             }
@@ -5678,9 +5696,18 @@ const spec = {
               "application/json": {
                 "schema": {
                   "type": "object",
+                  "required": [
+                    "message",
+                    "recommendationId",
+                    "data"
+                  ],
                   "properties": {
                     "message": {
                       "type": "string"
+                    },
+                    "recommendationId": {
+                      "type": "integer",
+                      "format": "int64"
                     },
                     "data": {
                       "type": "object",
@@ -5738,6 +5765,7 @@ const spec = {
                 },
                 "example": {
                   "message": "추천 플레이리스트 생성 성공",
+                  "recommendationId": 102,
                   "data": {
                     "playlist": {
                       "recommendationPlaylistId": 71,
@@ -5791,7 +5819,7 @@ const spec = {
             }
           },
           "400": {
-            "description": "추천 컨텍스트 생성을 위한 현재 위치 좌표가 누락되어 요청 검증에 실패했으므로 400.\n\n추가 케이스: latitude 또는 longitude가 유효한 좌표 범위를 만족하지 않으므로 400.",
+            "description": "latitude/longitude/recommendationAttempt가 누락됐거나 recommendationAttempt가 1~3 범위 밖이라 요청 검증에 실패했으므로 400.\n\n추가 케이스: latitude 또는 longitude가 유효한 좌표 범위를 만족하지 않으므로 400.",
             "content": {
               "application/json": {
                 "schema": {
@@ -9679,6 +9707,256 @@ const spec = {
           }
         ],
         "x-implementation-status": "contract-only"
+      }
+    },
+    "/api/ai-recommendations/{recommendationId}/feedback": {
+      "post": {
+        "tags": [
+          "RECOMMEND / 추천"
+        ],
+        "summary": "AI 추천 피드백 제출",
+        "operationId": "postApiAiRecommendationsRecommendationIdFeedback",
+        "description": "로그인한 사용자가 본인 추천 결과에 한 번 피드백을 제출한다.\n\n- PHOTO는 LIKE/DISLIKE 모두 selectedTrackId 없이 제출한다.\n- PLAYLIST + LIKE는 해당 추천 결과에 포함된 곡의 Spotify Track ID를 selectedTrackId로 필수 제출한다.\n- PLAYLIST + DISLIKE는 selectedTrackId 없이 제출한다.\n- 추천 결과당 피드백은 최대 하나다. 피드백 미제출 상태는 행을 만들지 않는다.\n- FE는 정상 결과의 피드백 제출 성공 전 닫기·다음 단계·재추천을 제한한다. Backend는 후속 추천 또는 자물쇠 생성 요청에서 미제출 여부를 강제하지 않는다.",
+        "security": [
+          {
+            "bearerAuth": []
+          }
+        ],
+        "parameters": [
+          {
+            "name": "recommendationId",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer",
+              "format": "int64",
+              "minimum": 1
+            }
+          }
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "feedback"
+                ],
+                "properties": {
+                  "feedback": {
+                    "type": "string",
+                    "enum": [
+                      "LIKE",
+                      "DISLIKE"
+                    ]
+                  },
+                  "selectedTrackId": {
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 22,
+                    "nullable": true,
+                    "description": "공백만으로 구성할 수 없다. PLAYLIST LIKE에서 필수이며 추천 결과에 포함된 Spotify Track ID. 그 외에는 생략하거나 null로 보낸다."
+                  }
+                }
+              },
+              "example": {
+                "feedback": "LIKE",
+                "selectedTrackId": "6rqhFgbbKwnb9MLmUQDhG6"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "피드백을 저장하고 저장된 식별자와 평가를 반환하므로 201.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "required": [
+                    "message",
+                    "data"
+                  ],
+                  "properties": {
+                    "message": {
+                      "type": "string"
+                    },
+                    "data": {
+                      "type": "object",
+                      "required": [
+                        "feedbackId",
+                        "recommendationId",
+                        "feedback"
+                      ],
+                      "properties": {
+                        "feedbackId": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "recommendationId": {
+                          "type": "integer",
+                          "format": "int64"
+                        },
+                        "feedback": {
+                          "type": "string",
+                          "enum": [
+                            "LIKE",
+                            "DISLIKE"
+                          ]
+                        },
+                        "selectedTrackId": {
+                          "type": "string",
+                          "maxLength": 22,
+                          "description": "선택 곡이 없으면 응답 JSON에서 생략된다."
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "message": "추천 피드백을 제출했습니다.",
+                  "data": {
+                    "feedbackId": 501,
+                    "recommendationId": 102,
+                    "feedback": "LIKE",
+                    "selectedTrackId": "6rqhFgbbKwnb9MLmUQDhG6"
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "요청값이 잘못됐거나 추천 유형·평가에 맞지 않는 곡 선택이므로 400 INVALID_INPUT_VALUE.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    },
+                    "errors": {
+                      "type": "array",
+                      "description": "Bean Validation 오류인 경우 제공된다. 서비스 규칙 오류는 이 필드 없이 code와 message만 반환한다.",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "field": {
+                            "type": "string"
+                          },
+                          "code": {
+                            "type": "string"
+                          },
+                          "message": {
+                            "type": "string"
+                          }
+                        }
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "code": "INVALID_INPUT_VALUE",
+                  "message": "입력값을 확인해주세요."
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "유효한 Access Token이 없어 인증할 수 없으므로 401.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "UNAUTHORIZED",
+                  "message": "로그인이 필요합니다."
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "추천 결과가 존재하지만 인증 사용자가 소유하지 않으므로 403 AI_RECOMMENDATION_NOT_OWNED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "AI_RECOMMENDATION_NOT_OWNED",
+                  "message": "해당 추천 결과에 피드백을 제출할 권한이 없습니다."
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "recommendationId에 해당하는 추천 결과가 없어 404 AI_RECOMMENDATION_NOT_FOUND.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "AI_RECOMMENDATION_NOT_FOUND",
+                  "message": "추천 결과를 찾을 수 없습니다."
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "추천 결과에 이미 피드백이 제출되어 409 AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "code": {
+                      "type": "string"
+                    },
+                    "message": {
+                      "type": "string"
+                    }
+                  }
+                },
+                "example": {
+                  "code": "AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED",
+                  "message": "이미 피드백을 제출한 추천 결과입니다."
+                }
+              }
+            }
+          }
+        },
+        "x-implementation-status": "implemented",
+        "x-csrf-required": true
       }
     }
   },
