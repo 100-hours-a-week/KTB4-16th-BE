@@ -3,6 +3,7 @@ package com.ktb4.team16.mulo.recommendation.service;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiGateway;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiClient.PhotoRecommendationAiResponse;
 import com.ktb4.team16.mulo.recommendation.dto.response.PhotoRecommendationResponse;
+import com.ktb4.team16.mulo.recommendation.entity.AiRecommendationType;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -15,20 +16,26 @@ public class PhotoRecommendationService {
 
     private final UploadService uploadService;
     private final PhotoRecommendationAiGateway aiClient;
+    private final AiRecommendationResultWriter resultWriter;
 
-    public List<PhotoRecommendationResponse.Track> recommend(Long userId, Long uploadId) {
+    public RecommendationResult recommend(Long userId, Long uploadId) {
         String signedUrl = uploadService.createReadSignedUrl(userId, uploadId);
         PhotoRecommendationAiResponse response = aiClient.recommend(signedUrl);
         if (response.degraded() || response.tracks().size() != REQUIRED_TRACKS) {
             throw new com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException();
         }
-        return response.tracks().stream()
+        List<PhotoRecommendationResponse.Track> tracks = response.tracks().stream()
                 .peek(PhotoRecommendationService::validateTrack)
                 .map(track -> new PhotoRecommendationResponse.Track(
                         track.externalTrackId(), track.title(), track.artistName(),
                         track.albumImageUrl(), track.externalUrl()))
                 .toList();
+        Long recommendationId = resultWriter.save(userId, AiRecommendationType.PHOTO, null,
+                tracks.stream().map(PhotoRecommendationResponse.Track::externalTrackId).toList());
+        return new RecommendationResult(recommendationId, tracks);
     }
+
+    public record RecommendationResult(Long recommendationId, List<PhotoRecommendationResponse.Track> tracks) { }
 
     private static void validateTrack(PhotoRecommendationAiResponse.Track track) {
         if (track == null || isBlank(track.externalTrackId()) || isBlank(track.title())
