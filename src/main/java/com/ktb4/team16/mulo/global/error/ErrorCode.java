@@ -100,6 +100,9 @@ public enum ErrorCode {
             "음악 정보를 불러올 수 없습니다. 잠시 후 다시 시도해주세요."),
     AI_SERVICE_ERROR(HttpStatus.BAD_GATEWAY,
             "AI 추천 서비스를 처리하지 못했습니다."),
+    AI_RECOMMENDATION_NOT_FOUND(HttpStatus.NOT_FOUND, "추천 결과를 찾을 수 없습니다."),
+    AI_RECOMMENDATION_NOT_OWNED(HttpStatus.FORBIDDEN, "해당 추천 결과에 피드백을 제출할 권한이 없습니다."),
+    AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 피드백을 제출한 추천 결과입니다."),
 
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
