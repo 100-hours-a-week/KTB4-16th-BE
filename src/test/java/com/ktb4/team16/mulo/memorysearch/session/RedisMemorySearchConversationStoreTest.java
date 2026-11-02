@@ -187,6 +187,35 @@ class RedisMemorySearchConversationStoreTest {
         verify(commands, org.mockito.Mockito.times(2)).del(KEY);
     }
 
+    /** 점유권 완료는 문맥과 사용자 잠금 키를 같은 원자적 스크립트에 전달한다. */
+    @Test
+    void completesWithUserLockAndConversationInSameScript() {
+        when(commands.hmget(KEY, "schemaVersion", "turns")).thenReturn(payload("1", "[]"));
+        doReturn(1L).when(commands).eval(anyString(), eq(ScriptOutputType.INTEGER),
+                any(String[].class), any(String[].class));
+        assertThat(store.appendIfOwned(35L, "conversation", "owner-token",
+                new MemorySearchTurn("질문", List.of()))).isTrue();
+        var keys = ArgumentCaptor.forClass(String[].class);
+        var args = ArgumentCaptor.forClass(String[].class);
+        verify(commands).eval(anyString(), eq(ScriptOutputType.INTEGER), keys.capture(), args.capture());
+        assertThat(keys.getValue()).containsExactly(KEY, "mulo:memory-search:{test:u:35}:inflight");
+        assertThat(args.getValue()[3]).isEqualTo("owner-token");
+    }
+
+    /** 문맥이 살아 있어도 만료·교체된 요청의 완료는 실패하고 재시도하지 않는다. */
+    @Test
+    void expiredOwnerCannotCommitAndDoesNotRetry() {
+        when(commands.hmget(KEY, "schemaVersion", "turns")).thenReturn(payload("1", "[]"));
+        doReturn(3L).when(commands).eval(anyString(), eq(ScriptOutputType.INTEGER),
+                any(String[].class), any(String[].class));
+        assertThatThrownBy(() -> store.appendIfOwned(35L, "conversation", "old-token",
+                new MemorySearchTurn("늦은 응답", List.of())))
+                .isInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Memory search request lease is no longer valid");
+        verify(commands).eval(anyString(), eq(ScriptOutputType.INTEGER),
+                any(String[].class), any(String[].class));
+    }
+
     /** HMGET 응답에서 스키마와 문맥 필드를 순서대로 구성한다. */
     private List<KeyValue<String, String>> payload(String schema, String turns) {
         return List.of(KeyValue.just("schemaVersion", schema), KeyValue.just("turns", turns));

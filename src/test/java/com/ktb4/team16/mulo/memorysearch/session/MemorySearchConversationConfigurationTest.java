@@ -4,6 +4,8 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ktb4.team16.mulo.global.redis.RedisConfiguration;
 import com.ktb4.team16.mulo.memorysearch.service.MemorySearchInFlightRegistry;
+import com.ktb4.team16.mulo.memorysearch.service.MemorySearchRequestRegistry;
+import com.ktb4.team16.mulo.memorysearch.service.RedisMemorySearchInFlightRegistry;
 import org.junit.jupiter.api.Test;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import org.springframework.boot.convert.ApplicationConversionService;
@@ -26,7 +28,9 @@ class MemorySearchConversationConfigurationTest {
             assertThat(context).hasSingleBean(MemorySearchConversationStore.class);
             assertThat(context.getBean(MemorySearchConversationStore.class))
                     .isInstanceOf(InMemoryMemorySearchConversationStore.class);
-            assertThat(context).hasSingleBean(MemorySearchInFlightRegistry.class);
+            assertThat(context).hasSingleBean(MemorySearchRequestRegistry.class);
+            assertThat(context.getBean(MemorySearchRequestRegistry.class))
+                    .isInstanceOf(MemorySearchInFlightRegistry.class);
             assertThat(context.getSourceApplicationContext().getBeanFactory()
                     .containsSingleton("redisConnection")).isFalse();
         });
@@ -41,7 +45,9 @@ class MemorySearchConversationConfigurationTest {
                     assertThat(context.getBean(MemorySearchConversationStore.class))
                             .isInstanceOf(RedisMemorySearchConversationStore.class);
                     assertThat(context).doesNotHaveBean(InMemoryMemorySearchConversationStore.class);
-                    assertThat(context).hasSingleBean(MemorySearchInFlightRegistry.class);
+                    assertThat(context).hasSingleBean(MemorySearchRequestRegistry.class);
+                    assertThat(context.getBean(MemorySearchRequestRegistry.class))
+                            .isInstanceOf(RedisMemorySearchInFlightRegistry.class);
                     assertThat(context.getSourceApplicationContext().getBeanFactory()
                             .containsSingleton("redisConnection")).isFalse();
                 });
@@ -58,6 +64,13 @@ class MemorySearchConversationConfigurationTest {
     @Test
     void rejectsUnknownStoreMode() {
         runner.withPropertyValues("memory-search.conversation-store=redsi")
+                .run(context -> assertThat(context).hasFailed());
+    }
+
+    /** Redis 문맥과 요청 잠금을 같은 환경·모드로 구성하고 무기한 잠금을 거절한다. */
+    @Test
+    void rejectsNonPositiveRequestLockTtl() {
+        runner.withPropertyValues("memory-search.conversation-store=redis", "memory-search.request-lock-ttl=0s")
                 .run(context -> assertThat(context).hasFailed());
     }
 }

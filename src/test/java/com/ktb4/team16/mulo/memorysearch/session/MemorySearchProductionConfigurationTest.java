@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ktb4.team16.mulo.global.redis.RedisConfiguration;
 import com.ktb4.team16.mulo.memorysearch.service.MemorySearchInFlightRegistry;
+import com.ktb4.team16.mulo.memorysearch.service.RedisMemorySearchInFlightRegistry;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.CsvSource;
@@ -34,14 +35,14 @@ class MemorySearchProductionConfigurationTest {
                 .hasStackTraceContaining("MEMORY_SEARCH_CONVERSATION_ENVIRONMENT"));
     }
 
-    /** Redis 설정이 갖춰지면 운영 문맥 저장소를 선택하고 연결은 첫 사용까지 미룬다. */
+    /** Redis 설정이 갖춰지면 운영 기본 모드로 문맥과 잠금 구현체를 선택한다. */
     @Test
     void productionSelectsRedisWithoutOpeningConnection() {
         configuredProduction().run(context -> {
             assertThat(context).hasNotFailed();
             assertThat(context).hasSingleBean(RedisMemorySearchConversationStore.class);
+            assertThat(context).hasSingleBean(RedisMemorySearchInFlightRegistry.class);
             assertThat(context).doesNotHaveBean(InMemoryMemorySearchConversationStore.class);
-            assertThat(context).hasSingleBean(MemorySearchInFlightRegistry.class);
             assertThat(context.getBeanFactory().containsSingleton("redisConnection")).isFalse();
         });
     }
@@ -62,7 +63,7 @@ class MemorySearchProductionConfigurationTest {
                         .hasStackTraceContaining(expectedReason));
     }
 
-    /** 로컬 실행은 공통 Redis 없이 인메모리 문맥과 기존 사용자별 요청 제한을 유지한다. */
+    /** 로컬 실행은 공통 Redis 없이 인메모리 문맥과 요청 잠금을 선택한다. */
     @Test
     void localUsesInMemoryWithoutRedis() {
         runner("local").run(context -> {
