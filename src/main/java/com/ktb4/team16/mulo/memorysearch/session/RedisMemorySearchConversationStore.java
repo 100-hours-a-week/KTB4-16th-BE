@@ -26,10 +26,12 @@ public class RedisMemorySearchConversationStore implements MemorySearchConversat
     private static final Long UPDATE_SUCCESS = 1L;
     private static final Long CONVERSATION_MISSING = 0L;
     private static final Long CONTEXT_CONFLICT = 2L;
+    private static final Long LOCK_OWNERSHIP_LOST = 3L;
     // 통신 실패는 재시도하지 않고 확인된 키 충돌·문맥 경합에만 총 3회까지 시도한다.
     private static final int MAX_ATTEMPTS = 3;
     private static final String CREATE_SCRIPT = loadScript("create-conversation.lua");
     private static final String APPEND_SCRIPT = loadScript("append-conversation.lua");
+    private static final String COMPLETE_SCRIPT = loadScript("complete-conversation.lua");
     private final Supplier<StatefulRedisConnection<String, String>> connections;
     private final JsonMapper mapper;
     private final long idleTtlMillis;
@@ -90,6 +92,20 @@ public class RedisMemorySearchConversationStore implements MemorySearchConversat
     /** 활성 문맥만 조건부 교체하며 확인된 값 충돌에만 제한적으로 재시도한다. */
     @Override
     public boolean appendIfActive(Long userId, String conversationId, MemorySearchTurn turn) {
+        return append(userId, conversationId, turn, null);
+    }
+
+    /** 잠금 소유권 확인과 문맥 갱신을 같은 슬롯의 Lua에서 함께 수행한다. */
+    @Override
+    public boolean appendIfOwned(Long userId, String conversationId, String requestToken, MemorySearchTurn turn) {
+        if (requestToken == null || requestToken.isBlank()) {
+            throw new IllegalArgumentException("Request owner token is required");
+        }
+        return append(userId, conversationId, turn, requestToken);
+    }
+
+    /** 일반 문맥 추가와 소유권 완료가 같은 직렬화·CAS 경합 정책을 사용하도록 한다. */
+    private boolean append(Long userId, String conversationId, MemorySearchTurn turn, String requestToken) {
         Objects.requireNonNull(turn);
         return withRedis(() -> {
             RedisCommands<String, String> commands = commands();
@@ -105,13 +121,20 @@ public class RedisMemorySearchConversationStore implements MemorySearchConversat
                     turns.removeFirst();
                 }
                 // JSON은 Java에서 처리해 Lua 숫자 변환으로 Long ID가 손실되지 않게 한다.
-                Long result = commands.eval(APPEND_SCRIPT, ScriptOutputType.INTEGER,
-                        new String[] {key}, snapshot.json(), encodeTurns(turns), Long.toString(idleTtlMillis));
+                Long result = requestToken == null
+                        ? commands.eval(APPEND_SCRIPT, ScriptOutputType.INTEGER,
+                                new String[] {key}, snapshot.json(), encodeTurns(turns), Long.toString(idleTtlMillis))
+                        : commands.eval(COMPLETE_SCRIPT, ScriptOutputType.INTEGER,
+                                new String[] {key, keys.inFlight(userId)}, snapshot.json(), encodeTurns(turns),
+                                Long.toString(idleTtlMillis), requestToken);
                 if (UPDATE_SUCCESS.equals(result)) {
                     return true;
                 }
                 if (CONVERSATION_MISSING.equals(result)) {
                     return false;
+                }
+                if (LOCK_OWNERSHIP_LOST.equals(result)) {
+                    throw new IllegalStateException("Memory search request lease is no longer valid");
                 }
                 if (!CONTEXT_CONFLICT.equals(result)) {
                     throw new IllegalStateException("Unexpected conversation append result");

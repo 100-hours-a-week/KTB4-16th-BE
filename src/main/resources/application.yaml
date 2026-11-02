@@ -46,6 +46,8 @@ memory-search:
   conversation-environment: ${MEMORY_SEARCH_CONVERSATION_ENVIRONMENT:local}
   # 마지막으로 완료된 질문 뒤 대화 문맥을 보존하는 유휴 시간이다.
   conversation-idle-ttl: 30m
+  # 문맥 TTL과 별개인 고정 점유 기한의 초기 검증값이다. 만료 응답은 문맥에 반영하지 않는다.
+  request-lock-ttl: ${MEMORY_SEARCH_REQUEST_LOCK_TTL:60s}
 
 # 상태, Prometheus, 애플리케이션 정보와 지표 엔드포인트를 HTTP에 등록한다.
 management:
