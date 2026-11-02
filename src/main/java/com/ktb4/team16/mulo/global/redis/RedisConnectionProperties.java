@@ -10,5 +10,6 @@ public record RedisConnectionProperties(
         @DefaultValue("127.0.0.1") String host,
         @DefaultValue("16382") int port,
         @DefaultValue("300ms") Duration connectTimeout,
-        @DefaultValue("100ms") Duration commandTimeout) {
+        @DefaultValue("100ms") Duration commandTimeout,
+        @DefaultValue("5s") Duration initializationTimeout) {
 }

@@ -21,7 +21,8 @@ public class RedisConfiguration {
     @Lazy
     RedisClient redisClient(RedisConnectionProperties properties) {
         RedisURI uri = RedisURI.Builder.redis(properties.host(), properties.port())
-                .withTimeout(properties.commandTimeout()).build();
+                // URI 시간은 Lettuce의 HELLO 등 연결 초기화에도 사용되므로 명령 기한과 분리한다.
+                .withTimeout(properties.initializationTimeout()).build();
         RedisClient client = RedisClient.create(uri);
         client.setOptions(ClientOptions.builder()
                 .socketOptions(SocketOptions.builder().connectTimeout(properties.connectTimeout()).build())
@@ -34,7 +35,11 @@ public class RedisConfiguration {
     /** 처음 요청될 때만 공통 연결을 열고 애플리케이션 종료 시 생성된 연결을 닫는다. */
     @Bean(destroyMethod = "close")
     @Lazy
-    StatefulRedisConnection<String, String> redisConnection(RedisClient redisClient) {
-        return redisClient.connect();
+    StatefulRedisConnection<String, String> redisConnection(RedisClient redisClient,
+            RedisConnectionProperties properties) {
+        StatefulRedisConnection<String, String> connection = redisClient.connect();
+        // 연결 준비가 끝나면 동기 API도 기존의 짧은 명령 기한으로 동작한다.
+        connection.setTimeout(properties.commandTimeout());
+        return connection;
     }
 }

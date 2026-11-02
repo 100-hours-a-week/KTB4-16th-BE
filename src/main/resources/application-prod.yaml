@@ -1,0 +1,9 @@
+# ECS 일반 백엔드용 운영 프로필. 빈 필수값은 시작 시 구성 검증에서 거절한다.
+memory-search:
+  conversation-store: ${MEMORY_SEARCH_CONVERSATION_STORE:redis}
+  conversation-environment: ${MEMORY_SEARCH_CONVERSATION_ENVIRONMENT:}
+
+mulo:
+  redis:
+    host: ${REDIS_HOST:}
+    port: ${REDIS_PORT:0}
