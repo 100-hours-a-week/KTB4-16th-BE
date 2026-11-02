@@ -33,7 +33,7 @@ public class MemorySearchService {
 
     /** 현재 질문을 처리하고 공개 가능한 카드만 AI 순서로 응답·문맥에 남긴다. */
     public MemorySearchResult search(Long userId, String conversationId, String query) {
-        try (var ignored = gate.acquire(userId, conversationId)) {
+        try (var lease = gate.acquire(userId, conversationId)) {
             availability.requireAnyOwnedRecord(userId);
             List<MemorySearchTurn> history = store.read(userId, conversationId)
                     .orElseThrow(() -> new MemorySearchDomainException(
@@ -55,7 +55,7 @@ public class MemorySearchService {
                     .toList();
             List<Long> publishedIds = exactCards.stream()
                     .map(MemorySearchCard::recordId).toList();
-            if (!store.appendIfActive(userId, conversationId,
+            if (!lease.appendIfActive(store, conversationId,
                     new MemorySearchTurn(query, publishedIds))) {
                 throw new MemorySearchDomainException(ErrorCode.MEMORY_SEARCH_CONVERSATION_GONE);
             }

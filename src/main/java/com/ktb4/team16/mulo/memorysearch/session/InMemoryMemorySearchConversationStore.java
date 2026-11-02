@@ -12,10 +12,13 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicReference;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Repository;
 
 /** 한 서버 프로세스에서 사용자·대화별 최근 5턴과 유휴 만료 시각을 관리한다. */
 @Repository
+@ConditionalOnProperty(prefix = "memory-search", name = "conversation-store",
+        havingValue = "in-memory", matchIfMissing = true)
 public class InMemoryMemorySearchConversationStore implements MemorySearchConversationStore {
 
     private final ConcurrentHashMap<Key, Session> sessions = new ConcurrentHashMap<>();

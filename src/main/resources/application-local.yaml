@@ -8,3 +8,8 @@ mulo:
 
 ai:
   mock-enabled: ${AI_MOCK_ENABLED:false}
+
+# 로컬은 Redis 없이 실행하며 필요할 때만 환경변수로 Redis 실험을 선택한다.
+memory-search:
+  conversation-store: ${MEMORY_SEARCH_CONVERSATION_STORE:in-memory}
+  conversation-environment: ${MEMORY_SEARCH_CONVERSATION_ENVIRONMENT:local}
