@@ -61,7 +61,7 @@
 | 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정, KST 23:00 신규 요청 차단 및 당일 WAITING 만료 구현 | 구현됨 |
 | 매칭 상태 조회 | 인증된 요청 소유자의 현재 상태를 polling으로 조회 | 구현됨 |
 | Chat Server 연동·채팅 | ChatRoomClient는 구현됐으나 MatchService 연동·방 생성 완료 전이는 미구현 | 일부 구현 / contract-only |
-| AI 기억 검색 | V1 제외 이력 유지, V2 공개 API·인메모리 대화·실제 AI HTTP 연동 및 현재 프론트의 대화 복원·오류 처리 구현 | PR #129 HTTP 연동 구현 / 실제 AI 직접 호출 200 확인 / 프론트 전체 흐름 실연동 검증은 미확인 |
+| AI 기억 검색 | V1 제외 이력 유지, V2 공개 API·프로필별 대화 저장(로컬 인메모리 / 운영 Redis 공유 제안)·실제 AI HTTP 연동 및 현재 프론트의 대화 복원·오류 처리 구현 | PR #129 HTTP 연동 구현 / PR #171 Redis 문맥·요청 잠금 제안(미병합) / 운영 Redis 연결과 ECS 배포 검증 미완료 |
 
 
 ## 공통·문서 원칙
@@ -297,8 +297,8 @@
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
 | `MEM-001` | **확정·구현됨** | 공개 API와 명시적 종료 | 인증 사용자는 `POST /api/memories/search/conversations`로 대화를 시작하고, `POST /api/memories/search`에 `{conversationId, query}`를 보내고, 명시적 나가기에서 `DELETE /api/memories/search/conversations/{conversationId}`를 호출한다. 시작은 201, 질문은 200, 종료는 본문 없는 204다. 프론트는 `userId`나 `history`를 보내지 않는다. 명시적 나가기는 화면·스냅샷을 즉시 지우고 서버 종료를 요청한다. 브라우저 수신·재시도 중단이 서버의 AI 호출 취소를 의미하지 않으며, 종료된 대화의 늦은 결과는 저장·공개하지 않는다. | 사용자 확정 / PR #103 컨트롤러·`MemorySearchService` / FE `MemorySearchConversationProvider:86-108,150-151`, `MemorySearchPage:63-69` |
-| `MEM-002` | **확정·구현됨** | 백엔드 대화 저장과 만료 | 백엔드가 사용자별 UUID 대화 ID를 발급하고 최근 완료된 질문·검증된 정확 일치 ID 최대 5턴을 단일 서버 프로세스 메모리에 저장한다. 생성 시 30분 유효기간을 시작하고 성공 응답의 턴을 활성 대화에 추가한 때만 다시 30분으로 갱신한다. 단순 조회·화면 이동·실패한 질문은 갱신하지 않는다. 만료 시점부터 대화는 유효하지 않지만 물리적 삭제는 해당 대화 접근 또는 새 대화 시작 시 수행한다. 새 대화를 시작해도 다른 활성 대화를 자동 종료하지 않는다. 서버 재시작 시 대화는 사라진다. Redis 도입은 서버 간 공유나 재시작 후 대화 유지가 필요할 때 재검토한다. | 사용자 확정 / `InMemoryMemorySearchConversationStore:41-103`, `MemorySearchService:58-60` |
-| `MEM-003` | **확정·구현됨** | 입력·동시성 | 질문은 최대 500자이며 초과 시 `400 INVALID_INPUT_VALUE`를 반환한다. 활성 본인 자물쇠가 0개이면 프론트 입력을 막고 질문 API도 `400 MEMORY_SEARCH_NO_RECORDS`를 반환한다. 같은 사용자에게 AI 호출이 진행 중이면 추가 질문을 시작하지 않고 `409 MEMORY_SEARCH_IN_PROGRESS`를 반환한다. 종료·만료·없는 대화 ID 또는 타인 대화 ID는 `410 MEMORY_SEARCH_CONVERSATION_GONE`이다. | 사용자 확정 / PR #103 요청 게이트·오류 코드 / PR #105 500자 제한 / `MemorySearchRequestGate`, `MemorySearchLimits` |
+| `MEM-002` | **PR #171 제안 (미병합)** | 백엔드 대화 저장과 만료 | 백엔드는 사용자별 UUID 대화 ID를 발급하고 최근 완료된 질문·검증된 정확 일치 ID 최대 5턴을 저장한다. 로컬 `local` 프로필은 단일 백엔드 프로세스 메모리를, 운영 `prod` 프로필은 모든 백엔드 태스크가 공유하는 Redis를 선택한다. Redis 키는 대화 생성 때 30분 유휴 만료를 시작하고, 성공한 질문 문맥을 저장할 때만 다시 30분으로 갱신한다. 30분은 실사용 측정치가 없는 초기값이며, 운영 데이터에서 질문 간격과 유휴 만료 비율을 확인해 조정한다. 단순 읽기·화면 이동·실패한 질문은 만료를 연장하지 않으며 명시적 나가기는 대화 키를 삭제한다. 새 대화를 시작해도 다른 활성 대화를 자동 종료하지 않는다. Redis 모드 서버는 같은 Redis 주소와 환경 구분값을 써야 하며, 운영 필수 설정이 없으면 시작을 거절한다. PR #171이 merge되기 전에는 develop 동작이 바뀌지 않는다. 운영 Redis의 TLS·인증·네트워크·장애 조치·데이터 보존 정책은 아직 검증되지 않았다. | 기능 PR #171 / `RedisMemorySearchConversationStore`, `MemorySearchConversationConfiguration` / 운영 확인 항목은 OQ-027 |
+| `MEM-003` | **기존 계약 유지 / Redis 잠금 PR #171 제안 (미병합)** | 입력·동시성 | 질문은 최대 500자이며 초과 시 `400 INVALID_INPUT_VALUE`를 반환한다. 활성 본인 자물쇠가 0개이면 프론트 입력을 막고 질문 API도 `400 MEMORY_SEARCH_NO_RECORDS`를 반환한다. 같은 사용자에게 AI 호출이 진행 중이면 추가 질문은 `409 MEMORY_SEARCH_IN_PROGRESS`를 받는다. 로컬에서는 잠금이 해당 프로세스 안에서만 공유되며, PR #171 제안의 운영 모드에서는 Redis `SET NX PX`로 사용자당 하나의 잠금을 여러 서버가 공유한다. 잠금 기본 유효시간은 60초다. 만료된 이전 요청은 결과를 문맥에 추가하거나 새 요청의 잠금을 해제할 수 없지만, 이전 AI 호출 자체가 취소되는 것은 아니다. 종료·만료·없는 대화 ID 또는 타인 대화 ID는 `410 MEMORY_SEARCH_CONVERSATION_GONE`이다. | 사용자 확정 / PR #103 요청 게이트·오류 코드 / PR #105 500자 제한 / 기능 PR #171 |
 | `MEM-004` | **확정·구현됨** | 응답과 화면 | 공개 성공 응답은 `{message, data: {answer, records, suggestedRecords}}`이다. AI의 `answer`에는 건수를 넣지 않는다. AI가 정확 일치 ID를 보냈으나 백엔드 소유권·삭제 검증 후 공개할 정확 일치 카드가 0건이면 백엔드가 `answer`를 `표시할 수 있는 자물쇠가 없어요.`로 교체한다. AI가 처음부터 정확 일치 0건이라고 판단한 경우에는 AI의 조건 설명을 유지한다. 프론트는 공개된 `records.length`로 건수를 표시하고 앞 5건을 먼저 보여준다. 6건 이상이면 전체보기에서 전체 정확 일치 카드를 같은 순서로 보여준다. 정확 일치가 0건이고 제안만 있어도 정상 200이며, 제안 카드는 사용자가 토글을 눌러 펼친다. | 사용자 확정 / PR #103 응답 DTO / PR #105 문구 교체 / `MemorySearchService:62-65` / FE `MemorySearchPage:159-203,282-305` |
 | `MEM-005` | **확정·구현됨** | AI ID 계약과 카드 순서 | 실제 AI에서 정확 일치 `records: [{recordId}]`와 제안 `suggestedRecords: [{recordId, matchedConditions}]`를 관련도 순서로 받는다. 정확 일치는 최대 50건, 제안은 최대 3건, 두 배열의 합계는 최대 50건이다. 백엔드는 양의 정수 ID·배열 내부와 배열 간 중복·필수 필드 타입·건수 계약을 검증한다. AI의 카드·점수 필드는 사용하지 않고 현재 사용자의 활성 자물쇠인지 DB에서 재검증해 카드 제목·가수·장소·생성일·날씨·앨범 이미지를 구성한다. 삭제·비소유 ID는 제외하고 각 배열의 AI 순서를 유지한다. 날씨나 법정동 이름이 없는 기록의 해당 카드 값은 `null`일 수 있다. | PR #129 / `HttpMemorySearchAiGateway:83-128`, `MemorySearchOwnedRecordFilter:20-30`, `MemorySearchService:42-55,69-81` |
 | `MEM-006` | **확정·구현됨** | 실제 HTTP 문맥 전달과 AI V2 한계 | 백엔드는 인증 사용자 `userId`, 현재 `query`, 완료된 이전 최대 5턴의 `history: [{query, recordIds}]`만 실제 HTTP 요청에 담고 `limit`은 보내지 않는다. `history`는 오래된 턴부터 전달하며 첫 요청은 빈 배열이다. 턴당 `recordIds`에는 공개된 정확 일치 결과만 최대 50개 저장하고 제안 ID는 제외한다. AI 자체에는 대화를 저장하지 않는다. 현재 AI V2는 `history`를 받아도 검색에 사용하지 않는다. V3의 문맥 활용·배포 적용은 미확인이다. | 사용자 확정 / AI 전달 문서 / PR #129 / `HttpMemorySearchAiGateway:46-69,161`, `MemorySearchService:38-42,56-60` |
@@ -421,6 +421,7 @@
 | `OQ-023` | 월간 리포트 배치 실행 시각 | 정책 |
 | `OQ-024` | AI V3의 `history` 활용 및 실제 배포 적용 확인. ID 중심 응답과 백엔드 HTTP 연동은 PR #129 기준 구현됨 | 정책, API, AI 연동 |
 | `OQ-026` | 기억 검색 만료 뒤 완료 화면 보존, 대화 상태 조회 GET, 읽기 전용 화면 등 만료 UX 개선 제안의 채택 여부. 현재 구현은 MEM-007·MEM-011이며 제안은 미확정·미구현 | 정책, API, 프론트 |
+| `OQ-027` | 기능 PR #171 merge 전후 운영 Redis 설정과 접속 확인. ECS 네트워크·DNS·TLS·인증, Redis persistence/eviction/failover, 30분 문맥 TTL의 사용 데이터 기반 적합성, 60초 잠금과 실제 AI 지연 적합성은 미검증 | 정책, 운영 |
 
 미정 항목은 문서에 추론으로 채우지 않는다.
 
