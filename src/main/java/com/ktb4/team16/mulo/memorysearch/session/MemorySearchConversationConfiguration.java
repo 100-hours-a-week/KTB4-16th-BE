@@ -1,7 +1,5 @@
 package com.ktb4.team16.mulo.memorysearch.session;
 
-import com.ktb4.team16.mulo.memorysearch.service.MemorySearchRequestRegistry;
-import com.ktb4.team16.mulo.memorysearch.service.RedisMemorySearchInFlightRegistry;
 import io.lettuce.core.api.StatefulRedisConnection;
 import java.time.Duration;
 import org.springframework.beans.factory.ObjectProvider;
@@ -13,7 +11,7 @@ import org.springframework.core.env.Environment;
 import org.springframework.core.env.Profiles;
 import tools.jackson.databind.json.JsonMapper;
 
-/** 같은 모드·환경의 문맥과 요청 잠금을 선택하고 인기곡 캐시 설정과 분리한다. */
+/** 대화 문맥의 저장 방식과 운영 환경 설정을 선택하고 인기곡 캐시와 분리한다. */
 @Configuration(proxyBeanMethods = false)
 public class MemorySearchConversationConfiguration {
 
@@ -66,13 +64,4 @@ public class MemorySearchConversationConfiguration {
         return new RedisMemorySearchConversationStore(connections::getObject, mapper, idleTtl, environment);
     }
 
-    /** Redis 문맥 모드에서는 분산 잠금도 같은 환경의 공통 연결을 사용한다. */
-    @Bean
-    @ConditionalOnProperty(prefix = "memory-search", name = "conversation-store", havingValue = "redis")
-    MemorySearchRequestRegistry redisMemorySearchRequestRegistry(
-            ObjectProvider<StatefulRedisConnection<String, String>> connections,
-            @Value("${memory-search.request-lock-ttl:60s}") Duration lockTtl,
-            @Value("${memory-search.conversation-environment:local}") String environment) {
-        return new RedisMemorySearchInFlightRegistry(connections::getObject, lockTtl, environment);
-    }
 }

@@ -18,11 +18,6 @@ public interface MemorySearchConversationStore {
     /** 활성 대화에만 완료된 턴을 추가하고 유휴 만료를 갱신한다. */
     boolean appendIfActive(Long userId, String conversationId, MemorySearchTurn turn);
 
-    /** Redis 점유권과 문맥 갱신을 함께 검증하며 미지원 저장소는 안전하게 거절한다. */
-    default boolean appendIfOwned(Long userId, String conversationId, String requestToken, MemorySearchTurn turn) {
-        throw new IllegalStateException("This conversation store does not support Redis request ownership");
-    }
-
     /** 지정한 사용자의 대화 ID와 최근 턴을 함께 제거한다. */
     void close(Long userId, String conversationId);
 }
