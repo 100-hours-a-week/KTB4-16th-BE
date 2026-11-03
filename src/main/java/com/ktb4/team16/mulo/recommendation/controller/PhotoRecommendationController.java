@@ -22,7 +22,8 @@ public class PhotoRecommendationController {
     public PhotoRecommendationResponse recommend(
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody PhotoRecommendationRequest request) {
+        var result = photoRecommendationService.recommend(userId, request.uploadId());
         return new PhotoRecommendationResponse(RecommendationMessage.PHOTO_RECOMMENDATION_SUCCEEDED.message(),
-                photoRecommendationService.recommend(userId, request.uploadId()));
+                result.recommendationId(), result.tracks());
     }
 }

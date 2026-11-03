@@ -2,7 +2,8 @@
 
 > 작성일: 2026-09-21 (KST)  
 > 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
-> 기본 테이블 정의 기준: Flyway V1~V8. 월간 리포트의 V9 추가 컬럼은 아래에 반영했으며, V10~V11 변경은 이 문서 전체에 아직 대조하지 않았다.
+> AI 추천 이력·피드백 실제 사용 상태 반영: 2026-11-01 (KST)
+> 기본 테이블 정의 기준: 기존 절의 기준은 각 절을 따르며, AI 추천 피드백 테이블은 Flyway V13 실제 스키마를 반영한다. V13 외 migration 전체와 모든 기존 절의 정합성은 이번 변경 범위에서 재검토하지 않았다.
 > 설계·정책 기준: 서비스 정책 정의서 v2.1, OpenAPI v2.8, 현재 구현 문서
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
 
@@ -10,14 +11,15 @@
 
 | 상태 | 의미 |
 | --- | --- |
-| `구현됨` | Flyway V1~V8에 실제 적용되는 구조. §11의 `batch_request_id`는 V9 기준 |
+| `구현됨` | 각 절에 표기된 Flyway 기준에 실제 적용되는 구조 |
 | `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
 | `V1 제외·V2 구현` | V1 기능에서는 제외됐지만 V2에서 서버 기능으로 구현됨 |
 | `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
+| `스키마 및 서비스 구현됨` | Flyway/Entity와 추천 이력 저장·피드백 API 구현이 적용됨 |
 
 ### 현재 스키마 기준 및 변경 사항
 
-- Flyway V1~V8을 순서대로 적용한 Backend 실제 테이블 26개를 기준으로 정리
+- 기존 Backend 테이블 정의를 유지하고, Flyway V13의 AI 추천 피드백 테이블 3개를 §29~31에 추가
 - V6에서 `matches`를 추가하고 Backend의 `chat_rooms`, `chat_room_participants`, `chat_messages`를 제거
 - Chat Server가 소유하는 채팅 schema는 별도 DB에 있으며 이 문서에서 Backend 테이블로 정의하지 않음
 - V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
@@ -1280,5 +1282,85 @@ KST 날짜별 사용자 배정이 원자적으로 준비되었는지 기록한�
 - AI 그룹은 AI DB 뷰에서 읽으며 BE는 그룹화 또는 인원 부족 그룹 통합을 하지 않는다. AI 사용자 행이 없으면 `공통` 그룹으로 배정한다.
 - 오늘 그룹 질문이 없으면 AI 뷰의 같은 그룹 전날 질문 내용을 오늘 날짜의 새 `vote_questions` 행으로 저장한다. 같은 그룹의 전날 질문도 없으면 질문 ID를 비우고 조회 시 404를 반환한다.
 - 기존 `vote_questions(music_genre, vote_date)` UNIQUE 제약을 유지한다. 같은 날짜·그룹의 기존 BE 질문이 있으면 AI 질문 내용과 달라도 기존 BE 질문·ID·답변을 우선 재사용하고 덮어쓰지 않는다.
+
+## 29. ai_recommendation_results - AI 추천 결과 이력 테이블
+
+#### 1. 테이블 설명
+
+Flyway V13에서 추가한 AI 추천 결과 이력이다. 사진 기반 정상 추천은 요청마다 별도 결과를 만들고, 플레이리스트 정상 추천은 전달된 세션 회차별 결과를 저장한다. 추천 결과는 생성 응답의 최상위 `recommendationId`로 식별하며 플레이리스트 fallback은 새 결과를 만들지 않는다. 기존 플레이리스트 GET 결과는 추천 이력과 연결하지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 추천 결과 ID |
+| `user_id` | `BIGINT` | NOT NULL | - | FK | 추천을 요청한 사용자 ID (`users.user_id`) |
+| `recommendation_type` | `ENUM('PHOTO','PLAYLIST')` | NOT NULL | - | - | 추천 유형 |
+| `recommendation_attempt` | `TINYINT` | NULL | NULL | CHECK | PHOTO는 NULL, PLAYLIST는 1~3 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 추천 결과 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_results` | PRIMARY KEY | `id` | - | 추천 결과 식별 |
+| `fk_ai_recommendation_results_user` | FOREIGN KEY | `user_id` | `users.user_id` | 추천 결과 소유 사용자 연결 |
+| `chk_ai_recommendation_results_type_attempt` | CHECK | `recommendation_type`, `recommendation_attempt` | PHOTO와 NULL 또는 PLAYLIST와 1~3 | 유형과 회차 조합을 제한 |
+
+## 30. ai_recommendation_result_tracks - 추천 결과 곡 스냅샷 테이블
+
+#### 1. 테이블 설명
+
+추천 결과 생성 시점에 포함된 모든 Spotify Track ID와 순서를 보존한다. 현재 추천 플레이리스트의 곡 테이블과 독립된 스냅샷이다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 추천 결과 곡 행 ID |
+| `recommendation_id` | `BIGINT` | NOT NULL | - | FK, UK(복합) | `ai_recommendation_results.id` 참조 |
+| `external_track_id` | `VARCHAR(22)` | NOT NULL | - | - | Spotify Track ID 스냅샷 |
+| `rank` | `INTEGER` | NOT NULL | - | UK(복합), CHECK | 추천 결과 안에서의 순서, 1 이상 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_result_tracks` | PRIMARY KEY | `id` | - | 곡 스냅샷 행 식별 |
+| `fk_ai_recommendation_result_tracks_result` | FOREIGN KEY | `recommendation_id` | `ai_recommendation_results.id` | 곡을 추천 결과에 연결 |
+| `uk_ai_recommendation_result_tracks_rank` | UNIQUE | `recommendation_id`, `rank` | - | 결과별 순서 중복 방지 |
+| `chk_ai_recommendation_result_tracks_rank` | CHECK | `rank` | `rank > 0` | 순서는 양수 |
+
+## 31. ai_recommendation_feedbacks - AI 추천 피드백 테이블
+
+#### 1. 테이블 설명
+
+사용자가 피드백을 제출한 경우에만 행을 생성한다. 미제출은 행이 없는 상태로 표현한다. 추천 결과당 최대 하나의 피드백을 저장하며 현재 플레이리스트 교체와 독립적으로 보존한다. 조건부 입력 검증은 피드백 API의 Backend 서비스가 수행하며 DB CHECK 제약에는 포함되어 있지 않다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 피드백 행 ID |
+| `recommendation_id` | `BIGINT` | NOT NULL | - | FK, UK | 피드백 대상 추천 결과 (`ai_recommendation_results.id`) |
+| `user_id` | `BIGINT` | NOT NULL | - | FK | 피드백 제출 사용자 (`users.user_id`) |
+| `feedback` | `ENUM('LIKE','DISLIKE')` | NOT NULL | - | - | 추천 결과 전체에 대한 평가 |
+| `selected_track_id` | `VARCHAR(22)` | NULL | NULL | - | PLAYLIST + LIKE에서 선택한 Spotify Track ID. 조건부 필수 여부는 서비스 검증 사항 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 피드백 제출 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_feedbacks` | PRIMARY KEY | `id` | - | 피드백 행 식별 |
+| `fk_ai_recommendation_feedbacks_result` | FOREIGN KEY | `recommendation_id` | `ai_recommendation_results.id` | 피드백 대상을 추천 결과에 연결 |
+| `fk_ai_recommendation_feedbacks_user` | FOREIGN KEY | `user_id` | `users.user_id` | 제출 사용자를 연결 |
+| `uk_ai_recommendation_feedbacks_result` | UNIQUE | `recommendation_id` | - | 추천 결과당 피드백 최대 1개 |
+
+#### 4. 처리 규칙
+
+- 추천 API는 정상 결과와 곡 스냅샷을 저장한다. 피드백 API는 사용자가 제출한 경우에만 피드백 행을 저장한다.
+- 선택 곡이 해당 결과의 추천 곡 목록에 포함되는지, PLAYLIST + LIKE에 선택 곡이 있는지, PHOTO/DISLIKE에 선택 곡이 없는지는 Backend가 검증한다.
+- 이 테이블들은 `recommendation_playlists` 또는 `recommendation_playlist_items`에 FK를 두지 않는다. 현재 플레이리스트 교체·삭제가 과거 추천/피드백 이력을 삭제하지 않도록 한다.
 
 ---

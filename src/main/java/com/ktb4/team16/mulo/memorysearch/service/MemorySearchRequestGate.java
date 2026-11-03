@@ -12,10 +12,10 @@ import org.springframework.stereotype.Component;
 public class MemorySearchRequestGate {
 
     private final MemorySearchConversationStore store;
-    private final MemorySearchInFlightRegistry registry;
+    private final MemorySearchRequestRegistry registry;
 
     /** 닫힌 대화는 410, 이미 기다리는 사용자는 409를 반환하고 나머지는 점유권을 준다. */
-    public MemorySearchInFlightRegistry.Lease acquire(Long userId, String conversationId) {
+    public MemorySearchRequestLease acquire(Long userId, String conversationId) {
         if (!store.isActive(userId, conversationId)) {
             throw new MemorySearchDomainException(
                     ErrorCode.MEMORY_SEARCH_CONVERSATION_GONE);

@@ -25,6 +25,10 @@ public class NotificationOutboxProcessor {
     private static final Logger log = LoggerFactory.getLogger(NotificationOutboxProcessor.class);
     private static final int SCHEDULER_BATCH_SIZE = 20;
 
+    enum ProcessOutcome {
+        COMPLETED, RETRY_SCHEDULED, PERMANENT_FAILURE, SKIPPED, RECOVERY_FAILED
+    }
+
     private final NotificationOutboxRepository outbox;
     private final NotificationEventHandler handler;
     private final NotificationRetryPolicy retryPolicy;
@@ -47,21 +51,25 @@ public class NotificationOutboxProcessor {
 
     /** 지정 이벤트를 독립 트랜잭션으로 처리하고 실패해도 원본 비즈니스 성공을 보존한다. */
     public void process(UUID eventId) {
+        processWithOutcome(eventId);
+    }
+
+    ProcessOutcome processWithOutcome(UUID eventId) {
         try {
-            transactionTemplate.executeWithoutResult(status -> processLocked(eventId));
+            return transactionTemplate.execute(status -> processLocked(eventId));
         } catch (RuntimeException exception) {
             log.warn("Outbox 이벤트 트랜잭션 롤백: eventId={}, failureType={}",
                     eventId, exception.getClass().getSimpleName());
-            recordFailureAfterRollback(eventId, exception);
+            return recordFailureAfterRollback(eventId, exception);
         }
     }
 
     /** due 상태를 잠금 재확인하고 Savepoint로 전체 알림 집합을 원자적으로 처리한다. */
-    private void processLocked(UUID eventId) {
+    private ProcessOutcome processLocked(UUID eventId) {
         LocalDateTime now = LocalDateTime.now(clock);
         var event = outbox.lockDueEvent(eventId, now);
         if (event.isEmpty()) {
-            return;
+            return ProcessOutcome.SKIPPED;
         }
 
         Connection connection = DataSourceUtils.getConnection(dataSource);
@@ -79,14 +87,16 @@ public class NotificationOutboxProcessor {
             }
             outbox.markCompleted(eventId, LocalDateTime.now(clock));
             releaseSavepoint(connection, savepoint);
+            return ProcessOutcome.COMPLETED;
         } catch (RuntimeException exception) {
             rollbackSavepoint(connection, savepoint);
             if (exception instanceof NotificationEventPermanentException
                     || exception instanceof com.ktb4.team16.mulo.notification.event
                             .InvalidNotificationEventPayloadException) {
                 markPermanentFailure(event.get(), errorCode(exception));
+                return ProcessOutcome.PERMANENT_FAILURE;
             } else {
-                recordRetry(event.get(), errorCode(exception));
+                return recordRetry(event.get(), errorCode(exception));
             }
         } finally {
             DataSourceUtils.releaseConnection(connection, dataSource);
@@ -130,7 +140,7 @@ public class NotificationOutboxProcessor {
     }
 
     /** 최초 실패 또는 자동 재시도 실패 횟수에 맞춰 예약 시각을 저장한다. */
-    private void recordRetry(OutboxEvent event, String errorCode) {
+    private ProcessOutcome recordRetry(OutboxEvent event, String errorCode) {
         boolean retryAttempt = event.nextRetryAt() != null;
         int retryCount = event.retryCount() + (retryAttempt ? 1 : 0);
         LocalDateTime now = LocalDateTime.now(clock);
@@ -138,7 +148,7 @@ public class NotificationOutboxProcessor {
             outbox.markFailure(event.eventId(), retryCount, null, errorCode, now, true);
             log.error("Outbox 자동 재시도 한도 초과: eventId={}, eventType={}, errorCode={}",
                     event.eventId(), event.eventType(), errorCode);
-            return;
+            return ProcessOutcome.PERMANENT_FAILURE;
         }
         int jitterSeconds = ThreadLocalRandom.current()
                 .nextInt(NotificationRetryPolicy.MAX_JITTER_SECONDS + 1);
@@ -146,24 +156,27 @@ public class NotificationOutboxProcessor {
         outbox.markFailure(event.eventId(), retryCount, nextRetryAt, errorCode, now, false);
         log.warn("Outbox 이벤트 재시도 예약: eventId={}, eventType={}, retryCount={}, nextRetryAt={}, errorCode={}",
                 event.eventId(), event.eventType(), retryCount, nextRetryAt, errorCode);
+        return ProcessOutcome.RETRY_SCHEDULED;
     }
 
     /** rollback 뒤에도 DB가 응답하면 행 잠금을 다시 얻어 실패 예약을 안전하게 기록한다. */
-    private void recordFailureAfterRollback(UUID eventId, RuntimeException exception) {
+    private ProcessOutcome recordFailureAfterRollback(UUID eventId, RuntimeException exception) {
         try {
-            transactionTemplate.executeWithoutResult(status -> outbox.lockDueEvent(
-                    eventId, LocalDateTime.now(clock)).ifPresent(event -> {
+            return transactionTemplate.execute(status -> outbox.lockDueEvent(
+                    eventId, LocalDateTime.now(clock)).map(event -> {
                         if (exception instanceof NotificationEventPermanentException
                                 || exception instanceof com.ktb4.team16.mulo.notification.event
                                         .InvalidNotificationEventPayloadException) {
                             markPermanentFailure(event, errorCode(exception));
+                            return ProcessOutcome.PERMANENT_FAILURE;
                         } else {
-                            recordRetry(event, errorCode(exception));
+                            return recordRetry(event, errorCode(exception));
                         }
-                    }));
+                    }).orElse(ProcessOutcome.SKIPPED));
         } catch (RuntimeException recordException) {
             log.error("Outbox 실패 상태를 기록하지 못함: eventId={}, failureType={}",
                     eventId, recordException.getClass().getSimpleName());
+            return ProcessOutcome.RECOVERY_FAILED;
         }
     }
 

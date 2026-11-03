@@ -1,7 +1,9 @@
 package com.ktb4.team16.mulo.recommendation.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.dto.request.CreateRecommendationPlaylistRequest;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -58,6 +62,7 @@ class RecommendationPlaylistControllerTest {
         mvc.perform(get("/api/recommendations/playlists"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("현재 추천 플레이리스트 조회 성공"))
+                .andExpect(jsonPath("$.recommendationId").doesNotExist())
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
                 .andExpect(jsonPath("$.data.playlist.tracks[0].externalTrackId").value("external-10"))
                 .andExpect(jsonPath("$.data.playlist.tracks[0].title").value("밤편지"))
@@ -71,13 +76,14 @@ class RecommendationPlaylistControllerTest {
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(4L,
                 List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(playlist, true));
+                new RecommendationPlaylistCommandService.CreateResult(playlist, true, 44L));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("추천 플레이리스트 생성 성공"))
+                .andExpect(jsonPath("$.recommendationId").value(44))
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4))
                 .andExpect(jsonPath("$.data.replaced").value(true));
     }
@@ -88,13 +94,14 @@ class RecommendationPlaylistControllerTest {
         RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(3L,
                 List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(playlist, false));
+                new RecommendationPlaylistCommandService.CreateResult(playlist, false, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("추천 결과가 없어 기존 플레이리스트 유지"))
+                .andExpect(jsonPath("$.recommendationId").doesNotExist())
                 .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
                 .andExpect(jsonPath("$.data.replaced").value(false));
     }
@@ -103,11 +110,11 @@ class RecommendationPlaylistControllerTest {
     void returnsNullPlaylistWhenNoRecommendationAndNoExistingPlaylist() throws Exception {
         authenticate(7L);
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(null, false));
+                new RecommendationPlaylistCommandService.CreateResult(null, false, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.data.playlist").doesNotExist());
     }
@@ -118,10 +125,80 @@ class RecommendationPlaylistControllerTest {
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"longitude\":126.9780}"))
+                        .content("{\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"))
                 .andExpect(jsonPath("$.errors[0].code").value("LATITUDE_REQUIRED"));
+    }
+
+    @Test
+    void acceptsRepeatedLegacyRequestsWithoutRecommendationAttempt() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+
+        for (int index = 0; index < 2; index++) {
+            mvc.perform(post("/api/recommendations/playlists")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.recommendationId").value(44));
+        }
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService, org.mockito.Mockito.times(2)).create(eq(7L), captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(CreateRecommendationPlaylistRequest::recommendationAttempt)
+                .containsExactly(1, 1);
+    }
+
+    @Test
+    void defaultsExplicitNullRecommendationAttemptToOne() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":null}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().recommendationAttempt()).isEqualTo(1);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2, 3})
+    void preservesExplicitRecommendationAttempt(int attempt) throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":" + attempt + "}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().recommendationAttempt()).isEqualTo(attempt);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {0, 4})
+    void rejectsRecommendationAttemptOutsideSupportedRange(int attempt) throws Exception {
+        authenticate(7L);
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":" + attempt + "}"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
+        org.mockito.Mockito.verifyNoInteractions(commandService);
     }
 
     @Test
@@ -131,7 +208,7 @@ class RecommendationPlaylistControllerTest {
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("WEATHER_API_ERROR"));
     }
@@ -143,7 +220,7 @@ class RecommendationPlaylistControllerTest {
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
                 .andExpect(status().isBadGateway())
                 .andExpect(jsonPath("$.code").value("AI_SERVICE_ERROR"));
     }
@@ -156,7 +233,7 @@ class RecommendationPlaylistControllerTest {
                 .collect(java.util.stream.Collectors.joining(","));
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5,\"longitude\":127,\"excludeTrackIds\":[" + ids + "]}"))
+                        .content("{\"latitude\":37.5,\"longitude\":127,\"recommendationAttempt\":1,\"excludeTrackIds\":[" + ids + "]}"))
                 .andExpect(status().isBadRequest())
                 .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
         org.mockito.Mockito.verifyNoInteractions(commandService);
@@ -167,7 +244,7 @@ class RecommendationPlaylistControllerTest {
     void rejectsBlankExcludedTrackId() throws Exception {
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5,\"longitude\":127,\"excludeTrackIds\":[\" \"]}"))
+                        .content("{\"latitude\":37.5,\"longitude\":127,\"recommendationAttempt\":1,\"excludeTrackIds\":[\" \"]}"))
                 .andExpect(status().isBadRequest());
         org.mockito.Mockito.verifyNoInteractions(commandService);
     }

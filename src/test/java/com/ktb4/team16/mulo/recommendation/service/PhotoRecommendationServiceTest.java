@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiGateway;
 import com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiClient.PhotoRecommendationAiResponse;
+import com.ktb4.team16.mulo.recommendation.entity.AiRecommendationType;
 import com.ktb4.team16.mulo.upload.service.UploadService;
 import java.util.List;
 import java.util.stream.Stream;
@@ -23,34 +24,41 @@ import org.mockito.junit.jupiter.MockitoExtension;
 class PhotoRecommendationServiceTest {
     @Mock private UploadService uploadService;
     @Mock private PhotoRecommendationAiGateway aiClient;
+    @Mock private AiRecommendationResultWriter resultWriter;
 
     @Test
-    void createsRecommendationsWithoutPersistingMusicTracks() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+    void savesPhotoRecommendationAfterReceivingFiveTracks() {
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(tracks(5), false));
+        when(resultWriter.save(org.mockito.ArgumentMatchers.eq(7L),
+                org.mockito.ArgumentMatchers.eq(AiRecommendationType.PHOTO),
+                org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.anyList())).thenReturn(44L);
 
         var result = service.recommend(7L, 123L);
 
-        assertThat(result).hasSize(5);
-        assertThat(result.getFirst().externalTrackId()).isEqualTo("id-1");
+        assertThat(result.recommendationId()).isEqualTo(44L);
+        assertThat(result.tracks()).hasSize(5);
+        assertThat(result.tracks().getFirst().externalTrackId()).isEqualTo("id-1");
         verify(uploadService).createReadSignedUrl(7L, 123L);
+        verify(resultWriter).save(7L, AiRecommendationType.PHOTO, null,
+                List.of("id-1", "id-2", "id-3", "id-4", "id-5"));
     }
 
     @Test
     void returnsAllFiveRecommendations() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(tracks(5), false));
 
-        assertThat(service.recommend(7L, 123L)).hasSize(5);
+        assertThat(service.recommend(7L, 123L).tracks()).hasSize(5);
     }
 
     @Test
     void rejectsFourTracksInsteadOfTruncatingOrReturningPartialRecommendations() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(tracks(4), false));
@@ -61,7 +69,7 @@ class PhotoRecommendationServiceTest {
 
     @Test
     void rejectsSixTracksInsteadOfTruncatingToFive() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(tracks(6), false));
@@ -73,7 +81,7 @@ class PhotoRecommendationServiceTest {
     @ParameterizedTest
     @MethodSource("invalidAlbumImageUrls")
     void rejectsMissingOrBlankAlbumImageUrl(String albumImageUrl) {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(List.of(
@@ -89,7 +97,7 @@ class PhotoRecommendationServiceTest {
 
     @Test
     void convertsDegradedResponseToAiError() {
-        PhotoRecommendationService service = new PhotoRecommendationService(uploadService, aiClient);
+        PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
                 new PhotoRecommendationAiResponse(List.of(), true));
@@ -97,6 +105,13 @@ class PhotoRecommendationServiceTest {
         assertThatThrownBy(() -> service.recommend(7L, 123L))
                 .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);
         verify(uploadService, never()).deleteMetadata(org.mockito.ArgumentMatchers.any());
+        verify(resultWriter, never()).save(org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.any(), org.mockito.ArgumentMatchers.any(),
+                org.mockito.ArgumentMatchers.anyList());
+    }
+
+    private PhotoRecommendationService service() {
+        return new PhotoRecommendationService(uploadService, aiClient, resultWriter);
     }
 
     private static PhotoRecommendationAiResponse.Track track(String id, String title,

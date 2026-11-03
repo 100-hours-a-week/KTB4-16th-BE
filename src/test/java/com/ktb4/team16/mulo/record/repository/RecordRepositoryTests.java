@@ -151,6 +151,19 @@ class RecordRepositoryTests {
         assertThat(recordRepository.findActiveRecordVisibleToViewer(owner, active)).isPresent();
     }
 
+    /** Flyway가 인기곡 필터와 곡 ID 순서의 복합 인덱스를 실제 DB에 생성했는지 검증한다. */
+    @Test
+    void popularAggregationIndexIncludesFiltersAndTrackInOrder() {
+        List<String> columns = jdbcTemplate.queryForList("""
+                SELECT column_name FROM information_schema.statistics
+                WHERE table_schema = DATABASE() AND table_name = 'records'
+                  AND index_name = 'idx_records_popular_place_active_created_track'
+                ORDER BY seq_in_index
+                """, String.class);
+
+        assertThat(columns).containsExactly("place_id", "deleted_at", "created_at", "music_track_id");
+    }
+
     @Test
     void popularTracksUseCountThenLatestRecordThenTrackIdOrder() {
         long userId = insertUser();
@@ -188,6 +201,28 @@ class RecordRepositoryTests {
                 .containsExactly(3L, 2L, 2L, 2L);
         assertThat(tracks.get(1).latestRecordCreatedAt()).isEqualTo(FIRST_DAY.plusDays(9));
         assertThat(recordRepository.countActiveRecordsAtPlaces(placeIds, createdAtFrom)).isEqualTo(9L);
+    }
+
+    /** 캐시 유효기간은 같은 장소·기간의 가장 먼저 만료될 활성 기록을 기준으로 삼는다. */
+    @Test
+    void cacheBoundaryUsesEarliestMatchingActiveRecord() {
+        long userId = insertUser();
+        long includedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.2000000", "-150.2000000");
+        long excludedPlace = insertPlace(
+                LEGAL_DONG_CODE, LEGAL_DONG_NAME, "-33.3000000", "-150.3000000");
+        long trackId = insertTrack("boundary");
+        LocalDateTime cutoff = FIRST_DAY.plusDays(3);
+        insertRecord(userId, includedPlace, trackId, cutoff.minusSeconds(1), null);
+        insertRecord(userId, includedPlace, trackId, cutoff, FIRST_DAY.plusDays(4));
+        insertRecord(userId, excludedPlace, trackId, cutoff, null);
+        insertRecord(userId, includedPlace, trackId, cutoff.plusSeconds(2), null);
+        insertRecord(userId, includedPlace, trackId, cutoff.plusSeconds(5), null);
+
+        assertThat(recordRepository.findOldestActiveCreatedAtAtPlaces(List.of(includedPlace), cutoff))
+                .contains(cutoff.plusSeconds(2));
+        assertThat(recordRepository.findOldestActiveCreatedAtAtPlaces(
+                List.of(includedPlace), cutoff.plusDays(30))).isEmpty();
     }
 
     @Test

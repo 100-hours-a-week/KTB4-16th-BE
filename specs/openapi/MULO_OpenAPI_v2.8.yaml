@@ -1617,6 +1617,20 @@ paths:
       security:
       - bearerAuth: []
       description: 임시 업로드된 사진을 AI가 분석한다. 추천 성공 시 정확히 5곡을 반환하며, AI 응답이 5곡 미만 또는 초과이면 추천 실패로 처리한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - uploadId
+              properties:
+                uploadId:
+                  type: integer
+                  format: int64
+            example:
+              uploadId: 2
       responses:
         '200':
           description: 임시 업로드된 사진 분석과 음악 추천 처리가 정상적으로 완료되어 추천 결과를 반환하므로 200.
@@ -1624,9 +1638,16 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - message
+                - recommendationId
+                - data
                 properties:
                   message:
                     type: string
+                  recommendationId:
+                    type: integer
+                    format: int64
                   data:
                     type: array
                     minItems: 5
@@ -1652,6 +1673,7 @@ paths:
                       - externalUrl
               example:
                 message: 사진 기반 음악 추천 성공
+                recommendationId: 101
                 data:
                 - externalTrackId: 6rqhFgbbKwnb9MLmUQDhG6
                   title: 밤편지
@@ -3840,6 +3862,7 @@ paths:
         - 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.
         - 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.
         - 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.
+        - 조회 DTO의 recommendationId는 null이며 JSON 응답에서는 NON_NULL 직렬화 설정으로 생략된다. playlist.recommendationPlaylistId는 기존 플레이리스트 ID이며 추천 이력 ID로 연결되지 않아 피드백 대상이 아니다.
         - 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.
         - 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다
       responses:
@@ -3927,6 +3950,7 @@ paths:
         필수
         latitude: Double
         longitude: Double
+        recommendationAttempt: Integer (1~3)
 
         동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 저장하지 않는다.
 
@@ -3950,6 +3974,7 @@ paths:
               required:
               - latitude
               - longitude
+              - recommendationAttempt
               properties:
                 latitude:
                   type: number
@@ -3963,6 +3988,11 @@ paths:
                   minimum: -180
                   maximum: 180
                   description: 현재 위치의 경도
+                recommendationAttempt:
+                  type: integer
+                  minimum: 1
+                  maximum: 3
+                  description: 현재 플레이리스트 화면 세션에서의 추천 회차. 최초 추천 1, 재추천 2~3.
                 excludeTrackIds:
                   type: array
                   maxItems: 50
@@ -3975,6 +4005,7 @@ paths:
             example:
               latitude: 37.5665
               longitude: 126.978
+              recommendationAttempt: 1
               excludeTrackIds: []
       responses:
         '200':
@@ -4033,9 +4064,16 @@ paths:
             application/json:
               schema:
                 type: object
+                required:
+                - message
+                - recommendationId
+                - data
                 properties:
                   message:
                     type: string
+                  recommendationId:
+                    type: integer
+                    format: int64
                   data:
                     type: object
                     properties:
@@ -4074,6 +4112,7 @@ paths:
                     - replaced
               example:
                 message: 추천 플레이리스트 생성 성공
+                recommendationId: 102
                 data:
                   playlist:
                     recommendationPlaylistId: 71
@@ -4111,7 +4150,7 @@ paths:
                   replaced: true
         '400':
           description: |-
-            추천 컨텍스트 생성을 위한 현재 위치 좌표가 누락되어 요청 검증에 실패했으므로 400.
+            latitude/longitude/recommendationAttempt가 누락됐거나 recommendationAttempt가 1~3 범위 밖이라 요청 검증에 실패했으므로 400.
 
             추가 케이스: latitude 또는 longitude가 유효한 좌표 범위를 만족하지 않으므로 400.
           content:
@@ -4186,6 +4225,177 @@ paths:
               example:
                 code: WEATHER_API_ERROR
                 message: 날씨 정보를 불러오는 중 오류가 발생했습니다. 잠시 후 다시 시도해주세요.
+      x-implementation-status: implemented
+      x-csrf-required: true
+  "/api/ai-recommendations/{recommendationId}/feedback":
+    post:
+      tags:
+      - RECOMMEND / 추천
+      summary: AI 추천 피드백 제출
+      operationId: postApiAiRecommendationsRecommendationIdFeedback
+      description: |-
+        로그인한 사용자가 본인 추천 결과에 한 번 피드백을 제출한다.
+
+        - PHOTO는 LIKE/DISLIKE 모두 selectedTrackId 없이 제출한다.
+        - PLAYLIST + LIKE는 해당 추천 결과에 포함된 곡의 Spotify Track ID를 selectedTrackId로 필수 제출한다.
+        - PLAYLIST + DISLIKE는 selectedTrackId 없이 제출한다.
+        - 추천 결과당 피드백은 최대 하나다. 피드백 미제출 상태는 행을 만들지 않는다.
+        - FE는 정상 결과의 피드백 제출 성공 전 닫기·다음 단계·재추천을 제한한다. Backend는 후속 추천 또는 자물쇠 생성 요청에서 미제출 여부를 강제하지 않는다.
+      security:
+      - bearerAuth: []
+      parameters:
+      - name: recommendationId
+        in: path
+        required: true
+        schema:
+          type: integer
+          format: int64
+          minimum: 1
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+              - feedback
+              properties:
+                feedback:
+                  type: string
+                  enum:
+                  - LIKE
+                  - DISLIKE
+                selectedTrackId:
+                  type: string
+                  minLength: 1
+                  maxLength: 22
+                  nullable: true
+                  description: 공백만으로 구성할 수 없다. PLAYLIST LIKE에서 필수이며 추천 결과에 포함된 Spotify Track ID. 그 외에는 생략하거나 null로 보낸다.
+            example:
+              feedback: LIKE
+              selectedTrackId: 6rqhFgbbKwnb9MLmUQDhG6
+      responses:
+        '201':
+          description: 피드백을 저장하고 저장된 식별자와 평가를 반환하므로 201.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                - message
+                - data
+                properties:
+                  message:
+                    type: string
+                  data:
+                    type: object
+                    required:
+                    - feedbackId
+                    - recommendationId
+                    - feedback
+                    properties:
+                      feedbackId:
+                        type: integer
+                        format: int64
+                      recommendationId:
+                        type: integer
+                        format: int64
+                      feedback:
+                        type: string
+                        enum: [LIKE, DISLIKE]
+                      selectedTrackId:
+                        type: string
+                        maxLength: 22
+                        description: 선택 곡이 없으면 응답 JSON에서 생략된다.
+              example:
+                message: 추천 피드백을 제출했습니다.
+                data:
+                  feedbackId: 501
+                  recommendationId: 102
+                  feedback: LIKE
+                  selectedTrackId: 6rqhFgbbKwnb9MLmUQDhG6
+        '400':
+          description: 요청값이 잘못됐거나 추천 유형·평가에 맞지 않는 곡 선택이므로 400 INVALID_INPUT_VALUE.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+                  errors:
+                    type: array
+                    description: Bean Validation 오류인 경우 제공된다. 서비스 규칙 오류는 이 필드 없이 code와 message만 반환한다.
+                    items:
+                      type: object
+                      properties:
+                        field:
+                          type: string
+                        code:
+                          type: string
+                        message:
+                          type: string
+              example:
+                code: INVALID_INPUT_VALUE
+                message: 입력값을 확인해주세요.
+        '401':
+          description: 유효한 Access Token이 없어 인증할 수 없으므로 401.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: UNAUTHORIZED
+                message: 로그인이 필요합니다.
+        '403':
+          description: 추천 결과가 존재하지만 인증 사용자가 소유하지 않으므로 403 AI_RECOMMENDATION_NOT_OWNED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: AI_RECOMMENDATION_NOT_OWNED
+                message: 해당 추천 결과에 피드백을 제출할 권한이 없습니다.
+        '404':
+          description: recommendationId에 해당하는 추천 결과가 없어 404 AI_RECOMMENDATION_NOT_FOUND.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: AI_RECOMMENDATION_NOT_FOUND
+                message: 추천 결과를 찾을 수 없습니다.
+        '409':
+          description: 추천 결과에 이미 피드백이 제출되어 409 AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  code:
+                    type: string
+                  message:
+                    type: string
+              example:
+                code: AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED
+                message: 이미 피드백을 제출한 추천 결과입니다.
       x-implementation-status: implemented
       x-csrf-required: true
   "/api/weather":
@@ -5950,7 +6160,7 @@ paths:
       - MEMORY / 기억
       summary: 기억 검색 대화 시작 (V2)
       operationId: postApiMemoriesSearchConversations
-      description: 인증된 사용자에게 새 기억 검색 대화 ID를 발급한다. 대화는 백엔드의 생성 시각 또는 마지막 질문의 성공 완료 시각으로부터 30분 후 만료되며, 읽기·화면 이동·입력만으로는 만료 시각을 갱신하지 않는다. 대화는 서버 메모리에 저장하므로 서버 재시작 시 사라진다. 새 대화 시작은 기존 대화를 자동 종료하지 않는다.
+      description: "인증된 사용자에게 새 기억 검색 대화 ID를 발급한다. 문맥은 local 프로필에서 백엔드 프로세스 메모리에 저장하고, prod 프로필에서는 모든 백엔드 태스크가 공유하는 Redis에 저장한다(PR #171 제안, 아직 미병합). 생성 또는 마지막 질문의 성공 완료 뒤 30분 동안 사용하지 않으면 만료되며, 읽기·화면 이동·입력은 만료 시각을 갱신하지 않는다. 30분은 운영 초기값이며, 실제 질문 간격과 유휴 만료 비율을 확인해 조정한다. 명시적 나가기는 해당 대화 문맥을 삭제한다. 새 대화 시작은 기존 대화를 자동 종료하지 않는다."
       security:
       - bearerAuth: []
       responses:
@@ -6024,9 +6234,9 @@ paths:
 
         백엔드는 AI가 반환한 ID를 현재 사용자의 활성 자물쇠로 검증하고 DB에서 카드 데이터를 만든다. 삭제·비소유 ID는 제외하고 AI 관련도 순서를 유지한다. AI 응답은 정확 일치 최대 50개, 제안 최대 3개, 두 배열 합계 최대 50개로 검증하며 상한을 넘으면 502 AI_SERVICE_ERROR로 처리한다. answer에는 건수를 포함하지 않는다. AI가 정확 일치 ID를 보냈지만 백엔드 검증 뒤 공개할 정확 일치 카드가 0건이면 백엔드는 answer를 "표시할 수 있는 자물쇠가 없어요."로 교체한다. AI가 처음부터 정확 일치 0건이라고 판단한 경우에는 AI의 조건 설명을 유지한다. 프론트는 records.length로 건수를 표시하며 처음에는 앞 5개를, 6개 이상이면 전체보기에서 전체 정확 일치 목록을 같은 순서로 보여준다. suggestedRecords는 토글을 눌러 펼친다. 정확 일치 0건·제안만 있는 경우도 정상 200이다. 500자 제한과 answer 교체는 기능 PR #105에 구현했다.
 
-        한 사용자에게 이전 요청이 진행 중이면 새 질문을 시작하지 않고 409 MEMORY_SEARCH_IN_PROGRESS를 반환한다. 프론트는 HTTP 409와 이 코드가 모두 일치할 때만 1초 간격으로 최대 40초 동안 순차 재시도하고, 이후에는 질문을 입력창에 남겨 사용자가 다시 보내도록 한다.
+        한 사용자에게 이전 요청이 진행 중이면 새 질문을 시작하지 않고 409 MEMORY_SEARCH_IN_PROGRESS를 반환한다. 로컬 잠금은 단일 프로세스에 한정되고, prod의 여러 백엔드는 Redis SET NX PX 잠금을 공유한다(PR #171 제안, 아직 미병합). 잠금 기본 만료는 60초이며, 만료된 이전 요청의 결과는 문맥에 추가하지 않는다. 프론트는 HTTP 409와 이 코드가 모두 일치할 때만 1초 간격으로 최대 40초 동안 순차 재시도하고, 이후에는 질문을 입력창에 남겨 사용자가 다시 보내도록 한다.
 
-        백엔드 대화는 생성 또는 마지막 질문의 성공 완료 후 30분 유휴 만료된다. 읽기·화면 이동·입력만으로는 만료 시각을 갱신하지 않으며 서버 재시작 시 인메모리 대화가 사라진다. 프론트는 React 상태와 같은 탭의 sessionStorage에 대화 ID·완료 턴·전체보기·제안 토글 상태를 보관한다. 프론트 자체의 30분 TTL이나 화면 진입 시 서버 대화 상태 조회는 없다. 만료된 ID로 다음 질문을 보냈을 때 410 MEMORY_SEARCH_CONVERSATION_GONE을 받으면 기존 대화·결과를 지우고 사용자가 새 대화 시작 버튼을 눌러야 한다.
+        백엔드 문맥은 local 프로필에서 프로세스 메모리에, prod 프로필에서 공유 Redis에 저장한다(PR #171 제안, 아직 미병합). 대화는 생성 또는 마지막 질문의 성공 완료 후 30분 유휴 만료된다. 30분은 운영 초기값이며, 실제 질문 간격과 유휴 만료 비율을 확인해 조정한다. 읽기·화면 이동·입력만으로 만료 시각을 갱신하지 않는다. Redis 모드에서는 모든 백엔드가 같은 Redis와 환경 구분값을 사용해야 한다. Redis 자체의 데이터 보존·장애 조치 설정은 배포 환경 검증 대상이다. 프론트는 React 상태와 같은 탭의 sessionStorage에 대화 ID·완료 턴·전체보기·제안 토글 상태를 보관한다. 프론트 자체의 30분 TTL이나 화면 진입 시 서버 대화 상태 조회는 없다. 만료된 ID로 다음 질문을 보냈을 때 410 MEMORY_SEARCH_CONVERSATION_GONE을 받으면 기존 대화·결과를 지우고 사용자가 새 대화 시작 버튼을 눌러야 한다.
 
         완료된 대화는 같은 탭 새로고침과 자물쇠 상세·전체보기 왕복에서 복원한다. 질문이 진행 중인 스냅샷으로 새로고침한 경우에는 이전 대화 ID에 DELETE를 요청하고 대화·결과를 초기화하며 질문 문구만 입력창에 복원한다.
       security:
@@ -6229,7 +6439,7 @@ paths:
                   message:
                     type: string
         '410':
-          description: 대화 ID가 종료·만료·미존재이거나 다른 사용자에게 속해 새 대화를 시작해야 하므로 410. 서버 재시작으로 인메모리 대화가 사라진 경우도 포함한다. 프론트는 다음 질문에서 이 응답을 받으면 기존 대화·결과를 지우고 새 대화 시작 버튼을 표시한다.
+          description: "대화 ID가 종료·만료·미존재이거나 다른 사용자에게 속해 새 대화를 시작해야 하므로 410이다. local 프로필에서는 백엔드 재시작으로 인메모리 문맥이 사라질 수 있다. prod의 공유 Redis 문맥은 백엔드 태스크 재시작과 별도로 유지되지만, Redis 데이터 손실·축출·장애 조치 시 보존 여부는 Redis 운영 설정에 따른다. 프론트는 다음 질문에서 이 응답을 받으면 기존 대화·결과를 지우고 새 대화 시작 버튼을 표시한다."
           content:
             application/json:
               schema:

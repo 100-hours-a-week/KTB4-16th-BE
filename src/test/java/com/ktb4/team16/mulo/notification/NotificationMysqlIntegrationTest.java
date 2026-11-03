@@ -95,15 +95,17 @@ class NotificationMysqlIntegrationTest {
 
     /** 역방향 요청은 친구 관계 생성과 2개 알림까지 Outbox worker가 원자적으로 마친다. */
     @Test
-    void mutualFriendRequestsCreateTwoNotificationsForOneCompletedEvent() {
+    void mutualFriendRequestsCreateTwoNotificationsForOneCompletedEvent() throws InterruptedException {
         TestUser requester = insertUser("requester");
         TestUser addressee = insertUser("addressee");
-        friendCommandService.sendFriendRequest(requester.id(), addressee.nickname());
+        var pending = friendCommandService.sendFriendRequest(requester.id(), addressee.nickname());
 
         var result = friendCommandService.sendFriendRequest(addressee.id(), requester.nickname());
 
         assertThat(result).isInstanceOf(SendFriendRequestResult.BecameFriends.class);
         Long friendshipId = ((SendFriendRequestResult.BecameFriends) result).friendshipId();
+        awaitCompleted("FRIEND_REQUEST", ((SendFriendRequestResult.Pending) pending).friendRequestId());
+        awaitCompleted("FRIEND_ACCEPTED", friendshipId);
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT COUNT(*) FROM notifications
                 WHERE type = 'FRIEND_ACCEPTED' AND friendship_id = ?
@@ -190,7 +192,7 @@ class NotificationMysqlIntegrationTest {
 
     /** AI 회고 COMPLETED 변경과 월간 리포트 이벤트 및 알림이 같은 commit에서 연결된다. */
     @Test
-    void completedAiRecapCreatesMonthlyReportNotification() {
+    void completedAiRecapCreatesMonthlyReportNotification() throws InterruptedException {
         TestUser owner = insertUser("reportowner");
         jdbcTemplate.update("""
                 INSERT INTO monthly_reports
@@ -207,6 +209,7 @@ class NotificationMysqlIntegrationTest {
                         MonthlyReportAiCallbackRequest.Status.COMPLETED,
                         new MonthlyReportAiCallbackRequest.AiRecap("9월 회고"), List.of(), null))));
 
+        awaitCompleted("MONTHLY_REPORT_CREATED", reportId);
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT status FROM outbox_events
                 WHERE event_type = 'MONTHLY_REPORT_CREATED' AND aggregate_id = ?
@@ -261,6 +264,7 @@ class NotificationMysqlIntegrationTest {
                     SELECT friend_request_id FROM friend_requests
                     WHERE requester_id = ? AND addressee_id = ?
                     """, Long.class, requesters.get(index).id(), addressees.get(index).id());
+            awaitCompleted("FRIEND_REQUEST", requestId);
             assertThat(jdbcTemplate.queryForObject("""
                     SELECT status FROM outbox_events
                     WHERE event_type = 'FRIEND_REQUEST' AND aggregate_id = ?
@@ -306,6 +310,23 @@ class NotificationMysqlIntegrationTest {
                 WHERE event_type = 'FRIEND_REQUEST'
                     AND JSON_EXTRACT(payload, '$.senderUserId') = ?
                 """, Integer.class, requester.id())).isZero();
+    }
+
+    /** 비동기 알림 완료를 DB 상태로 확인한 뒤 사용자별 데이터를 정리한다. */
+    private void awaitCompleted(String eventType, Long aggregateId) throws InterruptedException {
+        long deadline = System.nanoTime() + TimeUnit.SECONDS.toNanos(10);
+        String status;
+        do {
+            status = jdbcTemplate.queryForObject("""
+                    SELECT status FROM outbox_events
+                    WHERE event_type = ? AND aggregate_id = ?
+                    """, String.class, eventType, aggregateId);
+            if ("COMPLETED".equals(status) || "FAILED".equals(status)) {
+                break;
+            }
+            TimeUnit.MILLISECONDS.sleep(25);
+        } while (System.nanoTime() < deadline);
+        assertThat(status).isEqualTo("COMPLETED");
     }
 
     /** 고유한 활성 사용자를 생성해 다른 테스트와 사용자 데이터가 겹치지 않게 한다. */

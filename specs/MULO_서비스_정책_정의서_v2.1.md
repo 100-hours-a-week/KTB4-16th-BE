@@ -9,9 +9,10 @@
 > **알림 도메인 구현 상태 반영:** 2026-10-11 (KST)
 > **친구 요청 알림 정책 갱신:** 2026-10-18 (KST), [위키 #248](https://github.com/100-hours-a-week/KTB4-16th-wiki/issues/248) 사용자 확정
 > **AI 기억 검색 구현 상태 반영:** 2026-10-19 (KST), [PR #129](https://github.com/100-hours-a-week/KTB4-16th-BE/pull/129) 실제 HTTP 연동 및 현재 프론트 구현 기준
+> **AI 추천 피드백 구현 상태 반영:** 2026-11-01 (KST), BE #316 추천 이력·피드백 API와 FE 제출 게이트 구현 기준
 > **기준 자료**
 > 1. 대화에서 사용자가 직접 확정한 최신 결정
-> 2. 현재 백엔드 작업 트리와 Flyway V1~V8
+> 2. 현재 백엔드 작업 트리와 Flyway V1~V13
 > 3. `MULO_테이블_정의서_v8.1`
 > 4. `MULO_OpenAPI_v2.8`
 > 5. 테이블 정의서 v7.6, 정책 정의서 v1.9, OpenAPI v2.6
@@ -53,13 +54,14 @@
 | 자물쇠 | 생성·목록·상세·코멘트 수정·삭제 구현 | 구현됨 |
 | 날씨 | 기상청 격자 캐시 기반 조회 구현 | 구현됨 |
 | AI 추천 플레이리스트 | 현재 목록 조회·현재 좌표 기반 생성·기존 목록 유지 처리 구현 | 구현됨 |
+| AI 추천 피드백 이력 | 정상 추천 결과·곡 이력 저장, 생성 응답 ID, 피드백 제출 API | Backend 구현됨. 정상 결과의 진행 게이트와 세션 회차 관리는 FE가 수행 |
 | 월간 리포트 | 목록·상세 조회 및 내부 생성/AI 완료 콜백 구현 | 공개 조회 구현됨, 내부 운영 API는 공개 Swagger 미포함 |
 | 친구 | 친구 7개 API 및 친구 자물쇠 읽기 구현 | 구현됨 |
 | 알림 | 목록·일괄 읽음·삭제 API 및 친구·월간 리포트 Outbox 처리 구현 | MATCH_COMPLETED 발행은 배포 환경의 기존 이력 확인과 Chat DB 참가자 등록 근거 확인 전까지 보류 |
 | 매칭 요청 생성 | POST API, WAITING→MATCHING 후보 결정, KST 23:00 신규 요청 차단 및 당일 WAITING 만료 구현 | 구현됨 |
 | 매칭 상태 조회 | 인증된 요청 소유자의 현재 상태를 polling으로 조회 | 구현됨 |
 | Chat Server 연동·채팅 | ChatRoomClient는 구현됐으나 MatchService 연동·방 생성 완료 전이는 미구현 | 일부 구현 / contract-only |
-| AI 기억 검색 | V1 제외 이력 유지, V2 공개 API·인메모리 대화·실제 AI HTTP 연동 및 현재 프론트의 대화 복원·오류 처리 구현 | PR #129 HTTP 연동 구현 / 실제 AI 직접 호출 200 확인 / 프론트 전체 흐름 실연동 검증은 미확인 |
+| AI 기억 검색 | V1 제외 이력 유지, V2 공개 API·프로필별 대화 저장(로컬 인메모리 / 운영 Redis 공유 제안)·실제 AI HTTP 연동 및 현재 프론트의 대화 복원·오류 처리 구현 | PR #129 HTTP 연동 구현 / PR #171 Redis 문맥·요청 잠금 제안(미병합) / 운영 Redis 연결과 ECS 배포 검증 미완료 |
 
 
 ## 공통·문서 원칙
@@ -168,7 +170,7 @@
 | `UPLOAD-008` | **보류** | Presigned URL | V1은 백엔드가 파일을 받아 GCS에 업로드하는 방식을 유지하며 Presigned URL 전환은 보류한다. | API 명세 상세2차 정책 요약 R13 |
 | `PHOTO-001` | **현재 설계** | 최종 사진 수 | 자물쇠 생성 완료 시 사진은 정확히 1장 연결되며 `record_photos.record_id`는 1:1로 관리한다. | 테이블 정의서 6차 §5-6 / API 명세 상세2차 R106 |
 | `PHOTO-002` | **현재 설계** | 최종 사진 저장 | 최종 이미지 파일은 GCS에 저장하고 DB에는 이미지 위치와 파일 메타데이터를 저장한다. | 테이블 정의서 6차 §6 |
-| `PHOTO-003` | **현재 설계** | 사진 기반 음악 추천 | 유효한 본인 `uploadId`의 사진을 AI가 분석해 음악을 최대 3곡 추천한다. | API 명세 상세2차 정책 요약 R14 / R98-R104 |
+| `PHOTO-003` | **현재 구현** | 사진 기반 음악 추천 | 유효한 본인 `uploadId`의 사진을 AI가 분석하며 현행 API는 정확히 5곡을 반환한다. | OpenAPI v2.8 `/api/recommendations/photo`, `PhotoRecommendationService` |
 | `PHOTO-004` | **확정** | 최종 사진 보존 | 사용자 탈퇴 또는 자물쇠 soft delete 이후에도 이미 최종 자물쇠에 연결된 GCS 사진과 `record_photos` 메타데이터는 보존한다. | 사용자 확정 |
 
 ## 자물쇠
@@ -273,8 +275,21 @@
 | `REC-012` | **현재 구현** | 추천 곡 앨범 이미지 | 조회·생성 응답의 각 곡은 `music_tracks.album_image_url`을 `albumImageUrl`로 반환한다. AI 응답에서 앨범 이미지 URL이 없으면 추천 결과를 저장하지 않고 AI 연동 오류로 처리한다. | `RecommendationPlaylistData`, `ContextRecommendationAiClient` |
 | `REC-013` | **현재 구현** | 추천 곡 최대 수 | 백엔드는 AI 요청의 `limit`을 5로 고정하고 정확히 5개의 정상 곡 응답만 저장한다. 일부 곡을 잘라 저장하지 않으며 제외 곡 재등장·응답 내 중복 ID는 실패 처리한다. | `ContextRecommendationAiClient:19,39`, `RecommendationPlaylistWriter:28-39` |
 
-| `REC-014` | **확정·구현** | 화면 세션 추천 | 진입 시 이전 추천을 조회하거나 자동 생성하지 않고 최대 3회 안내와 추천 버튼을 표시한다. 새 추천 성공만 최대 3회이며 실패·기존 목록 유지 응답은 차감하지 않는다. 요청 중 버튼 잠금과 동기 실행 가드를 적용하고 초기·진행·완료 상태 모두 X·ESC·배경 닫기는 확인 후 수행한다. 닫았다 다시 열면 빈 추천·0회·빈 제외 목록으로 시작한다. 종료 경로의 최종 UX는 디자인에서 조정한다. | 사용자 확정 / `HomePlaylistSheet` |
+| `REC-014` | **확정·구현** | 화면 세션 추천 | 진입 시 이전 추천을 조회하거나 자동 생성하지 않고 최대 3회 안내와 추천 버튼을 표시한다. FE가 성공한 정상 추천만 최대 3회로 세며 실패·기존 목록 유지 응답은 차감하지 않는다. 요청에 `recommendationAttempt` 1~3을 전달한다. 새 정상 추천 결과의 피드백 제출 성공 전에는 FE가 닫기·재추천을 막고 제출 중에도 차단한다. 오류·결과 없음·추천 ID 누락은 피드백 없이 닫을 수 있다. Backend는 추천 회차 입력 범위만 검증하며 미제출 피드백 또는 시트당 3회를 독립 강제하지 않는다. 닫았다 다시 열면 추천·횟수·제외 목록을 초기화한다. | 사용자 확정 / `HomePlaylistSheet` / BE 요청 검증 |
 | `REC-015` | **확정·구현** | 세션 곡 중복 제외 | 프론트는 이번 화면에서 받은 externalTrackId를 누적해 POST의 excludeTrackIds로 전달한다. 최초는 빈 배열, 최대 50개이며 백엔드가 AI로 전달한다. 추천 응답은 externalTrackId, POST data는 replaced를 제공한다. 횟수·제외 이력은 프론트 메모리에서만 관리하고 서버 세션·Redis·종료 API는 추가하지 않는다. 기존 DB 저장 및 GET 계약은 유지하되 홈 진입에서는 조회하지 않는다. | 사용자 확정 / 추천 API |
+
+## AI 추천 피드백
+
+| 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
+|---|---|---|---|---|
+| `FB-001` | **현재 구현** | 추천 결과 단위 이력 | 정상 사진·플레이리스트 추천마다 독립 결과와 곡 전체의 Spotify Track ID·순위를 저장한다. 피드백은 추천 결과 전체에 LIKE 또는 DISLIKE를 제출하며 개별 곡별 피드백은 없다. | Flyway V13 / 추천 API 서비스 |
+| `FB-002` | **현재 구현** | 사진 추천 횟수와 피드백 | 사진 추천은 하루 횟수 제한이 없고 요청마다 별도 결과와 피드백 기회가 있다. 정상 결과의 피드백을 제출해야 FE에서 추천 화면 닫기와 다음 자물쇠 생성 단계 진행을 허용한다. 추천 오류·결과 없음·식별자 누락이면 FE가 제출을 요구하지 않는다. 피드백 미제출 시 행은 만들지 않는다. PHOTO는 LIKE/DISLIKE 모두 `selectedTrackId` 없이 제출한다. | BE 추천·피드백 API / FE `RecordCreateForm`, `PhotoMusicRecommendationModal` |
+| `FB-003` | **현재 구현** | 플레이리스트 세션 횟수 | 플레이리스트 창을 연 동안 최초 추천 1회차와 최대 두 번의 재추천(2·3회차)을 허용한다. FE가 세션 회차를 관리하고 요청에 `recommendationAttempt` 1~3을 전달한다. 창을 닫고 다시 열면 회차가 초기화된다. 실패와 기존 목록 유지 fallback은 성공 횟수에 포함하지 않는다. 하루 제한은 없다. | FE `HomePlaylistSheet` / BE 요청 검증 |
+| `FB-004` | **FE에서 구현** | 재추천·닫기 전 피드백 | 정상 추천 결과에 아직 피드백이 없으면 FE는 플레이리스트 시트 닫기·재추천과 사진 추천 화면 닫기·다음 단계 진행을 막는다. 미제출 피드백은 서버에 저장하지 않는다. 이 진행 차단은 FE 동작이며 Backend는 다음 추천 또는 자물쇠 생성 요청에서 미제출 여부를 검사·차단하지 않는다. | FE `HomePlaylistSheet`, `RecordCreateForm` / BE 서비스 경계 |
+| `FB-005` | **현재 구현** | 플레이리스트 피드백 입력 | PLAYLIST + LIKE는 추천 목록에서 가장 마음에 든 곡 1개를 골라야 제출할 수 있다. DISLIKE는 곡 선택 없이 제출한다. 한 추천 결과에는 피드백을 최대 1개만 저장한다. | 피드백 API / Flyway V13 UNIQUE |
+| `FB-006` | **현재 구현** | 선택 곡 검증 | Backend는 PLAYLIST + LIKE의 선택 곡이 해당 추천 결과의 곡 목록에 포함되는지 검증한다. PHOTO 및 DISLIKE에는 선택 곡을 허용하지 않는다. | `AiRecommendationFeedbackService` |
+| `FB-007` | **현재 구현** | 이력과 현재 플레이리스트 분리 | 정상 추천 성공 시 결과와 곡 스냅샷을 저장하고, 사용자가 피드백 API를 제출한 경우에만 피드백 행을 저장한다. 이력은 현재 플레이리스트 교체·삭제와 독립적으로 보존된다. | Flyway V13 / 추천 이력 저장 서비스 |
+| `FB-008` | **현재 구현** | 결과 식별자와 피드백 API | 사진 및 정상 플레이리스트 추천 POST 응답은 최상위 `recommendationId`를 반환한다. 플레이리스트 fallback은 ID를 생략하고 이력을 만들지 않는다. 피드백 POST는 인증·소유권·입력·중복을 검증한다. 기존 플레이리스트 GET은 추천 이력 ID를 연결하지 않는다. | OpenAPI v2.8 / 추천·피드백 API |
 
 
 ## AI 기억 검색
@@ -282,8 +297,8 @@
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
 | `MEM-001` | **확정·구현됨** | 공개 API와 명시적 종료 | 인증 사용자는 `POST /api/memories/search/conversations`로 대화를 시작하고, `POST /api/memories/search`에 `{conversationId, query}`를 보내고, 명시적 나가기에서 `DELETE /api/memories/search/conversations/{conversationId}`를 호출한다. 시작은 201, 질문은 200, 종료는 본문 없는 204다. 프론트는 `userId`나 `history`를 보내지 않는다. 명시적 나가기는 화면·스냅샷을 즉시 지우고 서버 종료를 요청한다. 브라우저 수신·재시도 중단이 서버의 AI 호출 취소를 의미하지 않으며, 종료된 대화의 늦은 결과는 저장·공개하지 않는다. | 사용자 확정 / PR #103 컨트롤러·`MemorySearchService` / FE `MemorySearchConversationProvider:86-108,150-151`, `MemorySearchPage:63-69` |
-| `MEM-002` | **확정·구현됨** | 백엔드 대화 저장과 만료 | 백엔드가 사용자별 UUID 대화 ID를 발급하고 최근 완료된 질문·검증된 정확 일치 ID 최대 5턴을 단일 서버 프로세스 메모리에 저장한다. 생성 시 30분 유효기간을 시작하고 성공 응답의 턴을 활성 대화에 추가한 때만 다시 30분으로 갱신한다. 단순 조회·화면 이동·실패한 질문은 갱신하지 않는다. 만료 시점부터 대화는 유효하지 않지만 물리적 삭제는 해당 대화 접근 또는 새 대화 시작 시 수행한다. 새 대화를 시작해도 다른 활성 대화를 자동 종료하지 않는다. 서버 재시작 시 대화는 사라진다. Redis 도입은 서버 간 공유나 재시작 후 대화 유지가 필요할 때 재검토한다. | 사용자 확정 / `InMemoryMemorySearchConversationStore:41-103`, `MemorySearchService:58-60` |
-| `MEM-003` | **확정·구현됨** | 입력·동시성 | 질문은 최대 500자이며 초과 시 `400 INVALID_INPUT_VALUE`를 반환한다. 활성 본인 자물쇠가 0개이면 프론트 입력을 막고 질문 API도 `400 MEMORY_SEARCH_NO_RECORDS`를 반환한다. 같은 사용자에게 AI 호출이 진행 중이면 추가 질문을 시작하지 않고 `409 MEMORY_SEARCH_IN_PROGRESS`를 반환한다. 종료·만료·없는 대화 ID 또는 타인 대화 ID는 `410 MEMORY_SEARCH_CONVERSATION_GONE`이다. | 사용자 확정 / PR #103 요청 게이트·오류 코드 / PR #105 500자 제한 / `MemorySearchRequestGate`, `MemorySearchLimits` |
+| `MEM-002` | **PR #171 제안 (미병합)** | 백엔드 대화 저장과 만료 | 백엔드는 사용자별 UUID 대화 ID를 발급하고 최근 완료된 질문·검증된 정확 일치 ID 최대 5턴을 저장한다. 로컬 `local` 프로필은 단일 백엔드 프로세스 메모리를, 운영 `prod` 프로필은 모든 백엔드 태스크가 공유하는 Redis를 선택한다. Redis 키는 대화 생성 때 30분 유휴 만료를 시작하고, 성공한 질문 문맥을 저장할 때만 다시 30분으로 갱신한다. 30분은 실사용 측정치가 없는 초기값이며, 운영 데이터에서 질문 간격과 유휴 만료 비율을 확인해 조정한다. 단순 읽기·화면 이동·실패한 질문은 만료를 연장하지 않으며 명시적 나가기는 대화 키를 삭제한다. 새 대화를 시작해도 다른 활성 대화를 자동 종료하지 않는다. Redis 모드 서버는 같은 Redis 주소와 환경 구분값을 써야 하며, 운영 필수 설정이 없으면 시작을 거절한다. PR #171이 merge되기 전에는 develop 동작이 바뀌지 않는다. 운영 Redis의 TLS·인증·네트워크·장애 조치·데이터 보존 정책은 아직 검증되지 않았다. | 기능 PR #171 / `RedisMemorySearchConversationStore`, `MemorySearchConversationConfiguration` / 운영 확인 항목은 OQ-027 |
+| `MEM-003` | **기존 계약 유지 / Redis 잠금 PR #171 제안 (미병합)** | 입력·동시성 | 질문은 최대 500자이며 초과 시 `400 INVALID_INPUT_VALUE`를 반환한다. 활성 본인 자물쇠가 0개이면 프론트 입력을 막고 질문 API도 `400 MEMORY_SEARCH_NO_RECORDS`를 반환한다. 같은 사용자에게 AI 호출이 진행 중이면 추가 질문은 `409 MEMORY_SEARCH_IN_PROGRESS`를 받는다. 로컬에서는 잠금이 해당 프로세스 안에서만 공유되며, PR #171 제안의 운영 모드에서는 Redis `SET NX PX`로 사용자당 하나의 잠금을 여러 서버가 공유한다. 잠금 기본 유효시간은 60초다. 만료된 이전 요청은 결과를 문맥에 추가하거나 새 요청의 잠금을 해제할 수 없지만, 이전 AI 호출 자체가 취소되는 것은 아니다. 종료·만료·없는 대화 ID 또는 타인 대화 ID는 `410 MEMORY_SEARCH_CONVERSATION_GONE`이다. | 사용자 확정 / PR #103 요청 게이트·오류 코드 / PR #105 500자 제한 / 기능 PR #171 |
 | `MEM-004` | **확정·구현됨** | 응답과 화면 | 공개 성공 응답은 `{message, data: {answer, records, suggestedRecords}}`이다. AI의 `answer`에는 건수를 넣지 않는다. AI가 정확 일치 ID를 보냈으나 백엔드 소유권·삭제 검증 후 공개할 정확 일치 카드가 0건이면 백엔드가 `answer`를 `표시할 수 있는 자물쇠가 없어요.`로 교체한다. AI가 처음부터 정확 일치 0건이라고 판단한 경우에는 AI의 조건 설명을 유지한다. 프론트는 공개된 `records.length`로 건수를 표시하고 앞 5건을 먼저 보여준다. 6건 이상이면 전체보기에서 전체 정확 일치 카드를 같은 순서로 보여준다. 정확 일치가 0건이고 제안만 있어도 정상 200이며, 제안 카드는 사용자가 토글을 눌러 펼친다. | 사용자 확정 / PR #103 응답 DTO / PR #105 문구 교체 / `MemorySearchService:62-65` / FE `MemorySearchPage:159-203,282-305` |
 | `MEM-005` | **확정·구현됨** | AI ID 계약과 카드 순서 | 실제 AI에서 정확 일치 `records: [{recordId}]`와 제안 `suggestedRecords: [{recordId, matchedConditions}]`를 관련도 순서로 받는다. 정확 일치는 최대 50건, 제안은 최대 3건, 두 배열의 합계는 최대 50건이다. 백엔드는 양의 정수 ID·배열 내부와 배열 간 중복·필수 필드 타입·건수 계약을 검증한다. AI의 카드·점수 필드는 사용하지 않고 현재 사용자의 활성 자물쇠인지 DB에서 재검증해 카드 제목·가수·장소·생성일·날씨·앨범 이미지를 구성한다. 삭제·비소유 ID는 제외하고 각 배열의 AI 순서를 유지한다. 날씨나 법정동 이름이 없는 기록의 해당 카드 값은 `null`일 수 있다. | PR #129 / `HttpMemorySearchAiGateway:83-128`, `MemorySearchOwnedRecordFilter:20-30`, `MemorySearchService:42-55,69-81` |
 | `MEM-006` | **확정·구현됨** | 실제 HTTP 문맥 전달과 AI V2 한계 | 백엔드는 인증 사용자 `userId`, 현재 `query`, 완료된 이전 최대 5턴의 `history: [{query, recordIds}]`만 실제 HTTP 요청에 담고 `limit`은 보내지 않는다. `history`는 오래된 턴부터 전달하며 첫 요청은 빈 배열이다. 턴당 `recordIds`에는 공개된 정확 일치 결과만 최대 50개 저장하고 제안 ID는 제외한다. AI 자체에는 대화를 저장하지 않는다. 현재 AI V2는 `history`를 받아도 검색에 사용하지 않는다. V3의 문맥 활용·배포 적용은 미확인이다. | 사용자 확정 / AI 전달 문서 / PR #129 / `HttpMemorySearchAiGateway:46-69,161`, `MemorySearchService:38-42,56-60` |
@@ -406,6 +421,7 @@
 | `OQ-023` | 월간 리포트 배치 실행 시각 | 정책 |
 | `OQ-024` | AI V3의 `history` 활용 및 실제 배포 적용 확인. ID 중심 응답과 백엔드 HTTP 연동은 PR #129 기준 구현됨 | 정책, API, AI 연동 |
 | `OQ-026` | 기억 검색 만료 뒤 완료 화면 보존, 대화 상태 조회 GET, 읽기 전용 화면 등 만료 UX 개선 제안의 채택 여부. 현재 구현은 MEM-007·MEM-011이며 제안은 미확정·미구현 | 정책, API, 프론트 |
+| `OQ-027` | 기능 PR #171 merge 전후 운영 Redis 설정과 접속 확인. ECS 네트워크·DNS·TLS·인증, Redis persistence/eviction/failover, 30분 문맥 TTL의 사용 데이터 기반 적합성, 60초 잠금과 실제 AI 지연 적합성은 미검증 | 정책, 운영 |
 
 미정 항목은 문서에 추론으로 채우지 않는다.
 
@@ -427,6 +443,7 @@
 | `SYNC-010` | 월간 리포트 | 대표 장소/대표 아티스트 동률 시 가장 최근 기록이 존재하는 후보를 선택하도록 명시한다. |
 | `SYNC-011` | `monthly_photo_scene_stats.scene_tag` | AI 반환 문자열을 `VARCHAR`로 저장하고 별도 ENUM/canonical 제한을 두지 않는 정책을 명시한다. |
 | `SYNC-012` | 인증 | 로그아웃 시 클라이언트 Access Token 즉시 폐기, Refresh Token revoke/Cookie 만료, V1 다중 기기 로그인 미지원, Refresh Token SHA-256 저장, 닉네임 확정 형식, Cookie/CORS 역할 분리를 AUTH/API 문서에 명시한다. |
+| `SYNC-013` | AI 추천 피드백 | Flyway V13 구조, 생성 응답의 최상위 recommendationId, 피드백 요청·응답 및 FE/BE 책임 경계를 OpenAPI·테이블·정책 문서에 반영 완료. |
 
 ## API 전수 대조 체크리스트
 
@@ -512,6 +529,9 @@
 - [x] 21. `weather - 도시 단위 레거시 날씨 테이블`
 - [x] 22. `weather_grids - 기상청 격자 테이블`
 - [x] 23. `weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블`
+- [x] 29. `ai_recommendation_results - AI 추천 결과 이력 테이블 (Flyway V13)`
+- [x] 30. `ai_recommendation_result_tracks - 추천 결과 곡 스냅샷 테이블 (Flyway V13)`
+- [x] 31. `ai_recommendation_feedbacks - AI 추천 피드백 테이블 (Flyway V13)`
 
 V1 당시 `chat_rooms`, `chat_room_participants`, `chat_messages` 정의는 테이블 정의서의 역사 자료이며 현재 Backend 테이블 목록에 포함하지 않는다.
 
@@ -529,4 +549,4 @@ V1 당시 `chat_rooms`, `chat_room_participants`, `chat_messages` 정의는 테�
 - 최신 자료에서 근거가 없는 사항은 자동으로 확정하지 않았다.
 - `미확정 / 추가 결정 필요`와 `보류` 항목은 구현 단계에서 임의 확정하지 않는다.
 - DB 컬럼 사전이 아니라 서비스 동작 판단을 위한 정책 문서이므로, 세부 타입·인덱스·제약조건은 테이블 정의서/ERD/SQL에서 관리하되 정책과 충돌해서는 안 된다.
-- API 전수 대조는 OpenAPI v2.8의 46개 경로·53개 작업을 기준으로 한다. V2 임시저장 API는 GET/PUT/DELETE `/api/users/me/record-draft`이다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 Flyway V1~V8의 실제 26개 테이블을 기준으로 한다. `record_drafts`와 레거시 `weather`는 실제 존재와 정책 상태를 함께 표시한다.
+- API 전수 대조는 현재 제공 중인 OpenAPI v2.8 계약을 기준으로 한다. AI 추천 결과 ID 응답과 피드백 API는 구현되어 현재 계약에 포함한다. 장소 클러스터 조회 2개는 담당 팀원의 OpenAPI v2.4 계약을 우선하며, 현재 구현의 `GET /api/csrf`를 포함한다. 테이블 정의서는 기존 Flyway 기준 본문을 유지하면서 Flyway V13의 AI 추천 피드백 테이블 3개를 §29~31에 추가했다.

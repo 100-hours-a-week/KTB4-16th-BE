@@ -1,0 +1,19 @@
+name: mulo-popular-cache-local
+
+services:
+  redis:
+    image: redis:8.2.10
+    container_name: mulo-popular-cache-local-redis
+    labels:
+      mulo.owner: popular-cache-pr-299
+    ports:
+      - "127.0.0.1:16382:6379"
+    # 캐시는 원본 데이터가 아니므로 별도 영구 볼륨 없이 메모리 한도를 둔다.
+    command: ["redis-server", "--save", "", "--appendonly", "no", "--maxmemory", "256mb", "--maxmemory-policy", "allkeys-lru"]
+    cpus: 1
+    mem_limit: 512m
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 3s
+      timeout: 2s
+      retries: 20

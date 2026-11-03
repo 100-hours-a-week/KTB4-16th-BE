@@ -42,7 +42,7 @@ public class RecommendationPlaylistCommandService {
             throw new RecommendationAiException();
         }
         if (recommendation.degraded()) {
-            return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false);
+            return new CreateResult(queryService.getCurrentPlaylist(userId).playlist(), false, null);
         }
         // 이미 보여준 곡이나 한 응답 안의 중복 곡은 성공 추천으로 저장하지 않는다.
         var trackIds = recommendation.tracks().stream()
@@ -51,9 +51,11 @@ public class RecommendationPlaylistCommandService {
                 || trackIds.stream().anyMatch(request.excludeTrackIds()::contains)) {
             throw new RecommendationAiException();
         }
-        return new CreateResult(writer.replace(userId, recommendation.tracks()), true);
+        var saved = writer.replace(userId, request.recommendationAttempt().byteValue(), recommendation.tracks());
+        return new CreateResult(saved.playlist(), true, saved.recommendationId());
     }
 
     // Controller가 실제 저장 여부에 맞는 HTTP 상태와 응답 메시지를 선택하도록 생성 결과를 전달한다.
-    public record CreateResult(RecommendationPlaylistData.Playlist playlist, boolean replaced) { }
+    public record CreateResult(RecommendationPlaylistData.Playlist playlist, boolean replaced,
+            Long recommendationId) { }
 }
