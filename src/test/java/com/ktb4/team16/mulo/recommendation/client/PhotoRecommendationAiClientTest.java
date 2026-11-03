@@ -16,6 +16,8 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.boot.test.system.CapturedOutput;
 import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.http.HttpMethod;
@@ -43,8 +45,28 @@ class PhotoRecommendationAiClientTest {
 
         var response = client.recommend("https://signed.example/photo");
 
+        assertThat(response.recommendReason()).isNull();
         assertThat(response.tracks()).hasSize(1);
         assertThat(response.tracks().getFirst().externalTrackId()).isEqualTo("id");
+        server.verify();
+    }
+
+    // 사진 추천 이유도 AI가 준 문자열 그대로 받고 누락과 별도로 명시적 null을 허용한다.
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "  사진의 분위기 🌄\n\"차분하게\" 들어요.  "})
+    void preservesRecommendationReason(String reason) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        AiProperties properties = new AiProperties(URI.create("http://ai.test"), "test-token",
+                Duration.ofSeconds(1), Duration.ofSeconds(1), false);
+        PhotoRecommendationAiClient client = new PhotoRecommendationAiClient(builder, properties);
+        String body = "{\"recommendReason\":" + JsonMapper.builder().build().writeValueAsString(reason)
+                + ",\"tracks\":[],\"degraded\":false}";
+        server.expect(requestTo("http://ai.test/api/photo-recommend"))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        assertThat(client.recommend("https://signed.example/photo").recommendReason()).isEqualTo(reason);
         server.verify();
     }
 

@@ -40,7 +40,7 @@ class PhotoRecommendationControllerTest {
     @Test
     void returnsRecommendations() throws Exception {
         when(service.recommend(7L, 123L)).thenReturn(new PhotoRecommendationService.RecommendationResult(44L, List.of(
-                new PhotoRecommendationResponse.Track("id", "title", "artist", "album", "url"))));
+                new PhotoRecommendationResponse.Track("id", "title", "artist", "album", "url")), "  사진 🌄\n그대로  "));
 
         mvc.perform(post("/api/recommendations/photo")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -48,9 +48,26 @@ class PhotoRecommendationControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("사진 기반 음악 추천 성공"))
                 .andExpect(jsonPath("$.recommendationId").value(44))
+                .andExpect(jsonPath("$.recommendReason").value("  사진 🌄\n그대로  "))
                 .andExpect(jsonPath("$.data[0].externalTrackId").value("id"));
 
         verify(service).recommend(7L, 123L);
+    }
+
+    // AI가 이유를 주지 않아도 기존 추천은 성공하고 공개 필드 값만 null이 된다.
+    @Test
+    void returnsNullReasonWithoutChangingTrackArray() throws Exception {
+        when(service.recommend(7L, 123L)).thenReturn(new PhotoRecommendationService.RecommendationResult(
+                45L, List.of(new PhotoRecommendationResponse.Track("id", "title", "artist", "album", "url")), null));
+
+        mvc.perform(post("/api/recommendations/photo")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"uploadId\":123}"))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.recommendReason").hasJsonPath())
+                .andExpect(jsonPath("$.recommendReason").isEmpty())
+                .andExpect(jsonPath("$.recommendationId").value(45))
+                .andExpect(jsonPath("$.data[0].externalTrackId").value("id"));
     }
 
     @Test

@@ -29,6 +29,7 @@ public enum ErrorCode {
     SELECTED_OPTION_REQUIRED(HttpStatus.BAD_REQUEST, "선택값을 입력해주세요."),
 
     INVALID_INPUT_VALUE(HttpStatus.BAD_REQUEST, "입력값을 확인해주세요."),
+    METHOD_NOT_ALLOWED(HttpStatus.METHOD_NOT_ALLOWED, "지원하지 않는 HTTP 메서드입니다."),
     UNSUPPORTED_MEDIA_TYPE(HttpStatus.UNSUPPORTED_MEDIA_TYPE, "지원하지 않는 요청 형식입니다."),
     LATITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 위도가 필요합니다."),
     LONGITUDE_REQUIRED(HttpStatus.BAD_REQUEST, "현재 경도가 필요합니다."),

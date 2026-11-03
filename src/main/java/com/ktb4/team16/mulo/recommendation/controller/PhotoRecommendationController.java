@@ -18,12 +18,13 @@ import org.springframework.web.bind.annotation.RestController;
 public class PhotoRecommendationController {
     private final PhotoRecommendationService photoRecommendationService;
 
+    // 사진 추천의 AI 문구와 평가 ID를 기존 곡 배열과 함께 반환한다.
     @PostMapping
     public PhotoRecommendationResponse recommend(
             @AuthenticationPrincipal Long userId,
             @Valid @RequestBody PhotoRecommendationRequest request) {
         var result = photoRecommendationService.recommend(userId, request.uploadId());
         return new PhotoRecommendationResponse(RecommendationMessage.PHOTO_RECOMMENDATION_SUCCEEDED.message(),
-                result.recommendationId(), result.tracks());
+                result.recommendationId(), result.recommendReason(), result.tracks());
     }
 }

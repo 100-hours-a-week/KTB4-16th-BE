@@ -18,6 +18,10 @@ import java.time.Duration;
 import java.time.OffsetDateTime;
 import java.util.List;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.NullAndEmptySource;
+import org.junit.jupiter.params.provider.ValueSource;
+import tools.jackson.databind.json.JsonMapper;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -45,12 +49,30 @@ class ContextRecommendationAiClientTest {
 
         var result = client.recommend(context());
 
+        assertThat(result.recommendReason()).isNull();
         assertThat(result.degraded()).isFalse();
         assertThat(result.tracks()).hasSize(5);
         assertThat(result.tracks().getFirst()).satisfies(track -> {
             assertThat(track.title()).isEqualTo("Track 1");
             assertThat(track.externalTrackId()).isEqualTo("track-1");
         });
+        server.verify();
+    }
+
+    // AI 문구의 공백·개행·이모지와 null을 변형 없이 내부 결과에 보존한다.
+    @ParameterizedTest
+    @NullAndEmptySource
+    @ValueSource(strings = {"   ", "  선선한 저녁 🌙\n\"함께\" 들어요.  "})
+    void preservesRecommendationReason(String reason) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
+        String body = "{\"recommendReason\":" + JsonMapper.builder().build().writeValueAsString(reason)
+                + "," + responseWithTracks(5, false).substring(1);
+        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        assertThat(client.recommend(context()).recommendReason()).isEqualTo(reason);
         server.verify();
     }
 

@@ -47,6 +47,7 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
@@ -305,6 +306,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    // 제거된 조회 API 등 지원하지 않는 HTTP 메서드를 Allow 헤더와 함께 405로 반환한다.
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedMethod(
+            HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.status())
+                .headers(exception.getHeaders())
+                .body(ErrorResponse.of(ErrorCode.METHOD_NOT_ALLOWED));
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
