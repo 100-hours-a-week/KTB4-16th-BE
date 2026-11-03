@@ -14,7 +14,7 @@ public interface RecommendationAiClient {
             OffsetDateTime requestedAt, List<NearbyTrack> nearbyTracks, String placeName, List<String> excludeTrackIds) { }
     // 주변 자물쇠에서 집계한 음악의 최소 AI 전달 형식이다.
     record NearbyTrack(String title, String artistName, long count) { }
-    record RecommendationResult(List<RecommendedTrack> tracks, boolean degraded) { }
+    record RecommendationResult(String recommendReason, List<RecommendedTrack> tracks, boolean degraded) { }
     record RecommendedTrack(String externalTrackId, String title, String artistName,
             String albumImageUrl, String externalUrl) { }
 }

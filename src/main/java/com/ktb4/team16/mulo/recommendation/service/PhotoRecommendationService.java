@@ -18,6 +18,7 @@ public class PhotoRecommendationService {
     private final PhotoRecommendationAiGateway aiClient;
     private final AiRecommendationResultWriter resultWriter;
 
+    // 사진 추천을 검증하고 평가 ID·AI 문구·곡 정보를 공개 응답 계층에 전달한다.
     public RecommendationResult recommend(Long userId, Long uploadId) {
         String signedUrl = uploadService.createReadSignedUrl(userId, uploadId);
         PhotoRecommendationAiResponse response = aiClient.recommend(signedUrl);
@@ -32,10 +33,11 @@ public class PhotoRecommendationService {
                 .toList();
         Long recommendationId = resultWriter.save(userId, AiRecommendationType.PHOTO, null,
                 tracks.stream().map(PhotoRecommendationResponse.Track::externalTrackId).toList());
-        return new RecommendationResult(recommendationId, tracks);
+        return new RecommendationResult(recommendationId, tracks, response.recommendReason());
     }
 
-    public record RecommendationResult(Long recommendationId, List<PhotoRecommendationResponse.Track> tracks) { }
+    public record RecommendationResult(Long recommendationId, List<PhotoRecommendationResponse.Track> tracks,
+            String recommendReason) { }
 
     private static void validateTrack(PhotoRecommendationAiResponse.Track track) {
         if (track == null || isBlank(track.externalTrackId()) || isBlank(track.title())

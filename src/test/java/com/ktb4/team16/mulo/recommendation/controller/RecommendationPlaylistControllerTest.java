@@ -8,6 +8,7 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
@@ -15,7 +16,6 @@ import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
 import com.ktb4.team16.mulo.recommendation.dto.request.CreateRecommendationPlaylistRequest;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
-import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
@@ -34,14 +34,13 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 
 @ExtendWith(MockitoExtension.class)
 class RecommendationPlaylistControllerTest {
-    @Mock private RecommendationPlaylistQueryService queryService;
     @Mock private RecommendationPlaylistCommandService commandService;
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
         mvc = MockMvcBuilders.standaloneSetup(
-                        new RecommendationPlaylistController(queryService, commandService))
+                        new RecommendationPlaylistController(commandService))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .setControllerAdvice(new GlobalExceptionHandler())
                 .build();
@@ -52,31 +51,24 @@ class RecommendationPlaylistControllerTest {
         SecurityContextHolder.clearContext();
     }
 
+    // 화면 세션 추천은 서버에 저장된 목록을 복원하는 GET을 제공하지 않는다.
     @Test
-    void returnsSavedPlaylistForAuthenticatedUser() throws Exception {
+    void doesNotExposeSavedPlaylistLookup() throws Exception {
         authenticate(7L);
-        when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(
-                new RecommendationPlaylistData.Playlist(3L, List.of(
-                        new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")))));
 
         mvc.perform(get("/api/recommendations/playlists"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.message").value("현재 추천 플레이리스트 조회 성공"))
-                .andExpect(jsonPath("$.recommendationId").doesNotExist())
-                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
-                .andExpect(jsonPath("$.data.playlist.tracks[0].externalTrackId").value("external-10"))
-                .andExpect(jsonPath("$.data.playlist.tracks[0].title").value("밤편지"))
-                // 추천 목록 응답이 화면에 필요한 앨범 이미지 URL을 포함하는지 검증한다.
-                .andExpect(jsonPath("$.data.playlist.tracks[0].albumImageUrl").value("image-url"));
+                .andExpect(status().isMethodNotAllowed())
+                .andExpect(header().string("Allow", "POST"))
+                .andExpect(jsonPath("$.code").value("METHOD_NOT_ALLOWED"));
     }
 
     @Test
     void createsPlaylistFromCoordinate() throws Exception {
         authenticate(7L);
-        RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(4L,
+        RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(
                 List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(playlist, true, 44L));
+                new RecommendationPlaylistCommandService.CreateResult(playlist, true, 44L, "  AI 이유 🌙\n그대로  "));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -84,17 +76,17 @@ class RecommendationPlaylistControllerTest {
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.message").value("추천 플레이리스트 생성 성공"))
                 .andExpect(jsonPath("$.recommendationId").value(44))
-                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(4))
+                .andExpect(jsonPath("$.recommendReason").value("  AI 이유 🌙\n그대로  "))
+                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").doesNotExist())
+                .andExpect(jsonPath("$.data.playlist.tracks[0].musicTrackId").value(10))
                 .andExpect(jsonPath("$.data.replaced").value(true));
     }
 
     @Test
-    void retainsExistingPlaylistWhenAiReturnsNoRecommendation() throws Exception {
+    void leavesCurrentScreenStateWithFrontendWhenAiIsDegraded() throws Exception {
         authenticate(7L);
-        RecommendationPlaylistData.Playlist playlist = new RecommendationPlaylistData.Playlist(3L,
-                List.of(new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(playlist, false, null));
+                new RecommendationPlaylistCommandService.CreateResult(null, false, null, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -102,21 +94,29 @@ class RecommendationPlaylistControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.message").value("추천 결과가 없어 기존 플레이리스트 유지"))
                 .andExpect(jsonPath("$.recommendationId").doesNotExist())
-                .andExpect(jsonPath("$.data.playlist.recommendationPlaylistId").value(3))
+                .andExpect(jsonPath("$.data.playlist").doesNotExist())
+                .andExpect(jsonPath("$.recommendReason").hasJsonPath())
+                .andExpect(jsonPath("$.recommendReason").isEmpty())
                 .andExpect(jsonPath("$.data.replaced").value(false));
     }
 
+    // 추천 이유가 없는 정상 응답도 기존 곡·평가 ID를 유지하고 null 필드를 반환한다.
     @Test
-    void returnsNullPlaylistWhenNoRecommendationAndNoExistingPlaylist() throws Exception {
+    void createsPlaylistWithoutRecommendationReason() throws Exception {
         authenticate(7L);
+        var playlist = new RecommendationPlaylistData.Playlist(List.of(
+                new RecommendationPlaylistData.Track(10L, "external-10", "밤편지", "아이유", "image-url", "url")));
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(null, false, null));
+                new RecommendationPlaylistCommandService.CreateResult(playlist, true, 45L, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
                         .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":1}"))
-                .andExpect(status().isOk())
-                .andExpect(jsonPath("$.data.playlist").doesNotExist());
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.recommendReason").hasJsonPath())
+                .andExpect(jsonPath("$.recommendReason").isEmpty())
+                .andExpect(jsonPath("$.recommendationId").value(45))
+                .andExpect(jsonPath("$.data.playlist.tracks[0].musicTrackId").value(10));
     }
 
     @Test
@@ -135,7 +135,7 @@ class RecommendationPlaylistControllerTest {
     void acceptsRepeatedLegacyRequestsWithoutRecommendationAttempt() throws Exception {
         authenticate(7L);
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L, null));
 
         for (int index = 0; index < 2; index++) {
             mvc.perform(post("/api/recommendations/playlists")
@@ -157,7 +157,7 @@ class RecommendationPlaylistControllerTest {
     void defaultsExplicitNullRecommendationAttemptToOne() throws Exception {
         authenticate(7L);
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
@@ -175,7 +175,7 @@ class RecommendationPlaylistControllerTest {
     void preservesExplicitRecommendationAttempt(int attempt) throws Exception {
         authenticate(7L);
         when(commandService.create(eq(7L), any())).thenReturn(
-                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L, null));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)

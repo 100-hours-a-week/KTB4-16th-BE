@@ -31,7 +31,7 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(5), false));
+                new PhotoRecommendationAiResponse("  사진 🌄\n그대로  ", tracks(5), false));
         when(resultWriter.save(org.mockito.ArgumentMatchers.eq(7L),
                 org.mockito.ArgumentMatchers.eq(AiRecommendationType.PHOTO),
                 org.mockito.ArgumentMatchers.isNull(), org.mockito.ArgumentMatchers.anyList())).thenReturn(44L);
@@ -39,6 +39,7 @@ class PhotoRecommendationServiceTest {
         var result = service.recommend(7L, 123L);
 
         assertThat(result.recommendationId()).isEqualTo(44L);
+        assertThat(result.recommendReason()).isEqualTo("  사진 🌄\n그대로  ");
         assertThat(result.tracks()).hasSize(5);
         assertThat(result.tracks().getFirst().externalTrackId()).isEqualTo("id-1");
         verify(uploadService).createReadSignedUrl(7L, 123L);
@@ -51,9 +52,11 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(5), false));
+                new PhotoRecommendationAiResponse(null, tracks(5), false));
 
-        assertThat(service.recommend(7L, 123L).tracks()).hasSize(5);
+        var result = service.recommend(7L, 123L);
+        assertThat(result.tracks()).hasSize(5);
+        assertThat(result.recommendReason()).isNull();
     }
 
     @Test
@@ -61,7 +64,7 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(4), false));
+                new PhotoRecommendationAiResponse(null, tracks(4), false));
 
         assertThatThrownBy(() -> service.recommend(7L, 123L))
                 .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);
@@ -72,7 +75,7 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(tracks(6), false));
+                new PhotoRecommendationAiResponse(null, tracks(6), false));
 
         assertThatThrownBy(() -> service.recommend(7L, 123L))
                 .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);
@@ -84,7 +87,7 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(List.of(
+                new PhotoRecommendationAiResponse(null, List.of(
                         track("id", "title", "artist", albumImageUrl, "url")), false));
 
         assertThatThrownBy(() -> service.recommend(7L, 123L))
@@ -100,7 +103,7 @@ class PhotoRecommendationServiceTest {
         PhotoRecommendationService service = service();
         when(uploadService.createReadSignedUrl(7L, 123L)).thenReturn("https://signed.example/photo");
         when(aiClient.recommend("https://signed.example/photo")).thenReturn(
-                new PhotoRecommendationAiResponse(List.of(), true));
+                new PhotoRecommendationAiResponse(null, List.of(), true));
 
         assertThatThrownBy(() -> service.recommend(7L, 123L))
                 .isInstanceOf(com.ktb4.team16.mulo.recommendation.client.PhotoRecommendationAiException.class);

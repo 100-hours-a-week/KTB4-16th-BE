@@ -38,7 +38,6 @@ class RecommendationPlaylistCommandServiceTest {
     @Mock private RecommendationNearbyTracksService nearbyTracksService;
     @Mock private RecommendationPlaceContextService placeContextService;
     @Mock private RecommendationPlaylistWriter writer;
-    @Mock private RecommendationPlaylistQueryService queryService;
     private final Clock clock = Clock.fixed(Instant.parse("2026-09-26T12:00:00Z"),
             ZoneId.of("Asia/Seoul"));
 
@@ -46,14 +45,14 @@ class RecommendationPlaylistCommandServiceTest {
     @Test
     void replacesPlaylistWithNonEmptyNonDegradedRecommendation() {
         RecommendationPlaylistCommandService service = service();
-        var created = playlist(4L);
+        var created = playlist();
         when(weatherService.getWeather(eq(37.5665), eq(126.9780), any(OffsetDateTime.class)))
                 .thenReturn(weather());
         when(nearbyTracksService.findTopTracks(BigDecimal.valueOf(37.5665), BigDecimal.valueOf(126.9780)))
                 .thenReturn(List.of(new RecommendationNearbyTracksService.NearbyTrack("비도 오고 그래서", "헤이즈", 9)));
         when(placeContextService.findLegalDongName(BigDecimal.valueOf(37.5665), BigDecimal.valueOf(126.9780)))
                 .thenReturn(java.util.Optional.of("태평로1가"));
-        when(recommendationAiClient.recommend(any())).thenReturn(new RecommendationAiClient.RecommendationResult(
+        when(recommendationAiClient.recommend(any())).thenReturn(new RecommendationAiClient.RecommendationResult("  선선한 저녁 🌙\n들어요.  ",
                 recommendedTracks(5), false));
         when(writer.replace(eq(7L), eq((byte) 1), any()))
                 .thenReturn(new RecommendationPlaylistWriter.ReplaceResult(created, 44L));
@@ -72,6 +71,7 @@ class RecommendationPlaylistCommandServiceTest {
         assertThat(result.replaced()).isTrue();
         assertThat(result.playlist()).isEqualTo(created);
         assertThat(result.recommendationId()).isEqualTo(44L);
+        assertThat(result.recommendReason()).isEqualTo("  선선한 저녁 🌙\n들어요.  ");
     }
 
     @org.junit.jupiter.params.ParameterizedTest
@@ -85,20 +85,20 @@ class RecommendationPlaylistCommandServiceTest {
         assertSuccessfulCreateUsesAttempt(null, (byte) 1);
     }
 
-    // 정확히 5곡인 degraded 결과는 기존 플레이리스트를 유지하고 Writer를 호출하지 않는다.
+    // degraded 결과는 서버의 과거 목록을 복원하지 않고 평가 이력도 저장하지 않는다.
     @Test
-    void retainsCurrentPlaylistWhenRecommendationIsDegraded() {
+    void returnsNoPlaylistWhenRecommendationIsDegraded() {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), true));
-        when(queryService.getCurrentPlaylist(7L)).thenReturn(new RecommendationPlaylistData(playlist(3L)));
+                new RecommendationAiClient.RecommendationResult(null, recommendedTracks(5), true));
 
         var result = service().create(7L, new CreateRecommendationPlaylistRequest(37.5665, 126.9780, 1, List.of()));
 
         verify(writer, never()).replace(any(), anyByte(), any());
         assertThat(result.replaced()).isFalse();
-        assertThat(result.playlist()).isEqualTo(playlist(3L));
+        assertThat(result.playlist()).isNull();
         assertThat(result.recommendationId()).isNull();
+        assertThat(result.recommendReason()).isNull();
     }
 
     // 추천 곡이 5개보다 적으면 기존 플레이리스트를 성공 응답으로 돌려주지 않고 실패 처리한다.
@@ -106,14 +106,13 @@ class RecommendationPlaylistCommandServiceTest {
     void failsWhenRecommendationHasNoTracks() {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(List.of(), false));
+                new RecommendationAiClient.RecommendationResult(null, List.of(), false));
 
         assertThatThrownBy(() -> service().create(7L,
                 new CreateRecommendationPlaylistRequest(37.5665, 126.9780, 1, List.of())))
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), anyByte(), any());
-        verify(queryService, never()).getCurrentPlaylist(any());
     }
 
     @Test
@@ -158,7 +157,7 @@ class RecommendationPlaylistCommandServiceTest {
     void rejectsAlreadyShownTrackBeforeSaving() {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), false));
+                new RecommendationAiClient.RecommendationResult(null, recommendedTracks(5), false));
         assertThatThrownBy(() -> service().create(7L,
                 new CreateRecommendationPlaylistRequest(37.5665, 126.9780, 1, List.of("track-1"))))
                 .isInstanceOf(RecommendationAiException.class);
@@ -168,7 +167,7 @@ class RecommendationPlaylistCommandServiceTest {
     // 테스트 대상 서비스의 외부 의존성을 명시적으로 조립한다.
     private RecommendationPlaylistCommandService service() {
         return new RecommendationPlaylistCommandService(weatherService, recommendationAiClient, writer,
-                queryService, nearbyTracksService, placeContextService, clock);
+                nearbyTracksService, placeContextService, clock);
     }
 
     // 날씨 API가 반환하는 현재 KST 날씨 데이터를 생성한다.
@@ -179,14 +178,14 @@ class RecommendationPlaylistCommandServiceTest {
     }
 
     // 저장 또는 유지 결과를 검증할 최소 플레이리스트 데이터를 생성한다.
-    private RecommendationPlaylistData.Playlist playlist(Long playlistId) {
-        return new RecommendationPlaylistData.Playlist(playlistId, List.of());
+    private RecommendationPlaylistData.Playlist playlist() {
+        return new RecommendationPlaylistData.Playlist(List.of());
     }
 
     private void assertInvalidTrackCountFailsBeforeWriter(int count) {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(recommendedTracks(count), false));
+                new RecommendationAiClient.RecommendationResult(null, recommendedTracks(count), false));
 
         assertThatThrownBy(() -> service().create(7L,
                 new CreateRecommendationPlaylistRequest(37.5665, 126.9780, 1, List.of())))
@@ -198,9 +197,9 @@ class RecommendationPlaylistCommandServiceTest {
     private void assertSuccessfulCreateUsesAttempt(Integer requestAttempt, byte expectedAttempt) {
         when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
         when(recommendationAiClient.recommend(any())).thenReturn(
-                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), false));
+                new RecommendationAiClient.RecommendationResult(null, recommendedTracks(5), false));
         when(writer.replace(eq(7L), eq(expectedAttempt), any()))
-                .thenReturn(new RecommendationPlaylistWriter.ReplaceResult(playlist(4L), 44L));
+                .thenReturn(new RecommendationPlaylistWriter.ReplaceResult(playlist(), 44L));
 
         service().create(7L, new CreateRecommendationPlaylistRequest(
                 37.5665, 126.9780, requestAttempt, List.of()));

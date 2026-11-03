@@ -51,7 +51,8 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
             if (response.tracks().size() != RECOMMENDATION_LIMIT) {
                 throw new RecommendationAiException();
             }
-            return new RecommendationResult(response.tracks().stream().map(this::toRecommendedTrack).toList(),
+            return new RecommendationResult(response.recommendReason(),
+                    response.tracks().stream().map(this::toRecommendedTrack).toList(),
                     response.degraded());
         } catch (RecommendationAiException exception) {
             throw exception;
@@ -95,7 +96,7 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
     private record Place(String name) { }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    private record ContextRecommendationAiResponse(List<Track> tracks, boolean degraded) {
+    private record ContextRecommendationAiResponse(String recommendReason, List<Track> tracks, boolean degraded) {
         @JsonIgnoreProperties(ignoreUnknown = true)
         private record Track(String title, String artistName, String externalTrackId,
                 String spotifyUri, String albumImageUrl, String externalUrl) { }

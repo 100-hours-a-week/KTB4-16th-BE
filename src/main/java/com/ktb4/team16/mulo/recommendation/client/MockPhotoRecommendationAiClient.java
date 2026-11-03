@@ -12,6 +12,7 @@ public class MockPhotoRecommendationAiClient implements PhotoRecommendationAiGat
     @Override
     public PhotoRecommendationAiClient.PhotoRecommendationAiResponse recommend(String imageUrl) {
         return new PhotoRecommendationAiClient.PhotoRecommendationAiResponse(
+                "사진의 분위기에 어울리는 곡들을 추천해요.",
                 java.util.List.of(
                         track("mock-track-1", "MULO Mock Sunset", "MULO Mock Artist 1"),
                         track("mock-track-2", "MULO Mock Ocean", "MULO Mock Artist 2"),
