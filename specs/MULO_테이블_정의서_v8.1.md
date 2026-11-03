@@ -234,7 +234,6 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
 | --- | --- | --- | --- |
 | `records` | `music_tracks.music_track_id` ↔ `records.music_track_id` | 1:N | 하나의 음악은 여러 사용자의 여러 자물쇠에 기록될 수 있으며, 각 자물쇠는 하나의 음악을 참조한다. |
-| `recommendation_playlist_items` | `recommendation_playlist_items.music_track_id` ↔ `music_tracks.music_track_id` | 1:N | 하나의 추천 항목은 하나의 음악을 참조하며, 동일한 음악이 여러 사용자의 추천 플레이리스트에 포함될 수 있다. |
 
 ---
 
@@ -656,79 +655,15 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ---
 
-## 14. recommendation_playlists - 추천 플레이리스트 테이블
+## 14. recommendation_playlists - V14에서 제거
 
-#### 1. 테이블 설명
-
-사용자에게 생성된 현재 추천 플레이리스트 정보를 저장하는 테이블이다. 사용자가 서비스를 나갔다가 다시 접속해도 마지막으로 생성된 추천 플레이리스트를 유지한다. AI가 정상 추천 곡을 반환한 새 추천 요청에만 기존 플레이리스트를 교체하며, AI 저하 상태 또는 빈 추천 결과에서는 기존 플레이리스트를 유지한다.
-
-#### 2. 컬럼 정의
-
-| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `recommendation_playlist_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 추천 플레이리스트 고유 ID | 각 추천 플레이리스트를 고유하게 식별하고 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 추천 플레이리스트와 해당 플레이리스트의 음악 목록을 식별하는 기준이 된다. |
-| `user_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 추천 플레이리스트 소유 사용자 ID | `users.user_id`를 참조한다. 현재 정책상 사용자별 현재 추천 플레이리스트 하나만 유지하므로 UNIQUE를 적용한다. | 어떤 사용자의 추천 플레이리스트인지 식별한다. |
-| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 현재 추천 플레이리스트 생성 시각 | 현재 저장된 플레이리스트가 생성된 시점을 기록한다. 교체 시 새 행이 생성되므로 새 시각이 저장된다. | 현재 추천 결과의 생성 시점을 관리한다. |
-
-#### 3. 제약조건
-
-| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
-| --- | --- | --- | --- | --- |
-| `pk_recommendation_playlists` | PRIMARY KEY | `recommendation_playlist_id` | - | 각 추천 플레이리스트를 고유하게 식별한다. |
-| `fk_recommendation_playlists_user` | FOREIGN KEY | `user_id` | `users.user_id` | 추천 플레이리스트를 해당 사용자와 연결한다. |
-| `uk_recommendation_playlists_user` | UNIQUE | `user_id` | - | 한 사용자에게 현재 추천 플레이리스트가 하나만 존재하도록 한다. |
-
-#### 4. 관계
-
-| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
-| --- | --- | --- | --- |
-| `users` | `recommendation_playlists.user_id` ↔ `users.user_id` | 0..1:1 | 하나의 추천 플레이리스트는 한 사용자에게 속한다. 현재 정책상 한 사용자에게 하나의 현재 추천 플레이리스트만 유지한다. |
-| `recommendation_playlist_items` | `recommendation_playlists.recommendation_playlist_id` ↔ `recommendation_playlist_items.recommendation_playlist_id` | 1:N | 하나의 추천 플레이리스트에는 여러 개의 추천 음악이 포함된다. |
-
-#### 5. 비즈니스 규칙
-
-- 추천 생성 시 요청 사용자 ID, 현재 위치의 날씨·기온, KST 요청 시각을 AI 컨텍스트로 사용하나, 해당 값은 이 테이블에 저장하지 않는다.
-- 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계해 상위 5곡만 AI에 전달한다. 법정동 역지오코딩이 성공한 경우에만 선택값 `place.name`을 전달하며, `placeId`와 `requestId`는 전달하지 않는다.
-- 현재 추천 플레이리스트 조회 응답에도 생성 당시의 `weatherCondition`, `temperature`, `time` 값을 포함하지 않는다.
+화면 추천은 컴포넌트 수명 동안만 유지한다. `V14__drop_session_playlist_tables.sql`에서 제거하며 사용자별 현재 목록을 복원하지 않는다. 기존 생성 migration V1은 수정하지 않는다. 평가용 `ai_recommendation_results`는 별도 테이블로 보존한다.
 
 ---
 
-## 15. recommendation_playlist_items - 추천 플레이리스트 음악 테이블
+## 15. recommendation_playlist_items - V14에서 제거
 
-#### 1. 테이블 설명
-
-추천 플레이리스트에 포함된 음악 목록과 순서를 저장하는 테이블이다. 하나의 추천 플레이리스트에 여러 음악을 연결하여 사용자가 다시 접속했을 때 마지막으로 생성된 추천 음악 목록을 동일하게 제공하는 데 사용한다.
-
-#### 2. 컬럼 정의
-
-| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| `recommendation_playlist_item_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 추천 플레이리스트 음악 고유 ID | 플레이리스트에 포함된 각각의 음악 행을 고유하게 식별한다. | 하나의 추천 음악 항목을 식별한다. |
-| `recommendation_playlist_id` | `BIGINT` | - | NOT NULL | - | FK | 음악이 포함된 추천 플레이리스트 ID | `recommendation_playlists.recommendation_playlist_id`를 참조한다. | 어떤 추천 플레이리스트에 포함된 음악인지 연결한다. |
-| `music_track_id` | `BIGINT` | - | NOT NULL | - | FK | 추천된 음악 ID | `music_tracks.music_track_id`를 참조하여 기존 음악 정보와 연결한다. | 추천된 음악의 제목·아티스트·앨범 등의 정보를 조회하는 데 사용한다. |
-| `music_order` | `INTEGER` | - | NOT NULL | - | - | 추천 플레이리스트 내 음악 순서 | 플레이리스트의 곡 순서를 정수로 저장한다. | AI가 추천한 음악을 정해진 순서대로 표시한다. |
-
-#### 3. 제약조건
-
-| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
-| --- | --- | --- | --- | --- |
-| `pk_recommendation_playlist_items` | PRIMARY KEY | `recommendation_playlist_item_id` | - | 각 추천 플레이리스트 음악 항목을 고유하게 식별한다. |
-| `fk_recommendation_playlist_items_playlist` | FOREIGN KEY | `recommendation_playlist_id` | `recommendation_playlists.recommendation_playlist_id` | 음악 항목을 해당 추천 플레이리스트와 연결하며, 추천 플레이리스트 삭제 시 해당 플레이리스트의 음악 항목도 함께 삭제되도록 `ON DELETE CASCADE`를 적용한다. |
-| `fk_recommendation_playlist_items_music` | FOREIGN KEY | `music_track_id` | `music_tracks.music_track_id` | 추천 항목을 실제 음악 정보와 연결한다. |
-| `uk_recommendation_playlist_items_rank` | UNIQUE | `recommendation_playlist_id`, `music_order` | - | 하나의 플레이리스트 안에서 동일한 순번이 중복되지 않도록 한다. |
-| chk_recommendation_playlist_items_music_order | CHECK | `music_order` | - | 추천 순번이 1 이상의 값만 가지도록 `CHECK (music_order > 0)`를 적용한다. |
-
-#### 4. 관계
-
-| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
-| --- | --- | --- | --- |
-| `recommendation_playlists` | `recommendation_playlist_items.recommendation_playlist_id` ↔ `recommendation_playlists.recommendation_playlist_id` | N:1 | 하나의 음악 항목은 하나의 추천 플레이리스트에 속하며, 하나의 추천 플레이리스트에는 여러 음악 항목이 존재한다. |
-| `music_tracks` | `recommendation_playlist_items.music_track_id` ↔ `music_tracks.music_track_id` | N:1 | 하나의 추천 항목은 하나의 음악을 참조하며, 동일한 음악이 여러 사용자의 추천 플레이리스트에 포함될 수 있다. |
-
-#### 5. 조회 응답 규칙
-
-- 추천 곡의 제목·아티스트·외부 재생 링크와 앨범 이미지는 연결된 `music_tracks` 행에서 조회한다.
-- API의 `albumImageUrl`은 `music_tracks.album_image_url` 값이며, 추천 항목 테이블에 별도로 중복 저장하지 않는다.
+복원용 곡 연결 테이블도 V14에서 부모보다 먼저 제거한다. 음악 카탈로그 `music_tracks`와 평가용 `ai_recommendation_result_tracks`는 유지한다. API의 `musicTrackId`와 평가용 `recommendationId`는 보존하고 `recommendationPlaylistId`만 제거한다.
 
 ---
 
@@ -1052,7 +987,7 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | `places` | 법정동 코드·이름 nullable 쌍, 좌표 기반 장소 | V4에서 `external_place_id`, `place_name` 제거, `legal_dong_code`, `legal_dong_name`, 좌표 UNIQUE, 법정동 쌍 CHECK 적용 | V4 실제 구조를 본문에 반영 |
 | `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
 | `friend_requests` | 대기 요청만 저장하고 처리 후 삭제 | V1에 별도 `status` 컬럼 없이 사용자 쌍 UNIQUE로 구성 | 현재 구조와 정책이 일치하며 `status` 컬럼을 임의 추가하지 않음 |
-| `recommendation_playlists` | 사용자별 현재 플레이리스트 하나 유지 | V1은 `user_id`, `created_at`만 저장하며 `source`, `status`는 없음 | 현재 구조를 유지하고 추천 문맥은 정책으로만 기록 |
+| `recommendation_playlists` | 화면 복원용 저장 제거 | V14에서 items와 함께 삭제 | 평가 이력과 음악 카탈로그만 유지 |
 | `record_drafts` | V1에서는 브라우저 로컬 임시저장을 사용하고 서버 기능에서 제외 | Flyway V1 생성, V5에서 현재 임시저장 스키마로 조정 | V1 제외 이력 유지, V2에서 사용자당 1개·14일 보관의 서버 임시저장 API 구현 |
 | `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
 | `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
@@ -1361,6 +1296,6 @@ Flyway V13에서 추가한 AI 추천 결과 이력이다. 사진 기반 정상 �
 
 - 추천 API는 정상 결과와 곡 스냅샷을 저장한다. 피드백 API는 사용자가 제출한 경우에만 피드백 행을 저장한다.
 - 선택 곡이 해당 결과의 추천 곡 목록에 포함되는지, PLAYLIST + LIKE에 선택 곡이 있는지, PHOTO/DISLIKE에 선택 곡이 없는지는 Backend가 검증한다.
-- 이 테이블들은 `recommendation_playlists` 또는 `recommendation_playlist_items`에 FK를 두지 않는다. 현재 플레이리스트 교체·삭제가 과거 추천/피드백 이력을 삭제하지 않도록 한다.
+- 이 테이블들은 `recommendation_playlists` 또는 `recommendation_playlist_items`에 FK를 두지 않는다. 화면 복원용 두 테이블은 V14에서 제거하며 과거 추천/피드백 이력은 보존한다.
 
 ---

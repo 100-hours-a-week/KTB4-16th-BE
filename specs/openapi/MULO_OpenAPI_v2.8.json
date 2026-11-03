@@ -2349,7 +2349,7 @@
             "bearerAuth": []
           }
         ],
-        "description": "임시 업로드된 사진을 AI가 분석한다. 추천 성공 시 정확히 5곡을 반환하며, AI 응답이 5곡 미만 또는 초과이면 추천 실패로 처리한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다.",
+        "description": "임시 업로드된 사진을 AI가 분석한다. 추천 성공 시 정확히 5곡을 반환하며, AI 응답이 5곡 미만 또는 초과이면 추천 실패로 처리한다. 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 유효한 uploadId만 사용할 수 있다. AI가 반환한 선택 문자열 recommendReason을 가공 없이 최상위에 전달하며, 누락 또는 null이면 null로 반환한다.",
         "requestBody": {
           "required": true,
           "content": {
@@ -2382,7 +2382,8 @@
                   "required": [
                     "message",
                     "recommendationId",
-                    "data"
+                    "data",
+                    "recommendReason"
                   ],
                   "properties": {
                     "message": {
@@ -2423,6 +2424,11 @@
                           "externalUrl"
                         ]
                       }
+                    },
+                    "recommendReason": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "AI가 반환한 추천 이유 원문. 누락 또는 null이면 null이며 별도 생성·정규화·저장을 하지 않는다."
                     }
                   }
                 },
@@ -2465,7 +2471,8 @@
                       "albumImageUrl": "https://i.scdn.co/image/example-5",
                       "externalUrl": "https://open.spotify.com/track/7exampleTrackId000001"
                     }
-                  ]
+                  ],
+                  "recommendReason": "오늘처럼 선선한 저녁엔 잔잔한 어쿠스틱 곡들 어때요?"
                 }
               }
             }
@@ -5413,136 +5420,13 @@
       }
     },
     "/api/recommendations/playlists": {
-      "get": {
-        "tags": [
-          "RECOMMEND / 추천"
-        ],
-        "summary": "현재 추천 플레이리스트 조회",
-        "operationId": "getApiRecommendationsPlaylists",
-        "description": "사용자당 현재 추천 플레이리스트 1개. 아직 생성된 플레이리스트가 없으면 playlist=null.\n\n### 미정 정책\n- 필수\n없음\n\n선택\n없음\n\n정책 및 설명\n- 현재 로그인한 사용자의 현재 추천 플레이리스트를 조회한다.\n- 인증된 활성 사용자만 사용할 수 있다.\n- 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다.\n- 아직 생성된 추천 플레이리스트가 없으면 오류가 아니라 정상 상태로 처리하며 playlist=null을 반환한다.\n- 현재 플레이리스트가 존재하면 저장된 플레이리스트와 포함된 음악 목록을 반환한다. 각 음악에는 albumImageUrl을 포함한다.\n- 조회 DTO의 recommendationId는 null이며 JSON 응답에서는 NON_NULL 직렬화 설정으로 생략된다. playlist.recommendationPlaylistId는 기존 플레이리스트 ID이며 추천 이력 ID로 연결되지 않아 피드백 대상이 아니다.\n- 추천 생성 당시 사용한 날씨, 기온, 시간 정보는 추천 입력 컨텍스트로만 사용하며 playlist 리소스에 저장하지 않는다.\n- 따라서 조회 응답에도 weatherCondition, temperature, time을 포함하지 않는다.: 상태=현재 추천 플레이리스트 조회API는 Request Body, Path Parameter, Query Parameter가 없으므로 400은 필요없다",
-        "responses": {
-          "200": {
-            "description": "리소스가 없는 상태도 현재 추천 상태 조회의 정상 결과이므로 200.\n\n추가 케이스: 현재 추천 플레이리스트가 존재하여 정상 반환하므로 200.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "message": {
-                      "type": "string"
-                    },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "playlist": {
-                          "nullable": true,
-                          "allOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "recommendationPlaylistId": {
-                                  "type": "integer",
-                                  "format": "int64"
-                                },
-                                "tracks": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "musicTrackId": {
-                                        "type": "integer",
-                                        "format": "int64"
-                                      },
-                                      "title": {
-                                        "type": "string"
-                                      },
-                                      "artistName": {
-                                        "type": "string"
-                                      },
-                                      "albumImageUrl": {
-                                        "type": "string"
-                                      },
-                                      "externalUrl": {
-                                        "type": "string"
-                                      },
-                                      "externalTrackId": {
-                                        "type": "string",
-                                        "description": "AI 중복 제외 목록에 사용하는 외부 곡 식별자"
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          ]
-                        }
-                      }
-                    }
-                  }
-                },
-                "example": {
-                  "message": "현재 추천 플레이리스트 조회 성공",
-                  "data": {
-                    "playlist": null
-                  }
-                }
-              }
-            }
-          },
-          "401": {
-            "description": "개인화 추천 조회이므로 인증이 필요하다.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "UNAUTHORIZED",
-                  "message": "로그인이 필요합니다."
-                }
-              }
-            }
-          },
-          "500": {
-            "description": "MULO 백엔드 내부의 예상하지 못한 처리 실패이므로 500.",
-            "content": {
-              "application/json": {
-                "schema": {
-                  "type": "object",
-                  "properties": {
-                    "code": {
-                      "type": "string"
-                    },
-                    "message": {
-                      "type": "string"
-                    }
-                  }
-                },
-                "example": {
-                  "code": "INTERNAL_SERVER_ERROR",
-                  "message": "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요."
-                }
-              }
-            }
-          }
-        },
-        "x-implementation-status": "implemented"
-      },
       "post": {
         "tags": [
           "RECOMMEND / 추천"
         ],
         "summary": "새 추천 플레이리스트 생성",
         "operationId": "postApiRecommendationsPlaylists",
-        "description": "필수\nlatitude: Double\nlongitude: Double\nrecommendationAttempt: Integer (1~3)\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 저장하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 정확히 5곡인 정상 추천에 성공한 경우에만 기존 현재 플레이리스트를 교체한다.\n- AI 응답이 degraded이고 tracks가 정확히 5곡이면 기존 현재 플레이리스트를 유지하고 200을 반환한다. tracks가 5곡이 아니면 502 AI_SERVICE_ERROR로 실패 처리한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n\n화면 진입 시 이전 플레이리스트를 조회하지 않는다. 프론트는 화면 세션마다 성공한 새 추천을 최대 3회 허용하고 실패·기존 목록 유지 응답은 차감하지 않는다. 첫 요청의 excludeTrackIds는 빈 배열이며 재추천에서는 이번 세션에 표시한 모든 externalTrackId를 누적한다. 세션 횟수·제외 목록은 프론트 메모리에서 관리하며 서버 세션이나 종료 API를 만들지 않는다.",
+        "description": "필수\nlatitude: Double\nlongitude: Double\n선택 recommendationAttempt: Integer (1~3, 생략·null은 1)\n\n동기 처리. AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨·기온, KST 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계한 상위 5곡이며, 법정동 역지오코딩이 성공한 경우에만 선택값 place.name을 추가로 전달한다. placeId와 requestId는 전달하지 않는다. AI 추천이 성공하려면 응답 tracks가 정확히 5곡이어야 한다. 5곡 미만 또는 초과 응답은 AI 추천 실패로 처리하며 일부 곡을 잘라 반환하지 않는다.\n\n정책 및 설명\n- 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다.\n- 현재 위치의 날씨와 기온은 필수 컨텍스트다.\n- 동일 KST 날짜·격자의 weather_grid_forecasts 캐시를 우선 조회하고 당일 캐시가 없으면 기상청 단기예보 getVilageFcst를 조회한다.\n- 최초 적재는 목표 예보시각을 포함하는 가장 최근 후보 회차를 시도하고, 실패·미포함이면 바로 이전 후보 회차를 한 번만 시도한다. 모두 실패해 날씨·기온을 확보하지 못하면 502 WEATHER_API_ERROR로 추천을 생성하지 않는다.\n- 정확히 5곡인 정상 추천에 성공하면 화면에 표시할 목록과 평가용 recommendationId를 반환한다. 현재 플레이리스트 복원용 테이블에는 저장하지 않는다.\n- AI 응답이 degraded이고 tracks가 정확히 5곡이면 playlist=null, replaced=false, recommendReason=null로 200을 반환한다. 프론트가 자신의 현재 화면 목록을 유지하며 서버는 과거 목록을 복원하지 않는다. tracks가 5곡이 아니면 502 AI_SERVICE_ERROR로 실패 처리한다.\n- 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 DB에 저장하지 않는다. 저장된 플레이리스트 조회 GET과 recommendationPlaylistId는 제거했다.\n- 같은 날짜·격자의 최초 성공 예보 묶음은 당일 유지하며, 더 최신 발표본으로 갱신하거나 외부 API를 재호출하지 않는다.\n\n화면 진입 시 이전 플레이리스트를 조회하지 않는다. 프론트는 화면 세션마다 성공한 새 추천을 최대 3회 허용하고 실패·기존 목록 유지 응답은 차감하지 않는다. 첫 요청의 excludeTrackIds는 빈 배열이며 재추천에서는 이번 세션에 표시한 모든 externalTrackId를 누적한다. 세션 횟수·제외 목록은 프론트 메모리에서 관리하며 서버 세션이나 종료 API를 만들지 않는다.\n\nAI의 선택 문자열 recommendReason을 최상위 응답에 그대로 전달한다. 공백·개행을 가공하지 않고 누락 또는 null이면 null이다. 추천 이유를 저장하거나 추가 AI 호출로 생성하지 않는다. 음악 카탈로그와 ai_recommendation_* 평가 이력은 유지한다. 지원하지 않는 GET 요청은 405 METHOD_NOT_ALLOWED와 Allow: POST를 반환한다.",
         "requestBody": {
           "required": true,
           "content": {
@@ -5551,8 +5435,7 @@
                 "type": "object",
                 "required": [
                   "latitude",
-                  "longitude",
-                  "recommendationAttempt"
+                  "longitude"
                 ],
                 "properties": {
                   "latitude": {
@@ -5573,7 +5456,9 @@
                     "type": "integer",
                     "minimum": 1,
                     "maximum": 3,
-                    "description": "현재 플레이리스트 화면 세션에서의 추천 회차. 최초 추천 1, 재추천 2~3."
+                    "description": "현재 화면 세션의 추천 회차(1~3). 구버전 클라이언트의 생략·null은 1로 처리한다.",
+                    "nullable": true,
+                    "default": 1
                   },
                   "excludeTrackIds": {
                     "type": "array",
@@ -5599,7 +5484,7 @@
         },
         "responses": {
           "200": {
-            "description": "AI가 degraded 상태를 반환했고 응답 tracks가 정확히 5곡이어서 기존 현재 플레이리스트를 유지했으므로 200.",
+            "description": "정확히 5곡인 degraded 응답. 서버 복원 없이 playlist=null, replaced=false, recommendReason=null이며 평가 이력을 만들지 않는다.",
             "content": {
               "application/json": {
                 "schema": {
@@ -5612,65 +5497,37 @@
                       "type": "object",
                       "properties": {
                         "playlist": {
+                          "type": "object",
                           "nullable": true,
-                          "allOf": [
-                            {
-                              "type": "object",
-                              "properties": {
-                                "recommendationPlaylistId": {
-                                  "type": "integer",
-                                  "format": "int64"
-                                },
-                                "tracks": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "object",
-                                    "properties": {
-                                      "musicTrackId": {
-                                        "type": "integer",
-                                        "format": "int64"
-                                      },
-                                      "title": {
-                                        "type": "string"
-                                      },
-                                      "artistName": {
-                                        "type": "string"
-                                      },
-                                      "albumImageUrl": {
-                                        "type": "string"
-                                      },
-                                      "externalUrl": {
-                                        "type": "string"
-                                      },
-                                      "externalTrackId": {
-                                        "type": "string",
-                                        "description": "AI 중복 제외 목록에 사용하는 외부 곡 식별자"
-                                      }
-                                    }
-                                  }
-                                }
-                              }
-                            }
-                          ]
+                          "description": "저하 응답에서는 항상 null. 서버는 이전 목록을 복원하지 않는다."
                         },
                         "replaced": {
                           "type": "boolean",
-                          "description": "새 추천을 저장한 경우 true. false는 기존 목록 유지이며 이번 세션의 성공 횟수에 포함하지 않는다."
+                          "description": "새 추천이 성공해 현재 화면 목록으로 교체할 수 있으면 true. false는 성공 횟수에 포함하지 않는다."
                         }
                       },
                       "required": [
                         "playlist",
                         "replaced"
                       ]
+                    },
+                    "recommendReason": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "AI가 반환한 추천 이유 원문. 누락 또는 null이면 null이며 별도 생성·정규화·저장을 하지 않는다."
                     }
-                  }
+                  },
+                  "required": [
+                    "recommendReason"
+                  ]
                 },
                 "example": {
                   "message": "추천 결과가 없어 기존 플레이리스트 유지",
                   "data": {
                     "playlist": null,
                     "replaced": false
-                  }
+                  },
+                  "recommendReason": null
                 }
               }
             }
@@ -5684,7 +5541,8 @@
                   "required": [
                     "message",
                     "recommendationId",
-                    "data"
+                    "data",
+                    "recommendReason"
                   ],
                   "properties": {
                     "message": {
@@ -5700,10 +5558,6 @@
                         "playlist": {
                           "type": "object",
                           "properties": {
-                            "recommendationPlaylistId": {
-                              "type": "integer",
-                              "format": "int64"
-                            },
                             "tracks": {
                               "type": "array",
                               "minItems": 5,
@@ -5738,13 +5592,18 @@
                         },
                         "replaced": {
                           "type": "boolean",
-                          "description": "새 추천을 저장한 경우 true. false는 기존 목록 유지이며 이번 세션의 성공 횟수에 포함하지 않는다."
+                          "description": "새 추천이 성공해 현재 화면 목록으로 교체할 수 있으면 true. false는 성공 횟수에 포함하지 않는다."
                         }
                       },
                       "required": [
                         "playlist",
                         "replaced"
                       ]
+                    },
+                    "recommendReason": {
+                      "type": "string",
+                      "nullable": true,
+                      "description": "AI가 반환한 추천 이유 원문. 누락 또는 null이면 null이며 별도 생성·정규화·저장을 하지 않는다."
                     }
                   }
                 },
@@ -5753,7 +5612,6 @@
                   "recommendationId": 102,
                   "data": {
                     "playlist": {
-                      "recommendationPlaylistId": 71,
                       "tracks": [
                         {
                           "musicTrackId": 3,
@@ -5798,7 +5656,8 @@
                       ]
                     },
                     "replaced": true
-                  }
+                  },
+                  "recommendReason": "오늘처럼 선선한 저녁엔 잔잔한 어쿠스틱 곡들 어때요?"
                 }
               }
             }
