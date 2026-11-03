@@ -23,6 +23,7 @@ public record CreateRecommendationPlaylistRequest(
         List<@NotBlank(message = "INVALID_INPUT_VALUE") String> excludeTrackIds) {
     // 최초 요청의 생략·null 제외 목록은 빈 목록으로 정규화한다.
     public CreateRecommendationPlaylistRequest {
+        recommendationAttempt = recommendationAttempt == null ? 1 : recommendationAttempt;
         excludeTrackIds = excludeTrackIds == null ? List.of() : excludeTrackIds;
     }
 }

@@ -74,6 +74,17 @@ class RecommendationPlaylistCommandServiceTest {
         assertThat(result.recommendationId()).isEqualTo(44L);
     }
 
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2, 3})
+    void preservesExplicitRecommendationAttemptWhenSaving(int attempt) {
+        assertSuccessfulCreateUsesAttempt(attempt, (byte) attempt);
+    }
+
+    @Test
+    void usesLegacyDefaultAttemptWhenRequestValueIsNull() {
+        assertSuccessfulCreateUsesAttempt(null, (byte) 1);
+    }
+
     // 정확히 5곡인 degraded 결과는 기존 플레이리스트를 유지하고 Writer를 호출하지 않는다.
     @Test
     void retainsCurrentPlaylistWhenRecommendationIsDegraded() {
@@ -182,6 +193,19 @@ class RecommendationPlaylistCommandServiceTest {
                 .isInstanceOf(RecommendationAiException.class);
 
         verify(writer, never()).replace(any(), anyByte(), any());
+    }
+
+    private void assertSuccessfulCreateUsesAttempt(Integer requestAttempt, byte expectedAttempt) {
+        when(weatherService.getWeather(anyDouble(), anyDouble(), any())).thenReturn(weather());
+        when(recommendationAiClient.recommend(any())).thenReturn(
+                new RecommendationAiClient.RecommendationResult(recommendedTracks(5), false));
+        when(writer.replace(eq(7L), eq(expectedAttempt), any()))
+                .thenReturn(new RecommendationPlaylistWriter.ReplaceResult(playlist(4L), 44L));
+
+        service().create(7L, new CreateRecommendationPlaylistRequest(
+                37.5665, 126.9780, requestAttempt, List.of()));
+
+        verify(writer).replace(eq(7L), eq(expectedAttempt), argThat(tracks -> tracks.size() == 5));
     }
 
     private List<RecommendationAiClient.RecommendedTrack> recommendedTracks(int count) {
