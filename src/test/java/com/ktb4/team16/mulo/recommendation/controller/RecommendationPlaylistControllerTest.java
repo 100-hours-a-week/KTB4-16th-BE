@@ -1,7 +1,9 @@
 package com.ktb4.team16.mulo.recommendation.controller;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.post;
@@ -10,6 +12,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
 import com.ktb4.team16.mulo.recommendation.client.RecommendationAiException;
+import com.ktb4.team16.mulo.recommendation.dto.request.CreateRecommendationPlaylistRequest;
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistData;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
@@ -19,6 +22,7 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.http.MediaType;
@@ -128,15 +132,60 @@ class RecommendationPlaylistControllerTest {
     }
 
     @Test
-    void rejectsMissingRecommendationAttempt() throws Exception {
+    void acceptsRepeatedLegacyRequestsWithoutRecommendationAttempt() throws Exception {
         authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+
+        for (int index = 0; index < 2; index++) {
+            mvc.perform(post("/api/recommendations/playlists")
+                            .contentType(MediaType.APPLICATION_JSON)
+                            .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
+                    .andExpect(status().isCreated())
+                    .andExpect(jsonPath("$.recommendationId").value(44));
+        }
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService, org.mockito.Mockito.times(2)).create(eq(7L), captor.capture());
+        assertThat(captor.getAllValues())
+                .extracting(CreateRecommendationPlaylistRequest::recommendationAttempt)
+                .containsExactly(1, 1);
+    }
+
+    @Test
+    void defaultsExplicitNullRecommendationAttemptToOne() throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
 
         mvc.perform(post("/api/recommendations/playlists")
                         .contentType(MediaType.APPLICATION_JSON)
-                        .content("{\"latitude\":37.5665,\"longitude\":126.9780}"))
-                .andExpect(status().isBadRequest())
-                .andExpect(jsonPath("$.code").value("INVALID_INPUT_VALUE"));
-        org.mockito.Mockito.verifyNoInteractions(commandService);
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":null}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().recommendationAttempt()).isEqualTo(1);
+    }
+
+    @org.junit.jupiter.params.ParameterizedTest
+    @org.junit.jupiter.params.provider.ValueSource(ints = {1, 2, 3})
+    void preservesExplicitRecommendationAttempt(int attempt) throws Exception {
+        authenticate(7L);
+        when(commandService.create(eq(7L), any())).thenReturn(
+                new RecommendationPlaylistCommandService.CreateResult(null, true, 44L));
+
+        mvc.perform(post("/api/recommendations/playlists")
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("{\"latitude\":37.5665,\"longitude\":126.9780,\"recommendationAttempt\":" + attempt + "}"))
+                .andExpect(status().isCreated());
+
+        ArgumentCaptor<CreateRecommendationPlaylistRequest> captor =
+                ArgumentCaptor.forClass(CreateRecommendationPlaylistRequest.class);
+        verify(commandService).create(eq(7L), captor.capture());
+        assertThat(captor.getValue().recommendationAttempt()).isEqualTo(attempt);
     }
 
     @org.junit.jupiter.params.ParameterizedTest
