@@ -7,9 +7,8 @@
 
 | API | 현재 동작 |
 | --- | --- |
-| `POST /api/recommendations/photo` | 요청 body `{uploadId}`. 성공 시 정확히 5곡과 최상위 `recommendationId`를 `{message, recommendationId, data}`로 반환한다. |
-| `POST /api/recommendations/playlists` | 필수 `recommendationAttempt`(1~3)를 받는다. 정상 생성은 201 및 최상위 `recommendationId`, `data.replaced=true`; fallback은 200 및 `data.replaced=false`이며 ID는 생략한다. |
-| `GET /api/recommendations/playlists` | 현재 플레이리스트를 조회한다. 응답 DTO의 `recommendationId`는 null이고 JSON에서는 생략된다. `playlist.recommendationPlaylistId`는 별도 플레이리스트 ID이며 추천 이력과 연결하지 않는다. |
+| `POST /api/recommendations/photo` | 요청 body `{uploadId}`. 성공 시 정확히 5곡과 최상위 `recommendationId`를 `{message, recommendationId, recommendReason, data}`로 반환한다. |
+| `POST /api/recommendations/playlists` | `recommendationAttempt`(1~3)를 받으며 생략·null은 1회차로 처리한다. 정상 생성은 201 및 최상위 `recommendationId`, `data.replaced=true`; fallback은 200 및 `data.replaced=false`이며 ID는 생략한다. |
 | `POST /api/ai-recommendations/{recommendationId}/feedback` | 본인 추천 결과에 대한 인증 피드백 API. 성공 201; 잘못된 요청 400, 소유권 403, 미존재 404, 중복 409. |
 
 ## 2. 기존 API 변경 및 현재 계약
@@ -23,16 +22,16 @@
 
 ### `POST /api/recommendations/playlists`
 
-- 요청에는 `recommendationAttempt`가 필수이며 1~3만 허용한다. 시트 세션 회차는 FE가 관리한다.
+- 요청의 `recommendationAttempt`는 값이 있으면 1~3만 허용하고 생략·null은 1로 처리한다. 시트 세션 회차는 FE가 관리한다.
 - 정상 추천 요청은 회차별 결과와 전체 곡 목록을 저장하고 HTTP 201, 최상위 `recommendationId`, `data.replaced=true`를 반환한다.
-- AI가 degraded/fallback 결과를 주면 기존 플레이리스트를 유지하고 HTTP 200, `data.replaced=false`를 반환한다. 새 이력을 저장하지 않으며 `recommendationId`는 JSON에서 생략한다.
+- AI가 정확히 5곡인 degraded 결과를 주면 HTTP 200, `data.playlist=null`, `data.replaced=false`, `recommendReason=null`을 반환한다. 프론트가 자신의 화면 목록을 유지한다. 새 이력을 저장하지 않으며 `recommendationId`는 JSON에서 생략한다.
 - FE는 피드백 제출 전·제출 중 재추천 및 닫기를 막는다. 실패/fallback은 회차에 포함하지 않으며 시트를 닫았다 다시 열면 회차가 초기화된다.
 
-### `GET /api/recommendations/playlists`
+### 화면 복원 제거 (2026-11-02)
 
-- 현재 플레이리스트 리소스 조회 계약을 유지한다.
-- `recommendationId`는 응답 DTO에서 null이고 `NON_NULL` 직렬화로 실제 JSON에서 생략된다.
-- 플레이리스트와 추천 이력은 연결하지 않는다. `recommendationPlaylistId`를 `recommendationId`로 간주하지 않으며, GET 결과는 피드백 대상이 아니다.
+- GET과 recommendationPlaylistId는 제거한다. 평가용 recommendationId와 음악 카탈로그 ID는 유지한다.
+- 두 POST 응답은 AI의 recommendReason을 그대로 전달하고 누락은 null로 반환한다. 추천 이유는 저장하지 않는다.
+- 화면 상태는 FE가 소유하며 복원용 두 테이블만 Flyway V14에서 삭제한다.
 
 ## 3. 피드백 제출 API
 
@@ -62,16 +61,16 @@ Flyway V13의 실제 컬럼 및 제약은 [테이블 정의서](MULO_테이블_�
 
 - 추천 성공 시 결과와 곡 스냅샷을 저장한다. 결과 곡에는 Spotify Track ID와 추천 순서를 보존한다.
 - 피드백 행은 사용자가 제출한 경우에만 저장한다.
-- 추천 이력과 피드백은 기존 `recommendation_playlists` / `recommendation_playlist_items` 교체와 독립적으로 보존한다.
+- 추천 이력과 피드백은 보존한다. 화면 복원용 `recommendation_playlists` / `recommendation_playlist_items`만 V14에서 삭제한다.
 - `selected_track_id`의 조건부 필수 여부와 추천 목록 포함 여부는 DB CHECK가 아니라 Backend 서비스가 검증한다.
 
 ## 5. 최초 계획의 미확정 사항과 결정 결과
 
 | 최초 미확정 항목 | 결정 결과 |
 | --- | --- |
-| 추천 회차 전달 | `POST /api/recommendations/playlists`의 필수 `recommendationAttempt` 정수 필드로 전달하고 1~3을 검증한다. 회차 관리는 FE가 맡는다. |
-| 현재 플레이리스트 연결 | `GET /api/recommendations/playlists`에 이력 ID를 연결하지 않는다. null ID는 JSON에서 생략한다. |
-| degraded/fallback | 기존 플레이리스트 유지, 새 결과 이력 미저장, 응답의 `recommendationId` 생략으로 확정했다. |
+| 추천 회차 전달 | `POST /api/recommendations/playlists`의 `recommendationAttempt` 정수 필드로 전달하며 값이 있으면 1~3을 검증하고 생략·null은 1로 처리한다. 회차 관리는 FE가 맡는다. |
+| 현재 플레이리스트 연결 | 2026-11-02 사용자 확정으로 GET과 recommendationPlaylistId를 제거한다. 평가용 recommendationId는 유지한다. |
+| degraded/fallback | 서버 복원 없이 프론트의 현재 화면 목록 유지, 새 결과 이력 미저장, 응답의 `recommendationId` 생략으로 확정했다. |
 | 피드백 API 응답 | 성공 201 및 `message`, `data.feedbackId`, `data.recommendationId`, `data.feedback`, 선택적 `data.selectedTrackId`로 확정했다. |
 | 피드백 오류 | 400 입력, 401 인증, 403 소유권, 404 미존재, 409 중복 제출을 적용한다. |
 

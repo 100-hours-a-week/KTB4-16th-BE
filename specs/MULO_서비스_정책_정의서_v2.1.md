@@ -261,22 +261,24 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `REC-001` | **현재 설계** | 현재 플레이리스트 수 | 사용자당 현재 추천 플레이리스트는 최대 1개만 유지한다. | 테이블 정의서 6차 §14 / API 명세 상세2차 R200-R204 |
-| `REC-002` | **현재 설계** | 플레이리스트 미존재 | 현재 추천 플레이리스트가 없으면 오류가 아니라 200과 `playlist=null`을 반환한다. | API 명세 상세2차 R200,R204 |
+| `REC-001` | **현재 구현** | 화면 세션 수명 | 현재 추천 목록은 프론트 화면 메모리에만 존재하며 닫으면 폐기한다. 사용자별 현재 플레이리스트 저장 테이블은 V14에서 제거했다. | 사용자 확정 2026-11-02 / Flyway V14 |
+| `REC-002` | **현재 구현** | 저장 목록 조회 제거 | `GET /api/recommendations/playlists`와 `recommendationPlaylistId`를 제거한다. 정상 POST의 평가용 `recommendationId`는 유지한다. | 사용자 확정 / 추천 Controller |
 | `REC-003` | **현재 설계** | 추천 처리 방식 | 새 추천 플레이리스트 생성은 동기 처리한다. | API 명세 상세2차 R205 |
 | `REC-004` | **현재 구현** | 추천 컨텍스트 | AI에는 요청 사용자 ID, 현재 위치에서 조회한 날씨 상태·섭씨 기온, KST 기준 요청 시각을 전달한다. 주변 인기곡은 현재 좌표 반경 1km 안에서 최근 7일간 생성된 활성 자물쇠를 집계해 상위 5곡만 전달하며, 법정동 역지오코딩이 성공한 경우에만 선택값 `place.name`을 전달한다. `placeId`, `requestId`는 전달하지 않는다. | `RecommendationPlaylistCommandService`, `RecommendationNearbyTracksService`, `ContextRecommendationAiClient` |
 | `REC-005` | **현재 설계** | 히스토리 최소값 없음 | 개인 기록과 주변 기록에는 최소 개수 제한이 없으며 0건이어도 추천할 수 있다. | API 명세 상세2차 R205,R212 |
 | `REC-006` | **현재 설계** | 날씨·기온 필수 | 추천 플레이리스트 생성에서는 현재 위치의 날씨와 기온이 필수 컨텍스트이며 확보 실패 시 502 `WEATHER_API_ERROR`로 추천을 생성하지 않는다. | API 명세 상세2차 R210,R212 |
 | `REC-007` | **확정** | AI 추천 장애 | AI 서비스 연동 실패 Error Code는 `AI_SERVICE_ERROR`로 통일한다. 기존 문서의 `AI_API_ERROR` 표기는 수정 대상이다. | 사용자 확정 |
-| `REC-008` | **현재 구현** | 교체 원자성 | AI가 정상 추천 곡을 반환한 경우에만 기존 현재 플레이리스트를 교체한다. AI가 저하 상태를 알리거나 추천 곡이 비어 있으면 오류 대신 기존 플레이리스트를 유지하고 200을 반환한다. AI 통신·응답 계약 실패 또는 날씨 확보 실패 시에도 기존 데이터를 교체하지 않고 각각 502 `AI_SERVICE_ERROR`, `WEATHER_API_ERROR`를 반환한다. | `RecommendationPlaylistCommandService`, `GlobalExceptionHandler` |
-| `REC-009` | **현재 설계** | 컨텍스트 비저장 | 추천 생성 당시 날씨·기온·시간은 입력 컨텍스트로만 사용하고 playlist에 저장하거나 GET 응답으로 반환하지 않는다. | API 명세 상세2차 정책 요약 R20 / 테이블 정의서 §14 |
-| `REC-010` | **현재 설계** | 추천 곡 순서 | 플레이리스트 음악 순번은 1 이상이며 같은 플레이리스트 내에서 순번이 중복되지 않는다. | 테이블 정의서 6차 §15 |
+| `REC-008` | **현재 구현** | 실패 시 화면 상태 유지 | 정확히 5곡인 degraded 응답은 200과 `playlist=null`, `replaced=false`, `recommendReason=null`을 반환하며 이력을 만들지 않는다. 프론트가 화면의 목록을 유지한다. 곡 수·응답 계약·AI 통신 실패는 502 `AI_SERVICE_ERROR`, 날씨 실패는 502 `WEATHER_API_ERROR`다. 서버에서 과거 추천을 복원하지 않는다. | `RecommendationPlaylistCommandService` |
+| `REC-009` | **현재 구현** | 추천 문맥·이유 비저장 | 날씨·기온·시간과 추천 이유는 DB에 저장하지 않는다. 서버 세션·Redis·종료 API를 추가하지 않는다. | 사용자 확정 / 추천 서비스 |
+| `REC-010` | **현재 구현** | 추천 곡 순서 | 화면 목록은 AI 곡 순서를 보존한다. 평가 이력의 곡 순위는 1부터 기록하며 같은 추천 이력 안에서 중복되지 않는다. | Flyway V13 / `RecommendationPlaylistWriter` |
 | `REC-011` | **V1 제외** | Spotify 플레이리스트 저장 | 추천 결과를 Spotify 계정에 저장하는 기능과 관련 API는 V1에서 제외한다. | API 명세 상세2차 정책 요약 R21 / R213 |
-| `REC-012` | **현재 구현** | 추천 곡 앨범 이미지 | 조회·생성 응답의 각 곡은 `music_tracks.album_image_url`을 `albumImageUrl`로 반환한다. AI 응답에서 앨범 이미지 URL이 없으면 추천 결과를 저장하지 않고 AI 연동 오류로 처리한다. | `RecommendationPlaylistData`, `ContextRecommendationAiClient` |
-| `REC-013` | **현재 구현** | 추천 곡 최대 수 | 백엔드는 AI 요청의 `limit`을 5로 고정하고 정확히 5개의 정상 곡 응답만 저장한다. 일부 곡을 잘라 저장하지 않으며 제외 곡 재등장·응답 내 중복 ID는 실패 처리한다. | `ContextRecommendationAiClient:19,39`, `RecommendationPlaylistWriter:28-39` |
+| `REC-012` | **현재 구현** | 추천 곡 앨범 이미지 | 생성 응답의 각 곡은 음악 카탈로그의 albumImageUrl을 반환한다. AI 필수 곡 정보가 누락되면 AI 연동 오류로 처리한다. | `RecommendationPlaylistData`, `ContextRecommendationAiClient` |
+| `REC-013` | **현재 구현** | 추천 곡 최대 수 | AI 요청 limit은 5다. 정확히 5개의 정상 곡만 반환하고 평가 이력을 저장한다. 일부 곡 자르기·제외 곡 재등장·중복 ID는 허용하지 않는다. | `ContextRecommendationAiClient`, `RecommendationPlaylistWriter` |
 
 | `REC-014` | **확정·구현** | 화면 세션 추천 | 진입 시 이전 추천을 조회하거나 자동 생성하지 않고 최대 3회 안내와 추천 버튼을 표시한다. FE가 성공한 정상 추천만 최대 3회로 세며 실패·기존 목록 유지 응답은 차감하지 않는다. 요청에 `recommendationAttempt` 1~3을 전달한다. 새 정상 추천 결과의 피드백 제출 성공 전에는 FE가 닫기·재추천을 막고 제출 중에도 차단한다. 오류·결과 없음·추천 ID 누락은 피드백 없이 닫을 수 있다. Backend는 추천 회차 입력 범위만 검증하며 미제출 피드백 또는 시트당 3회를 독립 강제하지 않는다. 닫았다 다시 열면 추천·횟수·제외 목록을 초기화한다. | 사용자 확정 / `HomePlaylistSheet` / BE 요청 검증 |
-| `REC-015` | **확정·구현** | 세션 곡 중복 제외 | 프론트는 이번 화면에서 받은 externalTrackId를 누적해 POST의 excludeTrackIds로 전달한다. 최초는 빈 배열, 최대 50개이며 백엔드가 AI로 전달한다. 추천 응답은 externalTrackId, POST data는 replaced를 제공한다. 횟수·제외 이력은 프론트 메모리에서만 관리하고 서버 세션·Redis·종료 API는 추가하지 않는다. 기존 DB 저장 및 GET 계약은 유지하되 홈 진입에서는 조회하지 않는다. | 사용자 확정 / 추천 API |
+| `REC-015` | **확정·구현** | 세션 곡 중복 제외 | 프론트는 화면에서 받은 externalTrackId를 누적해 excludeTrackIds로 전달한다. 최초는 빈 배열, 최대 50개다. 횟수·제외 목록은 프론트 메모리에서만 관리한다. 서버의 현재 플레이리스트 저장과 GET 복원은 제거한다. | 사용자 확정 / 추천 API |
+
+| `REC-016` | **현재 구현** | AI 추천 이유 | 사진·플리 POST 최상위 recommendReason에 AI 문자열을 그대로 전달한다. null·누락은 null이며 공백·개행을 가공하지 않는다. 추가 AI 호출·이유 저장은 없다. | 사용자 확정 / wiki #319 |
 
 ## AI 추천 피드백
 
@@ -288,8 +290,8 @@
 | `FB-004` | **FE에서 구현** | 재추천·닫기 전 피드백 | 정상 추천 결과에 아직 피드백이 없으면 FE는 플레이리스트 시트 닫기·재추천과 사진 추천 화면 닫기·다음 단계 진행을 막는다. 미제출 피드백은 서버에 저장하지 않는다. 이 진행 차단은 FE 동작이며 Backend는 다음 추천 또는 자물쇠 생성 요청에서 미제출 여부를 검사·차단하지 않는다. | FE `HomePlaylistSheet`, `RecordCreateForm` / BE 서비스 경계 |
 | `FB-005` | **현재 구현** | 플레이리스트 피드백 입력 | PLAYLIST + LIKE는 추천 목록에서 가장 마음에 든 곡 1개를 골라야 제출할 수 있다. DISLIKE는 곡 선택 없이 제출한다. 한 추천 결과에는 피드백을 최대 1개만 저장한다. | 피드백 API / Flyway V13 UNIQUE |
 | `FB-006` | **현재 구현** | 선택 곡 검증 | Backend는 PLAYLIST + LIKE의 선택 곡이 해당 추천 결과의 곡 목록에 포함되는지 검증한다. PHOTO 및 DISLIKE에는 선택 곡을 허용하지 않는다. | `AiRecommendationFeedbackService` |
-| `FB-007` | **현재 구현** | 이력과 현재 플레이리스트 분리 | 정상 추천 성공 시 결과와 곡 스냅샷을 저장하고, 사용자가 피드백 API를 제출한 경우에만 피드백 행을 저장한다. 이력은 현재 플레이리스트 교체·삭제와 독립적으로 보존된다. | Flyway V13 / 추천 이력 저장 서비스 |
-| `FB-008` | **현재 구현** | 결과 식별자와 피드백 API | 사진 및 정상 플레이리스트 추천 POST 응답은 최상위 `recommendationId`를 반환한다. 플레이리스트 fallback은 ID를 생략하고 이력을 만들지 않는다. 피드백 POST는 인증·소유권·입력·중복을 검증한다. 기존 플레이리스트 GET은 추천 이력 ID를 연결하지 않는다. | OpenAPI v2.8 / 추천·피드백 API |
+| `FB-007` | **현재 구현** | 평가 이력 보존 | 정상 추천의 평가 결과와 곡 스냅샷은 화면 수명과 독립적으로 저장한다. 화면 복원용 테이블 삭제와 무관하며 이유는 저장하지 않는다. 피드백은 사용자가 제출한 경우에만 기록한다. | Flyway V13·V14 / 추천 이력 서비스 |
+| `FB-008` | **현재 구현** | 결과 식별자와 피드백 API | 정상 사진·플리 POST는 최상위 recommendationId를 반환한다. degraded 플리는 ID를 생략하고 이력을 만들지 않는다. GET과 별도 recommendationPlaylistId는 제거한다. 피드백 인증·소유권·입력·중복 검증은 유지한다. | OpenAPI v2.8 / 추천·피드백 API |
 
 
 ## AI 기억 검색
@@ -519,8 +521,8 @@
 - [x] 11. `monthly_reports - 월간 리포트 테이블`
 - [x] 12. `monthly_mood_stats - 월간 기분 통계 테이블`
 - [x] 13. `monthly_photo_scene_stats - 월간 사진 분위기 통계 테이블`
-- [x] 14. `recommendation_playlists - 추천 플레이리스트 테이블`
-- [x] 15. `recommendation_playlist_items - 추천 플레이리스트 음악 테이블`
+- [x] 14. `recommendation_playlists` — V14에서 제거
+- [x] 15. `recommendation_playlist_items` — V14에서 제거
 - [x] 16. `vote_questions - 취향 투표 질문 테이블`
 - [x] 17. `vote_answers - 취향 투표 답변 테이블`
 - [x] 18. `match_requests - 매칭 요청 테이블`
