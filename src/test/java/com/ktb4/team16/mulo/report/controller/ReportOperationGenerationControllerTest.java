@@ -35,13 +35,13 @@ class ReportOperationGenerationControllerTest {
     }
 
     @Test
-    void generatesCurrentOrPreviousMonth() throws Exception {
-        YearMonth current = YearMonth.of(2026, 9);
+    void generatesOnlyPreviousMonth() throws Exception {
+        YearMonth current = YearMonth.of(2026, 8);
         when(generationService.generate(current))
                 .thenReturn(new MonthlyReportGenerationService.GenerationResult(current, 1, 0));
 
         mvc.perform(post("/internal/ops/monthly-reports/generate")
-                        .param("year", "2026").param("month", "9"))
+                        .param("year", "2026").param("month", "8"))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.createdCount").value(1));
 
@@ -50,6 +50,9 @@ class ReportOperationGenerationControllerTest {
 
     @Test
     void rejectsFutureAndOlderMonths() throws Exception {
+        mvc.perform(post("/internal/ops/monthly-reports/generate")
+                        .param("year", "2026").param("month", "9"))
+                .andExpect(status().isBadRequest());
         mvc.perform(post("/internal/ops/monthly-reports/generate")
                         .param("year", "2026").param("month", "10"))
                 .andExpect(status().isBadRequest());

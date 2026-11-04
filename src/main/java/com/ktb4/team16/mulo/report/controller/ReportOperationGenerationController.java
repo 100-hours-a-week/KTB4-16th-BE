@@ -14,7 +14,7 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
-/** 배포 내부에서 현재·이전 달 리포트를 수동 생성하는 운영 Controller다. */
+/** 배포 내부에서 지난달 마감 리포트를 수동 생성하는 운영 Controller다. */
 @RestController
 @ConditionalOnProperty("report.operation.token")
 @RequestMapping("/internal/ops/monthly-reports")
@@ -38,7 +38,7 @@ public class ReportOperationGenerationController {
         try {
             YearMonth target = YearMonth.of(year, month);
             YearMonth current = YearMonth.now(clock);
-            if (target.isAfter(current) || target.isBefore(current.minusMonths(1))) {
+            if (!target.equals(current.minusMonths(1))) {
                 throw new InvalidMonthlyReportGenerationRequestException();
             }
             return target;

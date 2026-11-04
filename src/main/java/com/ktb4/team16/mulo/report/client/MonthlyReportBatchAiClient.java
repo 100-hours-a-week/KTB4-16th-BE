@@ -40,7 +40,6 @@ public class MonthlyReportBatchAiClient {
                     .retrieve()
                     .body(BatchResponse.class);
             if (response == null || !"QUEUED".equals(response.status())
-                    || response.jobId() == null || response.jobId().isBlank()
                     || response.targetCount() <= 0) {
                 throw new MonthlyReportAiException();
             }

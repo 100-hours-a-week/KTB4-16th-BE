@@ -37,7 +37,7 @@ class LocalMonthlyReportTestGenerationControllerTest {
     @Test
     void generatesCurrentMonthOnlyThroughTheTestEndpoint() throws Exception {
         YearMonth currentMonth = YearMonth.of(2026, 9);
-        when(generationService.generate(currentMonth))
+        when(generationService.generateForTest(currentMonth))
                 .thenReturn(new MonthlyReportGenerationService.GenerationResult(currentMonth, 1, 0));
 
         mvc.perform(post("/api/internal/test/monthly-reports/generate")
@@ -48,7 +48,7 @@ class LocalMonthlyReportTestGenerationControllerTest {
                 .andExpect(jsonPath("$.month").value(9))
                 .andExpect(jsonPath("$.createdCount").value(1));
 
-        verify(generationService).generate(currentMonth);
+        verify(generationService).generateForTest(currentMonth);
     }
 
     @Test
@@ -58,6 +58,6 @@ class LocalMonthlyReportTestGenerationControllerTest {
                         .param("month", "10"))
                 .andExpect(status().isBadRequest());
 
-        verify(generationService, Mockito.never()).generate(any());
+        verify(generationService, Mockito.never()).generateForTest(any());
     }
 }

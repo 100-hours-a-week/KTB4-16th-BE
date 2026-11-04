@@ -33,7 +33,7 @@ class MonthlyReportAiCallbackControllerTest {
         mvc.perform(post("/internal/ai/report-ready")
                 .contentType(MediaType.APPLICATION_JSON)
                 .content("""
-                        {"batchRequestId":"batch-123","jobId":"job-1","year":2026,"month":8,
+                        {"batchRequestId":"batch-123","year":2026,"month":8,
                          "generatedAt":"2026-09-01T03:00:00+09:00",
                          "results":[{"userId":7,"status":"FAILED","errorCode":"AI_ERROR"}]}
                         """))
