@@ -52,6 +52,9 @@ dependencies {
     // Bean Validation
     implementation 'org.springframework.boot:spring-boot-starter-validation'
 
+    // 월간 리포트의 실행 이력과 재시작 상태를 기존 MySQL에 저장한다.
+    implementation 'org.springframework.boot:spring-boot-starter-batch-jdbc'
+
     // Database migration
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     runtimeOnly 'org.flywaydb:flyway-mysql'
@@ -88,10 +91,12 @@ ext.coverageExcludes = [
 def runningOnGitHubActions = System.getenv('GITHUB_ACTIONS')?.equalsIgnoreCase('true')
 def localTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3313/mulo_test?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
 def localWeatherTestDatabaseUrl = 'jdbc:mysql://127.0.0.1:3314/mulo_weather_it?useUnicode=true&characterEncoding=UTF-8&serverTimezone=Asia/Seoul'
-def groupTestHostPort = 3318
-def groupTestContainerName = 'mulo-be-group-test-mysql'
-def groupTestVolumeName = 'mulo-be-group-test-data'
-def groupTestNetworkName = 'mulo-be-group-test-network'
+// 월간 리포트 작업은 다른 워크트리의 테스트 DB와 포트·볼륨을 분리한다.
+def monthlyReportTestMysql = project.findProperty('monthlyReportTestMysql')?.toString() == 'true'
+def groupTestHostPort = monthlyReportTestMysql ? 3321 : 3318
+def groupTestContainerName = monthlyReportTestMysql ? 'mulo-monthly-batch-v2-mysql' : 'mulo-be-group-test-mysql'
+def groupTestVolumeName = monthlyReportTestMysql ? 'mulo-monthly-batch-v2-data' : 'mulo-be-group-test-data'
+def groupTestNetworkName = monthlyReportTestMysql ? 'mulo-monthly-batch-v2-network' : 'mulo-be-group-test-network'
 def groupTestDatabaseUrl = System.getenv('MULO_BE_GROUP_TEST_DB_URL') ?: ''
 def groupTestDatabaseUsername = System.getenv('MULO_BE_GROUP_TEST_DB_USERNAME') ?: ''
 def groupTestDatabasePassword = System.getenv('MULO_BE_GROUP_TEST_DB_PASSWORD') ?: ''
@@ -99,7 +104,7 @@ def groupTestOptIn = project.findProperty('muloBeGroupTestMysql')?.toString()
 if (groupTestOptIn != null && !(groupTestOptIn in ['true', 'false'])) {
     throw new GradleException('Use -PmuloBeGroupTestMysql=true to select the isolated group-test MySQL path.')
 }
-def useGroupTestMysql = groupTestOptIn == 'true'
+def useGroupTestMysql = monthlyReportTestMysql || groupTestOptIn == 'true'
 def localTestJvmEnvironment = [
     DB_URL: localTestDatabaseUrl,
     DB_USERNAME: 'mulo_test',
@@ -143,7 +148,7 @@ def verifyGroupTestMysql = {
         throw new GradleException('The local group-test MySQL path cannot be selected in GitHub Actions.')
     }
     if (!(groupTestDatabaseUrl ==~ /(?i)jdbc:mysql:\/\/127\.0\.0\.1:${groupTestHostPort}\/mulo_test(?:\?.*)?/)) {
-        throw new GradleException('MULO_BE_GROUP_TEST_DB_URL must target the isolated mulo_test database on 127.0.0.1:3318.')
+        throw new GradleException('MULO_BE_GROUP_TEST_DB_URL must target the isolated mulo_test database on the selected isolated loopback port.')
     }
     if (groupTestDatabaseUsername != 'mulo_test'
             || groupTestDatabasePassword.length() < 32

@@ -105,6 +105,16 @@ public enum ErrorCode {
     AI_RECOMMENDATION_NOT_OWNED(HttpStatus.FORBIDDEN, "해당 추천 결과에 피드백을 제출할 권한이 없습니다."),
     AI_RECOMMENDATION_FEEDBACK_ALREADY_SUBMITTED(HttpStatus.CONFLICT, "이미 피드백을 제출한 추천 결과입니다."),
 
+    REPORT_ALREADY_RUNNING(HttpStatus.CONFLICT, "해당 월 리포트 작업이 실행 중입니다."),
+    REPORT_REQUEST_CONFLICT(HttpStatus.CONFLICT, "리포트 작업의 요청 조건 또는 예약 상태가 다릅니다."),
+    REPORT_CALLBACK_CONFLICT(HttpStatus.CONFLICT, "이미 저장된 리포트 결과와 다릅니다."),
+    REPORT_INVALID_REQUEST(HttpStatus.BAD_REQUEST, "리포트 실행 요청이 올바르지 않습니다."),
+    REPORT_RUN_NOT_FOUND(HttpStatus.NOT_FOUND, "리포트 배치 실행을 찾을 수 없습니다."),
+    REPORT_DISPATCH_NOT_FOUND(HttpStatus.NOT_FOUND, "AI 전송 요청을 찾을 수 없습니다."),
+    REPORT_TEST_ENVIRONMENT_REQUIRED(HttpStatus.FORBIDDEN, "격리된 리포트 테스트 환경이 필요합니다."),
+    AI_ACCEPTANCE_UNKNOWN(HttpStatus.SERVICE_UNAVAILABLE, "AI 접수 여부 확인이 필요합니다. 자동 재전송하지 않습니다."),
+    REPORT_BATCH_FAILED(HttpStatus.INTERNAL_SERVER_ERROR, "월간 리포트 배치가 중단되었습니다."),
+
     INTERNAL_SERVER_ERROR(HttpStatus.INTERNAL_SERVER_ERROR,
             "서버 내부 오류가 발생했습니다. 잠시 후 다시 시도해주세요.");
 

@@ -280,6 +280,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
     }
 
+    /** 배치 업무 사유를 공통 오류 형식으로 반환하고 원본 AI 오류를 숨긴다. */
+    @ExceptionHandler(com.ktb4.team16.mulo.report.batch.ReportBatchException.class)
+    public ResponseEntity<ErrorResponse> handleReportBatch(
+            com.ktb4.team16.mulo.report.batch.ReportBatchException exception) {
+        ErrorCode code = ErrorCode.valueOf(exception.code());
+        return ResponseEntity.status(code.status()).body(ErrorResponse.of(code));
+    }
+
     @ExceptionHandler(AiRecommendationFeedbackException.class)
     public ResponseEntity<ErrorResponse> handleAiRecommendationFeedback(
             AiRecommendationFeedbackException exception) {

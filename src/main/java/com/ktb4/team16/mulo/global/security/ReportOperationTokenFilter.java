@@ -13,7 +13,7 @@ import org.springframework.web.filter.OncePerRequestFilter;
 
 /** 리포트 수동 실행 내부 요청의 전용 운영 토큰을 검증한다. */
 public class ReportOperationTokenFilter extends OncePerRequestFilter {
-    private static final String PATH = "/internal/ops/monthly-reports/generate";
+    private static final String PATH = "/internal/ops/monthly-reports/";
     private final ReportOperationProperties properties;
     private final SecurityErrorWriter errorWriter;
 
@@ -37,9 +37,9 @@ public class ReportOperationTokenFilter extends OncePerRequestFilter {
         filterChain.doFilter(request, response);
     }
 
-    // 지정된 운영 POST 외에는 이 필터를 적용하지 않는다.
+    // 모든 월간 리포트 운영 경로를 전용 토큰으로 보호한다.
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
-        return !("POST".equals(request.getMethod()) && PATH.equals(request.getRequestURI()));
+        return !request.getRequestURI().startsWith(PATH);
     }
 }
