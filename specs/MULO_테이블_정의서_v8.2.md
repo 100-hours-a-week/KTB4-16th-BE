@@ -1451,3 +1451,23 @@ AI에 월간 리포트 묶음을 보낸 단일 요청의 전송 상태를 `batch
 ---
 
 ---
+
+## 별도 Chat DB: 메시지 복구 인덱스 추가 계약 (#330)
+
+- 상태: [CHAT 기능 PR #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) 구현·미병합, 운영 적용 미확인.
+- 소유 저장소: `KTB4-16th-CHAT`, 데이터베이스: `mulo_chat`. Backend의 `mulo` DB migration이 아니다.
+- 기존 V1 역사 자료의 `chat_messages` 정의는 V6 이전 Backend schema이며 수정하지 않는다. 아래 내용은 별도 Chat DB에 대한 추가 계약이다.
+- Chat migration V1~V4는 유지하고 `V5__add_chat_message_sync_index.sql`만 추가한다. Backend V5와는 독립적인 버전이다.
+
+| 테이블 | 인덱스명 | 종류 | 컬럼 순서 | 목적 |
+|---|---|---|---|---|
+| `mulo_chat.chat_messages` | `idx_chat_messages_room_id` | 비고유 복합 인덱스 | `chat_room_id`, `chat_message_id` | 특정 방의 MAX ID 및 `after < chat_message_id <= through` 오름차순 복구 범위 조회 |
+
+```sql
+CREATE INDEX idx_chat_messages_room_id
+    ON chat_messages (chat_room_id, chat_message_id);
+```
+
+먼저 방을 동등 조건으로 좁히고 그 안에서 메시지 ID 범위를 읽는다. `chat_message_id`는 전체 테이블에서 발급하므로 방 안에서 연속일 필요가 없다. AUTO_INCREMENT 자체는 커밋 순서를 보장하지 않으며 같은 방 INSERT 전 기존 참가자 잠금으로 직렬화하는 조건을 유지한다.
+
+메시지 컬럼·기존 UNIQUE·기존 이력 조회 계약을 변경하지 않는다. Redis 채널과 전송 큐는 영구 메시지 저장소가 아니고 Outbox 테이블을 새로 만들지 않는다. 방 또는 메시지가 삭제되거나 접근 권한이 사라진 뒤까지 복구를 보장하지 않는다.
