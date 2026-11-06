@@ -5,9 +5,15 @@ import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 
 import com.ktb4.team16.mulo.notification.dto.NotificationUnreadStatusResponse;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
+import com.ktb4.team16.mulo.notification.sse.NotificationSseConnectionManager;
+import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
+import java.time.Instant;
+import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 import java.util.List;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
@@ -25,12 +31,17 @@ import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 class NotificationControllerTest {
     @Mock
     private NotificationService notificationService;
+    @Mock
+    private NotificationSseConnectionManager sseConnections;
+    @Mock
+    private JwtTokenProvider jwtTokenProvider;
 
     private MockMvc mvc;
 
     @BeforeEach
     void setUp() {
-        mvc = MockMvcBuilders.standaloneSetup(new NotificationController(notificationService))
+        mvc = MockMvcBuilders.standaloneSetup(new NotificationController(
+                notificationService, sseConnections, jwtTokenProvider))
                 .setCustomArgumentResolvers(new AuthenticationPrincipalArgumentResolver())
                 .build();
         SecurityContextHolder.getContext().setAuthentication(
@@ -54,5 +65,23 @@ class NotificationControllerTest {
                 .andExpect(jsonPath("$.data.hasUnread").value(true));
 
         verify(notificationService).getUnreadStatus(35L);
+    }
+
+    @Test
+    void streamUsesAuthenticatedUserAndValidatedTokenExpiry() throws Exception {
+        Instant expiresAt = Instant.now().plusSeconds(3600);
+        when(jwtTokenProvider.extractAccessTokenDetails("valid-token"))
+                .thenReturn(new JwtTokenProvider.AccessTokenDetails(35L, expiresAt));
+        when(sseConnections.connect(35L, expiresAt)).thenReturn(new SseEmitter(1000L));
+
+        mvc.perform(get("/api/notifications/stream")
+                        .header("Authorization", "Bearer valid-token")
+                        .param("userId", "99"))
+                .andExpect(status().isOk())
+                .andExpect(header().string("Cache-Control", "no-cache"))
+                .andExpect(header().string("X-Accel-Buffering", "no"))
+                .andExpect(request().asyncStarted());
+
+        verify(sseConnections).connect(35L, expiresAt);
     }
 }

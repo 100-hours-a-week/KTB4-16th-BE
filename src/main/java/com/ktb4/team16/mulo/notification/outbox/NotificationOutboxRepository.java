@@ -117,13 +117,12 @@ public class NotificationOutboxRepository {
     }
 
     /** 수신자별 알림을 저장하되 생성 전에 종료된 친구 요청 알림은 생략한다. */
-    public void insertNotification(UUID eventId, NotificationDraft draft) {
+    public int insertNotification(UUID eventId, NotificationDraft draft) {
         if (draft.type() == NotificationType.FRIEND_REQUEST) {
-            insertPendingFriendRequestNotification(eventId, draft);
-            return;
+            return insertPendingFriendRequestNotification(eventId, draft);
         }
         Long targetId = lockExistingTarget(draft.type(), draft.targetId());
-        jdbcTemplate.update("""
+        return jdbcTemplate.update("""
                 INSERT INTO notifications (
                     user_id, type, monthly_report_id, chat_room_id, friendship_id,
                     friend_request_id, source_event_id, title, content
@@ -137,10 +136,10 @@ public class NotificationOutboxRepository {
     }
 
     /** 원래 요청의 현재 존재 확인과 알림 저장을 한 SQL로 수행하고 종료된 요청은 0행 처리한다. */
-    private void insertPendingFriendRequestNotification(UUID eventId, NotificationDraft draft) {
+    private int insertPendingFriendRequestNotification(UUID eventId, NotificationDraft draft) {
         // worker의 사용자 선잠금 뒤 실행한다. FOR SHARE로 RC/RR 모두 최신 요청과 행 보호를 유지한다.
         // 0행도 정상 처리이므로 바깥 worker가 이벤트를 COMPLETED로 마무리한다.
-        jdbcTemplate.update("""
+        return jdbcTemplate.update("""
                 INSERT INTO notifications (
                     user_id, type, friend_request_id, source_event_id, title, content
                 )

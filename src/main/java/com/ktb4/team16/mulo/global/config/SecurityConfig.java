@@ -77,6 +77,8 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 내부 오류 디스패치가 기존 404/500을 401로 바꾸지 않도록 한다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers(request -> request.getDispatcherType() == DispatcherType.ASYNC
+                                && "/api/notifications/stream".equals(request.getServletPath())).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/auth/verify").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/ai/report-ready").permitAll()
                         .requestMatchers("/internal/ops/monthly-reports/**")
