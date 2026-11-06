@@ -29,6 +29,28 @@ class NotificationServiceTest {
     @Mock
     private NotificationRepository notifications;
 
+    @Test
+    void returnsTrueWhenCurrentUserHasUnreadNotification() {
+        NotificationService service = new NotificationService(notifications, FIXED_CLOCK,
+                new NotificationCursorCodec());
+        when(notifications.existsUnreadByUserId(7L)).thenReturn(1);
+
+        assertThat(service.getUnreadStatus(7L).data().hasUnread()).isTrue();
+
+        verify(notifications).existsUnreadByUserId(7L);
+    }
+
+    @Test
+    void returnsFalseWhenCurrentUserHasNoUnreadNotification() {
+        NotificationService service = new NotificationService(notifications, FIXED_CLOCK,
+                new NotificationCursorCodec());
+        when(notifications.existsUnreadByUserId(7L)).thenReturn(0);
+
+        assertThat(service.getUnreadStatus(7L).data().hasUnread()).isFalse();
+
+        verify(notifications).existsUnreadByUserId(7L);
+    }
+
     /** 현재 사용자가 요청한 모든 ID를 소유할 때만 하나의 시각으로 일괄 읽음 처리한다. */
     @Test
     void marksAllOwnedNotificationsReadAtOneTimestamp() {

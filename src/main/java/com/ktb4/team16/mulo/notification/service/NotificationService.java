@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.notification.cursor.NotificationCursor;
 import com.ktb4.team16.mulo.notification.cursor.NotificationCursorCodec;
 import com.ktb4.team16.mulo.notification.dto.NotificationListResponse;
+import com.ktb4.team16.mulo.notification.dto.NotificationUnreadStatusResponse;
 import com.ktb4.team16.mulo.notification.entity.Notification;
 import com.ktb4.team16.mulo.notification.exception.NotificationDomainException;
 import com.ktb4.team16.mulo.notification.exception.NotificationInputException;
@@ -61,6 +62,12 @@ public class NotificationService {
                 .toList();
         return new NotificationListResponse("알림 목록 조회 성공",
                 new NotificationListResponse.Data(items, nextCursor));
+    }
+
+    @Transactional(readOnly = true)
+    public NotificationUnreadStatusResponse getUnreadStatus(Long userId) {
+        return new NotificationUnreadStatusResponse("미읽음 알림 여부 조회 성공",
+                new NotificationUnreadStatusResponse.Data(notifications.existsUnreadByUserId(userId) == 1));
     }
 
     /** 요청 ID의 전체 소유권을 먼저 확인하고 unread 알림만 같은 시각으로 갱신한다. */
