@@ -261,6 +261,13 @@ class SecurityIntegrationTests {
     }
 
     @Test
+    void unreadStatusWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/notifications/unread-status"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
     void weatherGetIsPublicWithoutAuthenticationOrCsrf() throws Exception {
         var result = mvc.perform(get("/api/weather"))
                 .andExpect(status().isOk())
