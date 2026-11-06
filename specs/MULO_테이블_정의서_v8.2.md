@@ -1454,10 +1454,10 @@ AI에 월간 리포트 묶음을 보낸 단일 요청의 전송 상태를 `batch
 
 ## 별도 Chat DB: 메시지 복구 인덱스 추가 계약 (#330)
 
-- 상태: [CHAT 기능 PR #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) 구현·미병합, 운영 적용 미확인.
+- 상태: [CHAT 기능 PR #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) develop 반영 완료(2026-11-06 KST), 운영 적용 미확인.
 - 소유 저장소: `KTB4-16th-CHAT`, 데이터베이스: `mulo_chat`. Backend의 `mulo` DB migration이 아니다.
 - 기존 V1 역사 자료의 `chat_messages` 정의는 V6 이전 Backend schema이며 수정하지 않는다. 아래 내용은 별도 Chat DB에 대한 추가 계약이다.
-- Chat migration V1~V4는 유지하고 `V5__add_chat_message_sync_index.sql`만 추가한다. Backend V5와는 독립적인 버전이다.
+- Chat migration V1~V4는 유지되며 `V5__add_chat_message_sync_index.sql`이 CHAT develop에 추가되었다. 이 문서 PR은 migration을 변경하지 않는다. Backend V5와는 독립적인 버전이다.
 
 | 테이블 | 인덱스명 | 종류 | 컬럼 순서 | 목적 |
 |---|---|---|---|---|
