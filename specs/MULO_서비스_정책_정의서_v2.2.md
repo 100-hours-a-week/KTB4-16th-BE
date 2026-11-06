@@ -380,6 +380,21 @@
 | `CHAT-005` | **확정·미구현** | 일자 종료 | KST 00:00에 해당 날짜의 방을 종료하고 ROOM_CLOSED 이벤트를 전달한 뒤 ChatRoom과 종속 participant/message를 물리 삭제한다. | 최신 사용자 확정 |
 | `CHAT-006` | **확정·미구현** | 삭제 방식 | soft delete가 아닌 물리 삭제를 사용한다. 위 lifecycle은 향후 별도 Chat DB 정책이며 현재 Backend 기능 구현을 의미하지 않는다. | 최신 사용자 확정 |
 
+
+### 다중 CHAT 태스크 전달·복구 추가 계약 (#330)
+
+다음 항목은 별도 Chat Server의 DB 복구 [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36), Redis 전달 [CHAT #38](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/38), 스케일인 [CHAT #39](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/39)이 develop에 반영된 구현을 기준으로 한다(2026-11-06 KST). 클라이언트 복구 [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147)은 미병합이며 운영 배포는 별도 확인 대상이다. 기존 CHAT-001~006의 Backend 기준 구현 상태와 과거 lifecycle 정책을 일괄 변경하지 않는다.
+
+| 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
+|---|---|---|---|---|
+| `CHAT-007` | **CHAT develop 반영** | 서버 간 전달 | WebSocket 연결은 각 태스크가 소유한다. DB 커밋 이후 Redis Pub/Sub으로 메시지·방 이벤트를 전달하고 각 태스크는 로컬 접속자만 권한 재검증 후 전송한다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [CHAT #38](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/38) / [CHAT #39](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/39) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-008` | **CHAT develop 반영·FE 미병합** | DB 누락 복구 | GET `/api/chat-rooms/{chatRoomId}/messages/sync`로 최초 기준점 또는 ID 오름차순 최대 20건을 반환한다. 고정 상한의 전체 페이지를 완료해야 DB 복구 완료 기준점을 갱신한다. 기존 history와 구분한다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-009` | **FE PR 구현·미병합** | 복구 트리거 | 최초 기준점 확보 후 이력을 읽고, 재연결·online·visible 및 정상 약 15초+jitter 주기로 DB를 대조한다. 실패 시 간격을 늘린다. 방·세션 교체 시 이전 요청을 취소한다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-010` | **FE PR 구현·미병합** | 중복 및 전송 확인 | DB ID와 사용자별 clientMessageId로 병합한다. 본인 메시지의 DB 저장 확인도 ACK와 동일하게 전송 대기·재시도를 정리한다. live 최고 ID만으로 복구 완료 지점을 전진시키지 않는다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-011` | **CHAT develop 반영** | 전달 장애·종료 | 구독 ACK·발행 연결 PING·큐 유휴 상태를 5초 확인한 뒤 새 연결을 허용한다. 실제 PUBLISH 권한이나 브라우저 수신 확인은 아니다. READY 중 전달 장애 또는 종료 전환 시 로컬 소켓에 1012 종료를 요청한다. DRAINING에서 신규 handshake·SEND·HTTP 쓰기를 제한하고 SEND는 커밋 후 발행까지 최대 20초, 네 전달 큐는 공통 10초 기한으로 기다린다. 이후 미완료 작업에 중단을 요청하고 Redis를 정리한다. HTTP 쓰기는 503과 CHAT_DELIVERY_UNAVAILABLE, STOMP SEND는 같은 오류 코드로 거절한다. GET·HEAD·OPTIONS는 종료 필터가 허용하지만 종료 태스크의 GET 가용성·전체 ECS 종료 시간을 보장하지 않는다. `/health`는 DRAINING·STOPPED에서 503이며 공유 Redis 장애만으로 실패하지 않는다. `/actuator/health` 변경은 없다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [CHAT #38](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/38) / [CHAT #39](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/39) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-012` | **명시적 한계** | 전달 보장 범위 | DB 저장 후 발행 전 종료는 DB 조회로 보완한다. Pub/Sub 재생, Outbox, exactly-once 및 미커밋 전송의 자동 재전송은 제공하지 않는다. 이력·접근 권한이 남고 클라이언트 조회가 성공해야 반영되며 15초는 복구 SLA가 아니다. 방 이벤트 전체 이력 재생도 보장하지 않는다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [CHAT #38](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/38) / [CHAT #39](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/39) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+| `CHAT-013` | **운영 확인 필요** | 최초 배포 | 모든 CHAT 태스크는 같은 writer DB·Redis와 환경 채널을 사용한다. ECS는 전달 활성화가 필수다. 구형 로컬 모드와 신형 Pub/Sub 모드는 점검 창에서 버전을 맞추고 새 CHAT 이후 FE를 배포한다. ECS/ALB·Redis TLS/ACL·목표 동접 용량은 별도 검증한다. | [CHAT #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) / [CHAT #38](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/38) / [CHAT #39](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/39) / [FE #147](https://github.com/100-hours-a-week/KTB4-16th-FE/pull/147) |
+
 ## 알림
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
