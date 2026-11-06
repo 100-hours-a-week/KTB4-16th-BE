@@ -3,6 +3,7 @@ package com.ktb4.team16.mulo.notification.controller;
 import com.ktb4.team16.mulo.notification.dto.NotificationActionResponse;
 import com.ktb4.team16.mulo.notification.dto.NotificationListResponse;
 import com.ktb4.team16.mulo.notification.dto.NotificationReadRequest;
+import com.ktb4.team16.mulo.notification.dto.NotificationUnreadStatusResponse;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
@@ -32,6 +33,11 @@ public class NotificationController {
             @RequestParam(required = false) Integer size
     ) {
         return notificationService.getNotifications(userId, cursor, size);
+    }
+
+    @GetMapping("/unread-status")
+    public NotificationUnreadStatusResponse getUnreadStatus(@AuthenticationPrincipal Long userId) {
+        return notificationService.getUnreadStatus(userId);
     }
 
     /** 요청한 알림 ID 전체를 검증한 뒤 일괄 읽음 처리한다. */

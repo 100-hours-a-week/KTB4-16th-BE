@@ -62,6 +62,29 @@ class NotificationMysqlIntegrationTest {
 
     private final List<Long> createdUserIds = new ArrayList<>();
 
+    @Test
+    void unreadStatusReflectsOwnershipReadAndHardDeletion() {
+        TestUser owner = insertUser("unreadOwner");
+        TestUser other = insertUser("unreadOther");
+
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isFalse();
+        insertNotification(other.id(), "FRIEND_REQUEST", null);
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isFalse();
+
+        Long ownedId = insertNotification(owner.id(), "FRIEND_REQUEST", null);
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isTrue();
+
+        notificationService.markRead(owner.id(), List.of(ownedId));
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isFalse();
+
+        Long deletedId = insertNotification(owner.id(), "FRIEND_REQUEST", null);
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isTrue();
+        notificationService.delete(owner.id(), deletedId);
+        assertThat(notificationService.getUnreadStatus(owner.id()).data().hasUnread()).isFalse();
+        assertThat(notificationService.getNotifications(owner.id(), null, 20).data().notifications())
+                .hasSize(1);
+    }
+
     /** 테스트가 만든 Outbox·알림·친구 리소스·사용자를 FK 순서대로 제거한다. */
     @AfterEach
     void cleanUp() {

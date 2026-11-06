@@ -12,6 +12,14 @@ import org.springframework.data.repository.query.Param;
 /** 사용자의 알림 소유권과 최신순 keyset 조회를 데이터베이스에서 적용한다. */
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
+    @Query(value = """
+            SELECT EXISTS (
+                SELECT 1 FROM notifications
+                WHERE user_id = :userId AND read_at IS NULL
+            )
+            """, nativeQuery = true)
+    int existsUnreadByUserId(@Param("userId") Long userId);
+
     /** 생성 시각·ID 내림차순으로 알림 첫 페이지와 다음 행을 조회한다. */
     @Query("""
             SELECT notification FROM Notification notification
