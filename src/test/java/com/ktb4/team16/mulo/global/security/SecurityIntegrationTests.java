@@ -7,6 +7,10 @@ import com.ktb4.team16.mulo.auth.service.ChatAuthVerificationService;
 import com.ktb4.team16.mulo.global.config.JwtProperties;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
+import com.ktb4.team16.mulo.notification.controller.NotificationController;
+import com.ktb4.team16.mulo.notification.service.NotificationService;
+import com.ktb4.team16.mulo.notification.sse.NotificationSseConnectionManager;
+import jakarta.servlet.DispatcherType;
 import jakarta.servlet.http.Cookie;
 import java.time.Duration;
 import java.time.Instant;
@@ -46,6 +50,8 @@ import static org.mockito.Mockito.reset;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.delete;
@@ -59,6 +65,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.header;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.jsonPath;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
+import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.setup.MockMvcBuilders.webAppContextSetup;
 
 @SpringJUnitConfig(SecurityIntegrationTests.TestConfig.class)
@@ -74,6 +81,7 @@ class SecurityIntegrationTests {
     @Autowired WebApplicationContext context;
     @Autowired UserRepository userRepository;
     @Autowired JwtTokenProvider jwtTokenProvider;
+    @Autowired NotificationSseConnectionManager sseConnections;
     MockMvc mvc;
 
     /** 테스트 컨텍스트에 하드코딩하지 않은 JWT 서명 키를 제공한다. */
@@ -84,7 +92,7 @@ class SecurityIntegrationTests {
 
     @BeforeEach
     void setUp() {
-        reset(userRepository);
+        reset(userRepository, sseConnections);
         mvc = webAppContextSetup(context).apply(springSecurity()).build();
     }
 
@@ -265,6 +273,43 @@ class SecurityIntegrationTests {
         mvc.perform(get("/api/notifications/unread-status"))
                 .andExpect(status().isUnauthorized())
                 .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void notificationStreamWithoutAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/notifications/stream"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void notificationStreamWithValidAccessTokenStartsAsyncResponse() throws Exception {
+        when(userRepository.existsByUserIdAndDeletedAtIsNull(17L)).thenReturn(true);
+        var emitter = new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(1000L);
+        when(sseConnections.connect(eq(17L), any(Instant.class))).thenReturn(emitter);
+
+        mvc.perform(get("/api/notifications/stream")
+                        .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(17L)))
+                .andExpect(status().isOk())
+                .andExpect(request().asyncStarted());
+
+        emitter.complete();
+    }
+
+    @Test
+    void notificationStreamWithInvalidAccessTokenReturnsUnauthorized() throws Exception {
+        mvc.perform(get("/api/notifications/stream").header("Authorization", "Bearer invalid"))
+                .andExpect(status().isUnauthorized())
+                .andExpect(jsonPath("$.code").value("UNAUTHORIZED"));
+    }
+
+    @Test
+    void otherProtectedAsyncDispatchRemainsUnauthorized() throws Exception {
+        mvc.perform(get("/api/private").with(request -> {
+                    request.setDispatcherType(DispatcherType.ASYNC);
+                    return request;
+                }))
+                .andExpect(status().isUnauthorized());
     }
 
     @Test
@@ -576,7 +621,7 @@ class SecurityIntegrationTests {
     @EnableWebSecurity
     @ComponentScan("com.ktb4.team16.mulo.global")
     @Import({ProbeController.class, AuthController.class, ChatAuthVerificationController.class,
-            ChatAuthVerificationService.class})
+            ChatAuthVerificationService.class, NotificationController.class})
     static class TestConfig {
         @Bean
         UserRepository userRepository() {
@@ -586,6 +631,16 @@ class SecurityIntegrationTests {
         @Bean
         AuthService authService() {
             return mock(AuthService.class);
+        }
+
+        @Bean
+        NotificationService notificationService() {
+            return mock(NotificationService.class);
+        }
+
+        @Bean
+        NotificationSseConnectionManager sseConnections() {
+            return mock(NotificationSseConnectionManager.class);
         }
     }
 

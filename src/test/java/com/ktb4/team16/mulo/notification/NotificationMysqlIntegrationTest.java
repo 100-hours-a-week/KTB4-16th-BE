@@ -8,14 +8,24 @@ import com.ktb4.team16.mulo.friend.service.FriendCommandTransactionalService;
 import com.ktb4.team16.mulo.friend.service.SendFriendRequestResult;
 import com.ktb4.team16.mulo.notification.exception.NotificationDomainException;
 import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxProcessor;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxRepository;
+import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxAsyncWorker;
 import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxScheduler;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
+import com.ktb4.team16.mulo.notification.sse.NotificationCreatedNotifier;
+import java.sql.Connection;
+import java.sql.PreparedStatement;
+import java.sql.ResultSet;
 import com.ktb4.team16.mulo.report.dto.request.MonthlyReportAiCallbackRequest;
 import com.ktb4.team16.mulo.report.service.MonthlyReportAiCallbackService;
 import java.time.LocalDateTime;
+import java.time.Clock;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
+import java.util.concurrent.atomic.AtomicBoolean;
+import javax.sql.DataSource;
 import java.util.UUID;
 import java.util.concurrent.CountDownLatch;
 import java.util.concurrent.ExecutorService;
@@ -30,6 +40,11 @@ import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.support.TransactionTemplate;
+import static org.mockito.Mockito.doThrow;
+import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
+import static org.mockito.Mockito.timeout;
 
 /** MySQL에서 원본·Outbox 결합, Savepoint 처리, 사용자별 API 조회를 검증한다. */
 @SpringBootTest
@@ -37,6 +52,9 @@ class NotificationMysqlIntegrationTest {
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
+
+    @Autowired
+    private DataSource dataSource;
 
     @Autowired
     private FriendCommandService friendCommandService;
@@ -47,9 +65,21 @@ class NotificationMysqlIntegrationTest {
     @Autowired
     private NotificationOutboxProcessor outboxProcessor;
 
+    @Autowired
+    private NotificationOutboxRepository outboxRepository;
+
+    @Autowired
+    private NotificationOutboxAsyncWorker asyncWorker;
+
+    @Autowired
+    private Clock clock;
+
     // 지연 이벤트는 테스트가 지정한 순서로 처리하고 예약 실행의 개입을 막는다.
     @MockitoBean
     private NotificationOutboxScheduler scheduler;
+
+    @MockitoBean
+    private NotificationCreatedNotifier notificationCreatedNotifier;
 
     @Autowired
     private MonthlyReportAiCallbackService reportCallbackService;
@@ -61,6 +91,98 @@ class NotificationMysqlIntegrationTest {
     private PlatformTransactionManager transactionManager;
 
     private final List<Long> createdUserIds = new ArrayList<>();
+
+    @Test
+    void committedNotificationPublishesOnlyToItsRecipient() {
+        TestUser requester = insertUser("sseSender");
+        TestUser recipient = insertUser("sseReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), recipient.nickname());
+        UUID eventId = pending.eventIds().getFirst();
+        AtomicBoolean committedWhenNotified = new AtomicBoolean();
+        doAnswer(invocation -> {
+            try (Connection independent = dataSource.getConnection();
+                    PreparedStatement query = independent.prepareStatement(
+                            "SELECT COUNT(*) FROM notifications WHERE source_event_id = ?")) {
+                query.setString(1, eventId.toString());
+                try (ResultSet rows = query.executeQuery()) {
+                    committedWhenNotified.set(rows.next() && rows.getInt(1) == 1);
+                }
+            }
+            return null;
+        }).when(notificationCreatedNotifier).notificationCreated(Set.of(recipient.id()));
+
+        verifyNoInteractions(notificationCreatedNotifier);
+        outboxProcessor.process(eventId);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM notifications WHERE source_event_id = ?",
+                Integer.class, eventId.toString())).isEqualTo(1);
+        assertThat(committedWhenNotified.get()).isTrue();
+        verify(notificationCreatedNotifier).notificationCreated(Set.of(recipient.id()));
+    }
+
+    @Test
+    void cancelledRequestCompletesWithoutSseSignal() {
+        TestUser requester = insertUser("sseCancelSender");
+        TestUser recipient = insertUser("sseCancelReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), recipient.nickname());
+        Long requestId = ((SendFriendRequestResult.Pending) pending.result()).friendRequestId();
+        friendCommands.deleteFriendRequest(requester.id(), requestId);
+
+        outboxProcessor.process(pending.eventIds().getFirst());
+
+        verifyNoInteractions(notificationCreatedNotifier);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM outbox_events WHERE event_id = ?", String.class,
+                pending.eventIds().getFirst().toString())).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void sseSubmissionFailureDoesNotChangeCommittedNotification() {
+        TestUser requester = insertUser("sseFailureSender");
+        TestUser recipient = insertUser("sseFailureReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), recipient.nickname());
+        UUID eventId = pending.eventIds().getFirst();
+        doThrow(new IllegalStateException("SSE 전송 실패"))
+                .when(notificationCreatedNotifier).notificationCreated(Set.of(recipient.id()));
+
+        outboxProcessor.process(eventId);
+
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT COUNT(*) FROM notifications WHERE source_event_id = ?", Integer.class,
+                eventId.toString())).isEqualTo(1);
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM outbox_events WHERE event_id = ?", String.class,
+                eventId.toString())).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void schedulerRecoveryPublishesForCommittedNotification() {
+        TestUser requester = insertUser("sseSchedulerSender");
+        TestUser recipient = insertUser("sseSchedulerReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), recipient.nickname());
+
+        new NotificationOutboxScheduler(outboxRepository, outboxProcessor, clock).processDueEvents();
+
+        verify(notificationCreatedNotifier).notificationCreated(Set.of(recipient.id()));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM outbox_events WHERE event_id = ?", String.class,
+                pending.eventIds().getFirst().toString())).isEqualTo("COMPLETED");
+    }
+
+    @Test
+    void asyncWorkerPublishesForCommittedNotification() {
+        TestUser requester = insertUser("sseAsyncSender");
+        TestUser recipient = insertUser("sseAsyncReceiver");
+        var pending = friendCommands.sendFriendRequest(requester.id(), recipient.nickname());
+
+        asyncWorker.process(pending.eventIds());
+
+        verify(notificationCreatedNotifier, timeout(10000)).notificationCreated(Set.of(recipient.id()));
+        assertThat(jdbcTemplate.queryForObject(
+                "SELECT status FROM outbox_events WHERE event_id = ?", String.class,
+                pending.eventIds().getFirst().toString())).isEqualTo("COMPLETED");
+    }
 
     @Test
     void unreadStatusReflectsOwnershipReadAndHardDeletion() {
@@ -211,6 +333,7 @@ class NotificationMysqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject("""
                 SELECT status FROM outbox_events WHERE event_id = ?
                 """, String.class, eventId.toString())).isEqualTo("COMPLETED");
+        verify(notificationCreatedNotifier).notificationCreated(Set.of(requester.id(), addressee.id()));
     }
 
     /** AI 회고 COMPLETED 변경과 월간 리포트 이벤트 및 알림이 같은 commit에서 연결된다. */
@@ -242,6 +365,7 @@ class NotificationMysqlIntegrationTest {
                 WHERE user_id = ? AND monthly_report_id = ?
                 """, String.class, owner.id(), reportId))
                 .isEqualTo("2026년 9월 리포트가 도착했어요.");
+        verify(notificationCreatedNotifier, timeout(10000)).notificationCreated(Set.of(owner.id()));
     }
 
     /** 기본 풀 3개에서도 동시 원본 commit 직후 Outbox 처리까지 끝나야 한다. */
