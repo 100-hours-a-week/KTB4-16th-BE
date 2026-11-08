@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.notification.sse;
 
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
+import com.ktb4.team16.mulo.global.exception.AsyncRequestFailureClassifier;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.time.Clock;
@@ -16,6 +17,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import io.sentry.Sentry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -66,9 +68,9 @@ public class NotificationSseConnectionManager {
         long timeoutMillis = Math.max(1, Duration.between(now, deadline).toMillis() + 1);
         SseEmitter emitter = createEmitter(timeoutMillis);
         Connection connection = new Connection(UUID.randomUUID(), userId, tokenExpiresAt, deadline, emitter);
-        emitter.onCompletion(() -> close(connection));
+        emitter.onCompletion(() -> cleanup(connection));
         emitter.onTimeout(() -> close(connection));
-        emitter.onError(error -> close(connection));
+        emitter.onError(error -> cleanup(connection));
         connection.expirationTask = timer.schedule(() -> expire(connection), timeoutMillis, TimeUnit.MILLISECONDS);
         connections.compute(userId, (id, existing) -> {
             ConcurrentMap<UUID, Connection> userConnections = existing == null
@@ -166,23 +168,41 @@ public class NotificationSseConnectionManager {
             }
             return true;
         } catch (IOException | RuntimeException exception) {
-            log.debug("SSE 연결 전송에 실패했습니다: failureType={}", exception.getClass().getSimpleName());
-            close(connection);
+            cleanup(connection);
+            if (AsyncRequestFailureClassifier.isExpectedConnectionTermination(exception)) {
+                log.debug("SSE 응답 연결을 사용할 수 없어 전송을 중단했습니다: failureType={}",
+                        exception.getClass().getSimpleName());
+            } else if (!(exception instanceof IOException)
+                    && !AsyncRequestFailureClassifier.containsAsyncRequestNotUsable(exception)) {
+                log.error("SSE 이벤트 전송 중 예기치 않은 오류가 발생했습니다.", exception);
+                Sentry.captureException(exception);
+            }
             return false;
         }
     }
 
     private void close(Connection connection) {
-        if (!connection.closed.compareAndSet(false, true)) {
+        if (!markClosedAndRemove(connection)) {
             return;
         }
-        remove(connection);
         try {
             connection.emitter.complete();
         } catch (RuntimeException exception) {
-            log.debug("SSE 연결 종료 중 오류가 발생했습니다: failureType={}",
-                    exception.getClass().getSimpleName());
+            log.error("SSE 연결 종료를 완료하지 못했습니다.", exception);
+            Sentry.captureException(exception);
         }
+    }
+
+    private void cleanup(Connection connection) {
+        markClosedAndRemove(connection);
+    }
+
+    private boolean markClosedAndRemove(Connection connection) {
+        if (!connection.closed.compareAndSet(false, true)) {
+            return false;
+        }
+        remove(connection);
+        return true;
     }
 
     private void remove(Connection connection) {
