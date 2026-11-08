@@ -546,6 +546,8 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 ## 11. monthly_reports - 월간 리포트 테이블
 
+> AI 회고 300자 정의는 [BE PR #189](https://github.com/100-hours-a-week/KTB4-16th-BE/pull/189)의 Flyway V18 적용을 전제로 한다. 서버 검증은 기존 Java `String.length()` 기준을 유지한다.
+
 #### 1. 테이블 설명
 
 사용자의 월별 자물쇠 기록을 기반으로 생성된 월간 리포트의 대표 통계와 AI 요약 결과를 저장하는 테이블이다. 한 번 생성된 월간 리포트는 스냅샷 형태로 보존하며, 이후 원본 자물쇠 데이터가 변경되더라도 기존 리포트의 결과는 재계산하지 않는다.
@@ -561,7 +563,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `record_count` | `INTEGER` | - | NOT NULL | 0 | - | 해당 월에 포함된 자물쇠 개수 | 월별 자물쇠 개수는 정수값이므로 `INTEGER`를 사용한다. | 월간 기록 개수를 리포트에 표시한다. |
 | `top_place_id` | `BIGINT` | - | NULL | NULL | FK | 대표 법정동 안의 대표 장소 ID | 대상 월 활성 기록을 법정동 코드별로 합산해 기록 수 내림차순, 해당 동 최신 기록 시각 내림차순, 코드 오름차순으로 대표 동을 정한다. 미분류 코드는 한 그룹으로 합산하고 최종 동률에서 뒤에 둔다. 선정된 동 안에서는 장소별 기록 수 내림차순, 최신 시각 내림차순, `place_id` 오름차순으로 저장할 장소 행을 정한다. 기록이 없는 달에는 NULL을 허용한다. | 기존 FK를 유지하면서 대표 법정동의 이름을 표시한다. |
 | `top_artist_name` | `VARCHAR` | 255 | NULL | NULL | - | 해당 월에 가장 많이 기록된 아티스트명 | 음원 유통 메타데이터 표준 (DDEX) 규격 기준 | 월간 대표 아티스트를 표시한다. |
-| `ai_recap_text` | `VARCHAR` | 100 | NULL | NULL | - | AI가 생성한 월간 요약 문장 | AI가 생성한 월간 회고를 최대 100자로 저장하기 위해 `VARCHAR(100)`을 사용한다. | 월간 리포트의 AI RECAP 문장을 표시한다. |
+| `ai_recap_text` | `VARCHAR` | 300 | NULL | NULL | - | AI가 생성한 월간 요약 문장 | AI가 생성한 월간 회고를 최대 300자로 저장하기 위해 `VARCHAR(300)`을 사용한다. | 월간 리포트의 AI RECAP 문장을 표시한다. |
 | `ai_recap_status` | `ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')` | - | NOT NULL | PENDING | - | AI 월간 요약 생성 상태
 (`PENDING`, `PROCESSING`, `COMPLETED,` `FAILED` ) | AI 요약 상태가 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 네 가지로 제한되므로 `ENUM`을 사용한다. | AI 요약이 준비되었는지 판단하고 화면 상태를 제어한다. |
 | `batch_request_id` | `VARCHAR` | 36 | NULL | NULL | - | AI 배치 요청 시도 ID | Flyway V9에서 추가한 UUID 문자열이다. 이전에 저장된 리포트와 기존 콜백의 호환을 위해 NULL을 허용한다. | 현재 AI 요청과 콜백의 ID를 대조해 이전 시도에서 늦게 도착한 결과의 적용을 막는다. |
