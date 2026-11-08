@@ -1,4 +1,6 @@
 spring:
+  autoconfigure:
+    exclude: org.springframework.boot.amqp.autoconfigure.RabbitAutoConfiguration
   batch:
     job:
       enabled: false
@@ -6,6 +8,13 @@ spring:
       initialize-schema: never
   application:
     name: mulo
+
+  rabbitmq:
+    host: ${RABBITMQ_HOST:}
+    port: ${RABBITMQ_PORT:0}
+    username: ${RABBITMQ_USERNAME:}
+    password: ${RABBITMQ_PASSWORD:}
+    virtual-host: ${RABBITMQ_VIRTUAL_HOST:}
 
   datasource:
     # MySQL이 보고하는 모호한 KST 대신 Connector/J에 명시적 시간대를 전달한다.
@@ -89,6 +98,8 @@ logging:
 
 # 안전한 기본값은 운영 same-origin/HTTPS. HTTP 개발은 local 프로필을 명시한다.
 mulo:
+  rabbitmq:
+    enabled: ${MULO_RABBITMQ_ENABLED:false}
   # Redis를 사용하는 기능들이 공유하는 접속 정보다. 연결은 최초 사용 시에만 연다.
   redis:
     host: ${REDIS_HOST:127.0.0.1}
