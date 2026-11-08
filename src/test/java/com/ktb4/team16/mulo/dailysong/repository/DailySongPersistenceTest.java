@@ -8,6 +8,8 @@ import com.ktb4.team16.mulo.dailysong.entity.DailySongJob;
 import com.ktb4.team16.mulo.dailysong.entity.DailySongJobStatus;
 import com.ktb4.team16.mulo.dailysong.entity.DailySongRun;
 import com.ktb4.team16.mulo.dailysong.entity.DailySongRunStatus;
+import com.ktb4.team16.mulo.music.entity.MusicTrack;
+import com.ktb4.team16.mulo.music.repository.MusicTrackRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import jakarta.persistence.EntityManager;
@@ -45,6 +47,9 @@ class DailySongPersistenceTest {
     private UserRepository users;
 
     @Autowired
+    private MusicTrackRepository musicTracks;
+
+    @Autowired
     private EntityManager entityManager;
 
     @Test
@@ -80,6 +85,56 @@ class DailySongPersistenceTest {
         assertThat(savedOutbox.getNextPublishAt()).isNotNull();
         assertThat(savedOutbox.getCreatedAt()).isNotNull();
         assertThat(savedOutbox.getJob().getJobId()).isEqualTo(job.getJobId());
+    }
+
+    @Test
+    void persistsEveryJobAndDispatchOutboxStatus() {
+        String trackId = "d" + UUID.randomUUID().toString().replace("-", "").substring(0, 21);
+        MusicTrack track = musicTracks.saveAndFlush(MusicTrack.create(
+                trackId, "테스트 곡", "테스트 가수", "https://example.test/album", "https://example.test/track",
+                LocalDateTime.now()));
+        Long musicTrackId = track.getMusicTrackId();
+        DailySongJobStatus[] jobStatuses = DailySongJobStatus.values();
+        DailySongDispatchOutboxStatus[] outboxStatuses = DailySongDispatchOutboxStatus.values();
+        assertThat(jobStatuses).hasSameSizeAs(outboxStatuses);
+
+        for (int index = 0; index < jobStatuses.length; index++) {
+            String suffix = UUID.randomUUID().toString().substring(0, 8);
+            User user = users.saveAndFlush(User.signup("daily-" + suffix + "@example.test", "test-hash", "ds" + suffix));
+            assertThat(user.getUserId()).isBetween(1L, MAX_TEST_USER_ID);
+            LocalDate recommendationDate = MYSQL_DATE_MIN.plusDays(user.getUserId() - 1);
+            runs.saveAndFlush(new DailySongRun(recommendationDate, recommendationDate.atTime(0, 30)));
+            DailySongJob job = jobs.saveAndFlush(new DailySongJob(
+                    recommendationDate, user.getUserId(), UUID.randomUUID().toString()));
+            String eventId = UUID.randomUUID().toString();
+            outboxes.saveAndFlush(new DailySongDispatchOutbox(eventId, job.getJobId()));
+
+            if (jobStatuses[index] == DailySongJobStatus.COMPLETED) {
+                entityManager.createNativeQuery("""
+                                UPDATE daily_song_jobs
+                                SET status = :status, music_track_id = :musicTrackId, recommend_reason = :reason
+                                WHERE job_id = :jobId
+                                """)
+                        .setParameter("status", jobStatuses[index].name())
+                        .setParameter("musicTrackId", musicTrackId)
+                        .setParameter("reason", "테스트 추천 이유")
+                        .setParameter("jobId", job.getJobId())
+                        .executeUpdate();
+            } else {
+                entityManager.createNativeQuery("UPDATE daily_song_jobs SET status = :status WHERE job_id = :jobId")
+                        .setParameter("status", jobStatuses[index].name())
+                        .setParameter("jobId", job.getJobId())
+                        .executeUpdate();
+            }
+            entityManager.createNativeQuery("UPDATE daily_song_dispatch_outbox SET status = :status WHERE event_id = :eventId")
+                    .setParameter("status", outboxStatuses[index].name())
+                    .setParameter("eventId", eventId)
+                    .executeUpdate();
+            entityManager.clear();
+
+            assertThat(jobs.findById(job.getJobId()).orElseThrow().getStatus()).isEqualTo(jobStatuses[index]);
+            assertThat(outboxes.findById(eventId).orElseThrow().getStatus()).isEqualTo(outboxStatuses[index]);
+        }
     }
 
     public static class SafeDatabaseCondition implements ExecutionCondition {

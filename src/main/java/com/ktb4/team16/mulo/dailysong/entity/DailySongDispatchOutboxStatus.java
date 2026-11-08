@@ -4,5 +4,6 @@ public enum DailySongDispatchOutboxStatus {
     PENDING,
     PUBLISHING,
     PUBLISHED,
-    FAILED
+    FAILED,
+    CANCELLED
 }

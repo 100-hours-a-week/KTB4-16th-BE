@@ -4,5 +4,6 @@ public enum DailySongJobStatus {
     PENDING,
     PROCESSING,
     COMPLETED,
-    FAILED
+    FAILED,
+    CANCELLED
 }
