@@ -39,10 +39,12 @@ import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
@@ -52,6 +54,7 @@ import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -387,13 +390,34 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.UPLOAD_NOT_FOUND));
     }
 
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<Void> handleAsyncRequestNotUsable(AsyncRequestNotUsableException exception) {
+        if (AsyncRequestFailureClassifier.isExpectedConnectionTermination(exception)) {
+            log.debug("비동기 응답을 사용할 수 없어 오류 본문 작성을 중단합니다.");
+        } else {
+            log.error("비동기 응답 쓰기 중 원인을 확인할 수 없는 오류가 발생했습니다.", exception);
+            Sentry.captureException(exception);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception exception) {
+    public ResponseEntity<ErrorResponse> handleUnexpectedException(
+            Exception exception, HttpServletResponse response) {
         // 내부 예외 정보는 응답엔 노출하지 않되, 원인 파악을 위해 서버 로그엔 남긴다.
         log.error("처리되지 않은 예외", exception);
         Sentry.captureException(exception);
+        if (response.isCommitted() || isEventStreamResponse(response)) {
+            return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status()).build();
+        }
         return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_SERVER_ERROR));
+    }
+
+    private boolean isEventStreamResponse(HttpServletResponse response) {
+        String contentType = response.getContentType();
+        return contentType != null
+                && MediaType.parseMediaType(contentType).isCompatibleWith(MediaType.TEXT_EVENT_STREAM);
     }
 
     private com.ktb4.team16.mulo.global.error.FieldError toFieldError(FieldError error) {
