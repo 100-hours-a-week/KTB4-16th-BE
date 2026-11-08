@@ -55,6 +55,8 @@ dependencies {
     // 월간 리포트의 실행 이력과 재시작 상태를 기존 MySQL에 저장한다.
     implementation 'org.springframework.boot:spring-boot-starter-batch-jdbc'
 
+    implementation 'org.springframework.boot:spring-boot-starter-amqp'
+
     // Database migration
     implementation 'org.springframework.boot:spring-boot-starter-flyway'
     runtimeOnly 'org.flywaydb:flyway-mysql'
