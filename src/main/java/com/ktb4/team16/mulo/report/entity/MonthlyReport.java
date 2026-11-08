@@ -26,7 +26,7 @@ public class MonthlyReport {
     @Column(nullable = false) private int recordCount;
     @ManyToOne(fetch = FetchType.LAZY) @JoinColumn(name = "top_place_id") private Place topPlace;
     private String topArtistName;
-    private String aiRecapText;
+    @Column(name = "ai_recap_text", length = 300) private String aiRecapText;
     @Enumerated(EnumType.STRING) @Column(nullable = false) private AiRecapStatus aiRecapStatus;
     @Column(name = "batch_request_id", length = 36) private String batchRequestId;
     @Column(insertable = false, updatable = false) private LocalDateTime createdAt;

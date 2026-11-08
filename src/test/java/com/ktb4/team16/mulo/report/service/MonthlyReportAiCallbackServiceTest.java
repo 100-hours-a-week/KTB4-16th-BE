@@ -35,6 +35,42 @@ class MonthlyReportAiCallbackServiceTest {
     @Mock private User user;
     @Mock private NotificationOutboxEventPublisher notificationEvents;
 
+    // 최대 길이인 300자 회고가 잘리지 않고 완료 상태로 저장되는지 확인한다.
+    @Test
+    void acceptsRecapAtMaximumLength() {
+        MonthlyReport report = report();
+        String text = "가".repeat(300);
+        when(user.getUserId()).thenReturn(7L);
+        when(reports.findForUpdate(7L, (short) 2026, (short) 8))
+                .thenReturn(java.util.Optional.of(report));
+        when(notificationEvents.publish(Mockito.eq(NotificationEventType.MONTHLY_REPORT_CREATED),
+                Mockito.eq(105L), Mockito.any())).thenReturn(UUID.randomUUID());
+
+        new MonthlyReportAiCallbackTransactionalService(reports, scenes, notificationEvents)
+                .apply(callback(new Result(7L, Status.COMPLETED,
+                        new AiRecap(text), List.of(), null)));
+
+        assertThat(report.getAiRecapText()).isEqualTo(text);
+        assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.COMPLETED);
+    }
+
+    // 최대 길이를 넘으면 기존 회고와 상태를 변경하지 않고 거부하는지 확인한다.
+    @Test
+    void rejectsRecapOverMaximumLength() {
+        MonthlyReport report = report();
+        when(reports.findForUpdate(7L, (short) 2026, (short) 8))
+                .thenReturn(java.util.Optional.of(report));
+
+        assertThatThrownBy(() -> new MonthlyReportAiCallbackTransactionalService(
+                reports, scenes, notificationEvents).apply(callback(new Result(7L,
+                        Status.COMPLETED, new AiRecap("가".repeat(301)), List.of(), null))))
+                .isInstanceOf(com.ktb4.team16.mulo.report.client.MonthlyReportAiException.class);
+
+        assertThat(report.getAiRecapText()).isNull();
+        assertThat(report.getAiRecapStatus()).isEqualTo(MonthlyReport.AiRecapStatus.PENDING);
+        Mockito.verifyNoInteractions(scenes, notificationEvents);
+    }
+
     // 완료 콜백의 회고·장면 통계를 저장하고 선저장된 기록 수를 보존한다.
     @Test
     void completesReportWithRecapAndScenes() {

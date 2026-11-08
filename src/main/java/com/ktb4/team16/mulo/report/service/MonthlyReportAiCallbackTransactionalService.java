@@ -81,7 +81,8 @@ public class MonthlyReportAiCallbackTransactionalService {
                         throw new InvalidMonthlyReportAiCallbackException();
                     }
                 }
-                if (result.aiRecap().text().length() > 100) {
+                // DB 컬럼의 최대 길이에 맞춰 300자를 초과하는 회고는 저장 전에 거부한다.
+                if (result.aiRecap().text().length() > 300) {
                     throw new MonthlyReportAiException();
                 }
             } else if (result.errorCode() == null || result.errorCode().isBlank()) {
