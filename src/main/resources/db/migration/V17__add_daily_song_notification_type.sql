@@ -1,0 +1,8 @@
+ALTER TABLE notifications
+    MODIFY COLUMN type ENUM(
+        'MONTHLY_REPORT_CREATED',
+        'MATCH_COMPLETED',
+        'FRIEND_REQUEST',
+        'FRIEND_ACCEPTED',
+        'DAILY_SONG_READY'
+    ) NOT NULL;
