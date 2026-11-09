@@ -4,6 +4,7 @@
 > 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
 > AI 추천 이력·피드백 실제 사용 상태 반영: 2026-11-01 (KST)
 > 월간 리포트 Spring Batch 스키마 반영: 2026-11-04 (KST), Flyway V15 / BE PR #178 기준
+> 닉네임 버전 동기화 스키마 반영: 2026-11-09 (KST), Backend Flyway V20과 Chat Flyway V6 기준
 > 기본 테이블 정의 기준: 기존 절의 기준은 각 절을 따르며, AI 추천 피드백 테이블은 Flyway V13, 월간 리포트 Batch 메타데이터와 업무 일지는 Flyway V15 실제 스키마를 반영한다. V15 외 이전 migration 전체와 모든 기존 절의 정합성은 이번 변경 범위에서 재검토하지 않았다.
 > 설계·정책 기준: 서비스 정책 정의서 v2.2, OpenAPI v2.8, 현재 구현 문서
 > 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
@@ -28,6 +29,7 @@
 - `record_drafts`는 V1 기능 제외 이력을 유지하고, V2 API 및 V5 실제 스키마를 반영
 - 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
 - V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
+- Backend V20의 `users.nickname_version`과 `chat_nickname_outbox`를 §1과 §38에 반영. Chat V6의 `chat_user_nickname_states`는 별도 Chat DB 절에 기록
 - V9 `monthly_reports.batch_request_id`를 AI 배치 요청 시도 식별용 nullable 컬럼으로 반영. 기존 리포트의 값은 NULL이며 V10~V11은 별도 대조 필요
 - V15에 추가한 Spring Batch JDBC 메타데이터 9개 테이블과 월간 리포트 업무 일지 5개 테이블을 §32~37에 반영
 - Batch 실행 상태는 Spring Batch 메타데이터에, 월별 소유권·고정 대상·AI 전송/접수·복구 근거는 별도 업무 일지에 저장
@@ -75,6 +77,7 @@
 | `active_email` | `VARCHAR(254)` | NULL | - | UK | 활성 회원 이메일 | `deleted_at IS NULL`이면 `email` 값을 가지고, 탈퇴한 회원이면 `NULL`이 되도록 생성되는 Generated Column이다. | 활성 회원끼리만 이메일 UNIQUE 제약을 적용하여 탈퇴한 회원의 이메일을 재사용할 수 있도록 한다. |
 | `password_hash` | `VARCHAR(60)` | NOT NULL | - | - | 해시 처리된 비밀번호 | 비밀번호 원문을 저장하지 않고 bcrypt 해시값을 저장한다. bcrypt 인코딩 결과 문자열은 60자로 고정되므로 `VARCHAR(60)`을 사용한다. | 이메일 로그인 시 입력된 비밀번호와 저장된 해시값을 비교하여 사용자 인증에 사용한다. |
 | `nickname` | `VARCHAR(10)` | NOT NULL | - | - | 서비스에서 사용하는 사용자 닉네임 | 닉네임 정책인 2~10자를 반영한다. 탈퇴 후에도 기존 사용자 데이터를 보존하기 위해 실제 닉네임 값은 유지한다. | 프로필, 친구 목록, 채팅 등에서 사용자 표시 이름으로 사용한다. |
+| `nickname_version` | `BIGINT` | NOT NULL | `0` | - | 사용자별 닉네임 변경 버전 | 기존 사용자와 신규 사용자는 0에서 시작하며 실제 닉네임 변경마다 1씩 증가한다. | 변경 시점의 닉네임과 함께 Outbox에 저장해 순서를 판별한다. |
 | `active_nickname` | `VARCHAR(10)` | NULL | - | UK | 활성 회원 닉네임 | `deleted_at IS NULL`이면 `nickname` 값을 가지고, 탈퇴한 회원이면 `NULL`이 되도록 생성되는 Generated Column이다. | 활성 회원끼리만 닉네임 UNIQUE 제약을 적용하여 탈퇴한 회원의 닉네임을 재사용할 수 있도록 한다. |
 | `music_genre` | `VARCHAR(50)` | NULL | `NULL` | - | 레거시 대표 음악 장르 | 기존 스키마 호환을 위해 유지한다. AI 대표 그룹의 최신본은 `be_user_music_genres`에서 읽으며 BE가 이 컬럼을 그룹 계산값으로 갱신하지 않는다. | 기존 참조와 과거 데이터를 보존한다. 당일 투표에는 일일 배정 스냅샷을 사용한다. |
 | `preferred_genres` | `JSON` | NULL | `NULL` | - | 사용자가 선택한 선호 장르 | 온보딩에서 고른 고정 13개 장르 중 최대 3개를 선택 순서대로 저장한다. | AI 그룹 계산의 입력으로 제공하며 AI가 덮어쓰지 않는다. |
@@ -1454,6 +1457,48 @@ AI에 월간 리포트 묶음을 보낸 단일 요청의 전송 상태를 `batch
 
 ---
 
+## 38. chat_nickname_outbox - 채팅 닉네임 변경 Outbox
+
+#### 1. 테이블 설명
+
+Backend DB `mulo`의 [Flyway V20](../src/main/resources/db/migration/V20__add_chat_nickname_outbox.sql)에 정의한다. 닉네임과 버전을 변경하는 트랜잭션에서 변경 당시 값을 발행 대기 이벤트로 함께 저장한다. Outbox 저장에 실패하면 사용자 변경도 롤백된다. [BE 기능 PR #197](https://github.com/100-hours-a-week/KTB4-16th-BE/pull/197)
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `event_id` | `CHAR(36)` | NOT NULL | - | 닉네임 변경 이벤트 UUID |
+| `user_id` | `BIGINT` | NOT NULL | - | 변경한 사용자의 ID 스냅샷 |
+| `nickname_version` | `BIGINT` | NOT NULL | - | 변경 시점의 사용자별 닉네임 버전 |
+| `payload` | `JSON` | NOT NULL | - | 변경 당시 이벤트 본문 |
+| `status` | `ENUM('PENDING', 'PUBLISHING', 'PUBLISHED', 'FAILED')` | NOT NULL | `PENDING` | 발행 상태. BE-1은 최초 `PENDING`만 기록한다. |
+| `attempt_count` | `INT` | NOT NULL | `0` | 발행 시도 횟수 |
+| `retry_at` | `DATETIME(6)` | NULL | `NULL` | 다음 발행 재시도 예정 시각 |
+| `published_at` | `DATETIME(6)` | NULL | `NULL` | 발행 완료 시각 |
+| `claim_token` | `CHAR(36)` | NULL | `NULL` | 발행 작업 선점 토큰 |
+| `lease_until` | `DATETIME(6)` | NULL | `NULL` | 작업 선점 만료 시각 |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | 이벤트 생성 시각 |
+| `last_error_code` | `VARCHAR(100)` | NULL | `NULL` | 마지막 발행 오류 코드 |
+
+#### 3. 제약조건과 인덱스
+
+| 이름 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `pk_chat_nickname_outbox` | PRIMARY KEY | `event_id` | 이벤트 식별 |
+| `uk_chat_nickname_outbox_user_version` | UNIQUE | `user_id`, `nickname_version` | 사용자별 동일 버전의 중복 저장 방지 |
+| `idx_chat_nickname_outbox_schedule` | INDEX | `status`, `retry_at`, `created_at` | 상태·재시도 시각·생성 시각 기준 조회 |
+| `idx_chat_nickname_outbox_lease` | INDEX | `status`, `lease_until` | 만료된 선점 조회 |
+
+`user_id`는 이벤트의 원본 식별자이며 물리 FK를 두지 않는다.
+
+#### 4. 처리 범위
+
+- `payload`에는 `schemaVersion`(현재 1), `eventId`, `eventType`(`USER_NICKNAME_CHANGED`), `userId`, `nickname`, `nicknameVersion`, `occurredAt`을 기록한다.
+- 닉네임과 선호 장르 변경은 같은 사용자 행 잠금을 사용한다. 닉네임을 변경할 때만 버전을 올리고 이벤트를 만든다.
+- BE-1은 Outbox 저장까지 구현했다. 채팅 서버 갱신은 기존 커밋 후 HTTP 호출로 수행하며, RabbitMQ 발행과 상태 전이는 후속 범위다.
+
+---
+
 ## 별도 Chat DB: 메시지 복구 인덱스 추가 계약 (#330)
 
 - 상태: [CHAT 기능 PR #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) develop 반영 완료(2026-11-06 KST), 운영 적용 미확인.
@@ -1473,3 +1518,20 @@ CREATE INDEX idx_chat_messages_room_id
 먼저 방을 동등 조건으로 좁히고 그 안에서 메시지 ID 범위를 읽는다. `chat_message_id`는 전체 테이블에서 발급하므로 방 안에서 연속일 필요가 없다. AUTO_INCREMENT 자체는 커밋 순서를 보장하지 않으며 같은 방 INSERT 전 기존 참가자 잠금으로 직렬화하는 조건을 유지한다.
 
 메시지 컬럼·기존 UNIQUE·기존 이력 조회 계약을 변경하지 않는다. Redis 채널과 전송 큐는 영구 메시지 저장소가 아니고 Outbox 테이블을 새로 만들지 않는다. 방 또는 메시지가 삭제되거나 접근 권한이 사라진 뒤까지 복구를 보장하지 않는다.
+
+---
+
+## 별도 Chat DB: chat_user_nickname_states - 사용자별 닉네임 적용 상태 (#337)
+
+Chat DB `mulo_chat`의 [Flyway V6](https://github.com/100-hours-a-week/KTB4-16th-CHAT/blob/7f07a640b9faae64fbb1d3caf104adefb185fdf8/src/main/resources/db/migration/V6__create_chat_user_nickname_states.sql)에 정의한다. 채팅 서버가 마지막으로 적용한 닉네임과 버전을 사용자당 한 행에 저장한다. [Chat 기능 PR #41](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/41)
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `user_id` | `BIGINT` | NOT NULL | - | 사용자 ID. `pk_chat_user_nickname_states`의 기본 키 |
+| `nickname` | `VARCHAR(10)` | NOT NULL | - | 마지막으로 적용한 닉네임 |
+| `nickname_version` | `BIGINT` | NOT NULL | - | 마지막으로 적용한 BE 닉네임 버전 |
+| `updated_at` | `DATETIME(6)` | NOT NULL | - | 채팅 서버에서 상태를 적용한 KST 시각 |
+
+- 물리 FK를 두지 않는다. V6 적용 시 새 테이블은 비어 있고, 버전 처리 함수가 첫 입력의 이름과 버전으로 상태를 생성한다. 채팅방 참가 기록이 없어도 상태를 저장한다.
+- 새 버전은 사용자 상태와 기존 방 참가자의 표시 이름을 같은 트랜잭션에서 갱신한다. 과거 버전과 같은 이름의 동일 버전은 생략한다. 같은 버전에 다른 이름이 오면 갱신을 거절하고 ERROR 로그에 사용자 ID·버전·이벤트 ID를 기록한다.
+- Chat-1은 내부 처리 함수까지 제공한다. 기존 닉네임 HTTP 경로는 참가자 이름을 갱신하며, RabbitMQ 소비 연결과 BE 기준 전체 초기화는 후속 단계에서 진행한다.
