@@ -421,8 +421,20 @@ public class GlobalExceptionHandler {
     }
 
     private com.ktb4.team16.mulo.global.error.FieldError toFieldError(FieldError error) {
-        ErrorCode code = ErrorCode.valueOf(error.getDefaultMessage());
+        ErrorCode code = resolveValidationErrorCode(error.getDefaultMessage());
         return com.ktb4.team16.mulo.global.error.FieldError.of(error.getField(), code);
+    }
+
+    /** DTO가 지정한 오류 코드를 유지하고 일반 검증 문구에는 공통 입력 오류를 사용한다. */
+    private ErrorCode resolveValidationErrorCode(String message) {
+        if (message == null) {
+            return ErrorCode.INVALID_INPUT_VALUE;
+        }
+        try {
+            return ErrorCode.valueOf(message);
+        } catch (IllegalArgumentException ignored) {
+            return ErrorCode.INVALID_INPUT_VALUE;
+        }
     }
 
     private ResponseEntity<ErrorResponse> response(ErrorCode code, List<com.ktb4.team16.mulo.global.error.FieldError> errors) {
