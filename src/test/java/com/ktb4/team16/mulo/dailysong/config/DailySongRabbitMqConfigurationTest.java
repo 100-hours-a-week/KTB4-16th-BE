@@ -44,6 +44,9 @@ class DailySongRabbitMqConfigurationTest {
                     assertThat(connectionFactory.getRabbitConnectionFactory().getPassword())
                             .isEqualTo("test-password");
                     assertThat(connectionFactory.getVirtualHost()).isEqualTo("test-vhost");
+                    assertThat(connectionFactory.isPublisherConfirms()).isTrue();
+                    assertThat(connectionFactory.isSimplePublisherConfirms()).isFalse();
+                    assertThat(connectionFactory.isPublisherReturns()).isTrue();
                 });
     }
 

@@ -1,6 +1,7 @@
 package com.ktb4.team16.mulo.dailysong.config;
 
 import org.springframework.amqp.rabbit.connection.CachingConnectionFactory;
+import org.springframework.amqp.rabbit.connection.CachingConnectionFactory.ConfirmType;
 import org.springframework.amqp.rabbit.connection.ConnectionFactory;
 import org.springframework.boot.amqp.autoconfigure.RabbitProperties;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -28,6 +29,8 @@ public class DailySongRabbitMqConfiguration {
         connectionFactory.setUsername(properties.getUsername());
         connectionFactory.setPassword(properties.getPassword());
         connectionFactory.setVirtualHost(properties.getVirtualHost());
+        connectionFactory.setPublisherConfirmType(ConfirmType.CORRELATED);
+        connectionFactory.setPublisherReturns(true);
         return connectionFactory;
     }
 }
