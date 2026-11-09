@@ -38,6 +38,9 @@ public class User {
     @Column(nullable = false, length = 10)
     private String nickname;
 
+    @Column(name = "nickname_version", nullable = false)
+    private long nicknameVersion;
+
     @Column(name = "active_nickname", length = 10, insertable = false, updatable = false)
     private String activeNickname;
 
@@ -71,9 +74,10 @@ public class User {
         return new User(email, passwordHash, nickname);
     }
 
+    /** 실제 닉네임 변경 시 동기화 버전과 마지막 수정 시각을 함께 갱신한다. */
     public void updateNickname(String nickname, LocalDateTime updatedAt) {
-        // 중요: 사용자 정보 변경 시 마지막 수정 시각을 함께 기록한다.
         this.nickname = nickname;
+        this.nicknameVersion++;
         this.updatedAt = updatedAt;
     }
 

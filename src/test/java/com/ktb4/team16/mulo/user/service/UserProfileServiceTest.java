@@ -9,6 +9,8 @@ import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.event.UserNicknameChangedEvent;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
+import com.ktb4.team16.mulo.user.outbox.ChatNicknameChangedMessage;
+import com.ktb4.team16.mulo.user.outbox.ChatNicknameOutboxRepository;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.time.ZoneId;
@@ -17,6 +19,7 @@ import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
+import org.mockito.ArgumentCaptor;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -32,17 +35,20 @@ import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.lenient;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.verifyNoInteractions;
 
 @ExtendWith(MockitoExtension.class)
 class UserProfileServiceTest {
     @Mock UserRepository userRepository;
     @Mock ApplicationEventPublisher eventPublisher;
+    @Mock ChatNicknameOutboxRepository chatNicknameOutboxRepository;
     PasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     UserProfileService service;
 
     @BeforeEach
     void setUp() {
-        service = new UserProfileService(userRepository, passwordEncoder, eventPublisher);
+        service = new UserProfileService(
+                userRepository, passwordEncoder, eventPublisher, chatNicknameOutboxRepository);
     }
 
     @Test
@@ -107,7 +113,7 @@ class UserProfileServiceTest {
     void updatePreferredGenresCompletesOnboardingWithoutChangingDailyMusicGenre() {
         User user = User.signup("user@example.com", "password-hash", "뮤로16");
         ReflectionTestUtils.setField(user, "musicGenre", "인디·재즈·R&B");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
 
         var response = service.updatePreferredGenres(1L, List.of("재즈", "인디음악"));
@@ -117,12 +123,14 @@ class UserProfileServiceTest {
         assertThat(user.getMusicGenre()).isEqualTo("인디·재즈·R&B");
         assertThat(response.data().preferredGenres()).containsExactly("재즈", "인디음악");
         assertThat(response.data().genreOnboardingDone()).isTrue();
+        assertThat(user.getNicknameVersion()).isZero();
+        verifyNoInteractions(chatNicknameOutboxRepository);
     }
 
     @Test
     void emptyPreferredGenresCannotCompleteOnboarding() {
         User user = User.signup("user@example.com", "password-hash", "뮤로16");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.updatePreferredGenres(1L, List.of()))
@@ -133,12 +141,12 @@ class UserProfileServiceTest {
     }
 
     @Test
-    void updateNicknameChangesNicknameAndUpdatedAt() {
+    void updateNicknameChangesNicknameAndRecordsOutboxSnapshot() {
         User user = User.signup("user@example.com", "password-hash", "기존닉네임");
         ReflectionTestUtils.setField(user, "userId", 1L);
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
-        LocalDateTime beforeUpdate = LocalDateTime.now();
+        LocalDateTime beforeUpdate = LocalDateTime.now(ZoneId.of("Asia/Seoul"));
 
         UpdateNicknameResponse response = service.updateNickname(1L, "새닉네임");
 
@@ -146,13 +154,20 @@ class UserProfileServiceTest {
         assertThat(user.getUpdatedAt()).isAfterOrEqualTo(beforeUpdate);
         assertThat(response.message()).isEqualTo("닉네임이 변경되었습니다.");
         assertThat(response.data().nickname()).isEqualTo("새닉네임");
+        assertThat(user.getNicknameVersion()).isEqualTo(1L);
+        ArgumentCaptor<ChatNicknameChangedMessage> message =
+                ArgumentCaptor.forClass(ChatNicknameChangedMessage.class);
+        verify(chatNicknameOutboxRepository).insert(message.capture());
+        assertThat(message.getValue().userId()).isEqualTo(user.getUserId());
+        assertThat(message.getValue().nickname()).isEqualTo(user.getNickname());
+        assertThat(message.getValue().nicknameVersion()).isEqualTo(user.getNicknameVersion());
         verify(eventPublisher).publishEvent(new UserNicknameChangedEvent(1L));
     }
 
     @Test
     void updateNicknameRejectsCurrentNickname() {
         User user = User.signup("user@example.com", "password-hash", "현재닉네임");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
 
         assertThatThrownBy(() -> service.updateNickname(1L, "현재닉네임"))
@@ -160,13 +175,15 @@ class UserProfileServiceTest {
                         exception -> assertThat(exception.errorCode())
                                 .isEqualTo(ErrorCode.SAME_NICKNAME));
         assertThat(user.getUpdatedAt()).isNull();
+        assertThat(user.getNicknameVersion()).isZero();
+        verifyNoInteractions(chatNicknameOutboxRepository);
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void updateNicknameRejectsNicknameUsedByAnotherActiveUser() {
         User user = User.signup("user@example.com", "password-hash", "현재닉네임");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
         when(userRepository.existsByNicknameAndUserIdNotAndDeletedAtIsNull(
                 "사용중닉네임", 1L))
@@ -178,13 +195,15 @@ class UserProfileServiceTest {
                                 .isEqualTo(ErrorCode.NICKNAME_DUPLICATED));
         assertThat(user.getNickname()).isEqualTo("현재닉네임");
         assertThat(user.getUpdatedAt()).isNull();
+        assertThat(user.getNicknameVersion()).isZero();
+        verifyNoInteractions(chatNicknameOutboxRepository);
         verify(eventPublisher, never()).publishEvent(org.mockito.ArgumentMatchers.any());
     }
 
     @Test
     void updateNicknameDoesNotTreatCurrentUserAsDuplicateWhenOnlyCaseChanges() {
         User user = User.signup("user@example.com", "password-hash", "Mulo");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
         // MySQL utf8mb4_0900_ai_ci에서는 현재 행도 대소문자 구분 없이 일치한다.
         lenient().when(userRepository.existsByNicknameAndDeletedAtIsNull("mulo"))
@@ -199,7 +218,7 @@ class UserProfileServiceTest {
     @Test
     void updateNicknameConvertsDatabaseUniqueRaceToDuplicateConflict() {
         User user = User.signup("user@example.com", "password-hash", "현재닉네임");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
         doThrow(new DataIntegrityViolationException("uk_users_active_nickname"))
                 .when(userRepository).flush();
@@ -213,7 +232,7 @@ class UserProfileServiceTest {
     @Test
     void updateNicknameDoesNotHideUnrelatedDatabaseFailure() {
         User user = User.signup("user@example.com", "password-hash", "현재닉네임");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(1L))
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(1L))
                 .thenReturn(Optional.of(user));
         DataIntegrityViolationException databaseException =
                 new DataIntegrityViolationException("unrelated_constraint");

@@ -11,8 +11,11 @@ import com.ktb4.team16.mulo.user.event.UserNicknameChangedEvent;
 import com.ktb4.team16.mulo.user.exception.NicknameConflictException;
 import com.ktb4.team16.mulo.user.exception.PasswordChangeException;
 import com.ktb4.team16.mulo.user.message.UserMessage;
+import com.ktb4.team16.mulo.user.outbox.ChatNicknameChangedMessage;
+import com.ktb4.team16.mulo.user.outbox.ChatNicknameOutboxRepository;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneId;
 import java.util.List;
 import lombok.RequiredArgsConstructor;
@@ -31,6 +34,7 @@ public class UserProfileService {
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final ApplicationEventPublisher eventPublisher;
+    private final ChatNicknameOutboxRepository chatNicknameOutboxRepository;
 
     @Transactional(readOnly = true)
     public UserProfileResponse getMyProfile(Long userId) {
@@ -38,9 +42,10 @@ public class UserProfileService {
         return UserProfileResponse.from(user);
     }
 
+    /** 닉네임과 버전, 채팅 동기화 이벤트를 함께 저장한다. */
     @Transactional
     public UpdateNicknameResponse updateNickname(Long userId, String nickname) {
-        User user = findActiveUser(userId);
+        User user = findActiveUserForUpdate(userId);
         if (user.getNickname().equals(nickname)) {
             throw new NicknameConflictException(ErrorCode.SAME_NICKNAME);
         }
@@ -48,8 +53,9 @@ public class UserProfileService {
                 nickname, userId)) {
             throw new NicknameConflictException(ErrorCode.NICKNAME_DUPLICATED);
         }
+        OffsetDateTime changedAt = OffsetDateTime.now(SERVICE_ZONE_ID);
         try {
-            user.updateNickname(nickname, currentKstDateTime());
+            user.updateNickname(nickname, changedAt.toLocalDateTime());
             // 커밋 전 UNIQUE 위반을 확인해 API의 409 계약으로 변환한다.
             userRepository.flush();
         } catch (DataIntegrityViolationException exception) {
@@ -58,6 +64,9 @@ public class UserProfileService {
             }
             throw exception;
         }
+        // 중요: DB 커밋 전에 실제 변경값을 기록하고, 기존 HTTP 전달은 커밋 후에 실행한다.
+        chatNicknameOutboxRepository.insert(ChatNicknameChangedMessage.create(
+                userId, user.getNickname(), user.getNicknameVersion(), changedAt));
         eventPublisher.publishEvent(new UserNicknameChangedEvent(userId));
         return UpdateNicknameResponse.from(user.getNickname());
     }
@@ -72,8 +81,7 @@ public class UserProfileService {
     public UpdatePasswordResponse updatePassword(
             Long userId, String currentPassword, String newPassword) {
         // 탈퇴와 비밀번호 변경이 같은 해시를 동시에 검사하지 않도록 직렬화한다.
-        User user = userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)
-                .orElseThrow(UnauthenticatedUserException::new);
+        User user = findActiveUserForUpdate(userId);
         if (!passwordEncoder.matches(currentPassword, user.getPasswordHash())) {
             throw new PasswordChangeException(ErrorCode.CURRENT_PASSWORD_MISMATCH);
         }
@@ -85,16 +93,23 @@ public class UserProfileService {
         return new UpdatePasswordResponse(UserMessage.PASSWORD_UPDATED.message());
     }
 
+    /** 닉네임 변경과 같은 사용자 행 잠금 아래에서 선호 장르를 저장한다. */
     @Transactional
     public UpdatePreferredGenresResponse updatePreferredGenres(
             Long userId, List<String> preferredGenres) {
-        User user = findActiveUser(userId);
+        User user = findActiveUserForUpdate(userId);
         user.updatePreferredGenres(preferredGenres);
         return UpdatePreferredGenresResponse.from(user);
     }
 
     private User findActiveUser(Long userId) {
         return userRepository.findByUserIdAndDeletedAtIsNull(userId)
+                .orElseThrow(UnauthenticatedUserException::new);
+    }
+
+    /** 여러 인스턴스에서 같은 사용자를 변경할 때 DB가 변경 순서를 정하도록 한다. */
+    private User findActiveUserForUpdate(Long userId) {
+        return userRepository.findByUserIdAndDeletedAtIsNullForUpdate(userId)
                 .orElseThrow(UnauthenticatedUserException::new);
     }
 

@@ -10,6 +10,7 @@ import static org.mockito.Mockito.when;
 import com.ktb4.team16.mulo.match.client.ChatRoomClient;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.event.ChatNicknameSyncAfterCommitListener;
+import com.ktb4.team16.mulo.user.outbox.ChatNicknameOutboxRepository;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -43,6 +44,8 @@ class UserNicknameSyncTransactionBoundaryTest {
         User user = user("기존닉네임");
         when(userRepository.existsByNicknameAndUserIdNotAndDeletedAtIsNull("새닉네임", 17L))
                 .thenReturn(false);
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(17L))
+                .thenReturn(java.util.Optional.of(user));
         when(userRepository.findByUserIdAndDeletedAtIsNull(17L)).thenReturn(java.util.Optional.of(user));
 
         new TransactionTemplate(transactionManager).execute(status -> {
@@ -58,7 +61,8 @@ class UserNicknameSyncTransactionBoundaryTest {
     @Test
     void doesNotInvokeChatServerWhenNicknameTransactionRollsBack() {
         User user = user("기존닉네임");
-        when(userRepository.findByUserIdAndDeletedAtIsNull(17L)).thenReturn(java.util.Optional.of(user));
+        when(userRepository.findByUserIdAndDeletedAtIsNullForUpdate(17L))
+                .thenReturn(java.util.Optional.of(user));
         when(userRepository.existsByNicknameAndUserIdNotAndDeletedAtIsNull("새닉네임", 17L))
                 .thenReturn(false);
 
@@ -84,6 +88,12 @@ class UserNicknameSyncTransactionBoundaryTest {
         @Bean
         UserRepository userRepository() {
             return mock(UserRepository.class);
+        }
+
+        /** HTTP 커밋 경계만 검증하도록 Outbox 저장을 대체한다. */
+        @Bean
+        ChatNicknameOutboxRepository chatNicknameOutboxRepository() {
+            return mock(ChatNicknameOutboxRepository.class);
         }
 
         @Bean
