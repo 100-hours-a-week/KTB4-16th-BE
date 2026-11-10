@@ -1,32 +1,15 @@
 package com.ktb4.team16.mulo.recommendation.dto.response;
 
-import com.fasterxml.jackson.annotation.JsonInclude;
-import com.ktb4.team16.mulo.recommendation.entity.RecommendationPlaylist;
-import com.ktb4.team16.mulo.recommendation.entity.RecommendationPlaylistItem;
+import com.ktb4.team16.mulo.music.entity.MusicTrack;
 import java.util.List;
 
-public record RecommendationPlaylistData(Playlist playlist,
-        @JsonInclude(JsonInclude.Include.NON_NULL) Boolean replaced) {
-    // 조회 응답은 생성 여부 없이 반환하고 POST에서만 실제 교체 여부를 명시한다.
-    public RecommendationPlaylistData(Playlist playlist) {
-        this(playlist, null);
-    }
+public record RecommendationPlaylistData(Playlist playlist, boolean replaced) {
+    public record Playlist(List<Track> tracks) { }
 
-    // 영속 엔티티를 공개 응답용 현재 플레이리스트 데이터로 변환한다.
-    public static RecommendationPlaylistData from(RecommendationPlaylist playlist,
-            List<RecommendationPlaylistItem> items) {
-        return new RecommendationPlaylistData(new Playlist(playlist.getRecommendationPlaylistId(),
-                items.stream().map(Track::from).toList()));
-    }
-
-    public record Playlist(Long recommendationPlaylistId, List<Track> tracks) {
-    }
-
-    public record Track(Long musicTrackId, String externalTrackId, String title, String artistName, String albumImageUrl,
-            String externalUrl) {
-        // 추천 항목의 곡 정보를 API 응답용 값으로 변환한다.
-        public static Track from(RecommendationPlaylistItem item) {
-            var track = item.getMusicTrack();
+    public record Track(Long musicTrackId, String externalTrackId, String title, String artistName,
+            String albumImageUrl, String externalUrl) {
+        // 음악 카탈로그의 곡을 화면 세션 응답으로 변환하며 플레이리스트 저장 상태를 만들지 않는다.
+        public static Track from(MusicTrack track) {
             return new Track(track.getMusicTrackId(), track.getExternalTrackId(), track.getTitle(), track.getArtistName(),
                     track.getAlbumImageUrl(), track.getExternalUrl());
         }

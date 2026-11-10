@@ -39,18 +39,22 @@ import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
 import com.ktb4.team16.mulo.weather.exception.WeatherApiException;
 import com.ktb4.team16.mulo.weather.exception.WeatherRequestTimeException;
 import jakarta.validation.ConstraintViolationException;
+import jakarta.servlet.http.HttpServletResponse;
 import java.util.List;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.MediaType;
 import org.springframework.http.ResponseEntity;
 import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.HttpMediaTypeNotSupportedException;
+import org.springframework.web.HttpRequestMethodNotSupportedException;
 import org.springframework.web.bind.MissingServletRequestParameterException;
 import org.springframework.web.multipart.MaxUploadSizeExceededException;
 import org.springframework.web.multipart.support.MissingServletRequestPartException;
 import org.springframework.web.bind.MethodArgumentNotValidException;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.method.annotation.HandlerMethodValidationException;
@@ -279,6 +283,14 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.AI_SERVICE_ERROR));
     }
 
+    /** 배치 업무 사유를 공통 오류 형식으로 반환하고 원본 AI 오류를 숨긴다. */
+    @ExceptionHandler(com.ktb4.team16.mulo.report.batch.ReportBatchException.class)
+    public ResponseEntity<ErrorResponse> handleReportBatch(
+            com.ktb4.team16.mulo.report.batch.ReportBatchException exception) {
+        ErrorCode code = ErrorCode.valueOf(exception.code());
+        return ResponseEntity.status(code.status()).body(ErrorResponse.of(code));
+    }
+
     @ExceptionHandler(AiRecommendationFeedbackException.class)
     public ResponseEntity<ErrorResponse> handleAiRecommendationFeedback(
             AiRecommendationFeedbackException exception) {
@@ -305,6 +317,15 @@ public class GlobalExceptionHandler {
     public ResponseEntity<ErrorResponse> handleInvalidParameter(Exception exception) {
         return ResponseEntity.status(ErrorCode.INVALID_INPUT_VALUE.status())
                 .body(ErrorResponse.of(ErrorCode.INVALID_INPUT_VALUE));
+    }
+
+    // 제거된 조회 API 등 지원하지 않는 HTTP 메서드를 Allow 헤더와 함께 405로 반환한다.
+    @ExceptionHandler(HttpRequestMethodNotSupportedException.class)
+    public ResponseEntity<ErrorResponse> handleUnsupportedMethod(
+            HttpRequestMethodNotSupportedException exception) {
+        return ResponseEntity.status(ErrorCode.METHOD_NOT_ALLOWED.status())
+                .headers(exception.getHeaders())
+                .body(ErrorResponse.of(ErrorCode.METHOD_NOT_ALLOWED));
     }
 
     @ExceptionHandler(HttpMediaTypeNotSupportedException.class)
@@ -369,18 +390,51 @@ public class GlobalExceptionHandler {
                 .body(ErrorResponse.of(ErrorCode.UPLOAD_NOT_FOUND));
     }
 
+    @ExceptionHandler(AsyncRequestNotUsableException.class)
+    public ResponseEntity<Void> handleAsyncRequestNotUsable(AsyncRequestNotUsableException exception) {
+        if (AsyncRequestFailureClassifier.isExpectedConnectionTermination(exception)) {
+            log.debug("비동기 응답을 사용할 수 없어 오류 본문 작성을 중단합니다.");
+        } else {
+            log.error("비동기 응답 쓰기 중 원인을 확인할 수 없는 오류가 발생했습니다.", exception);
+            Sentry.captureException(exception);
+        }
+        return ResponseEntity.noContent().build();
+    }
+
     @ExceptionHandler(Exception.class)
-    public ResponseEntity<ErrorResponse> handleUnexpectedException(Exception exception) {
+    public ResponseEntity<ErrorResponse> handleUnexpectedException(
+            Exception exception, HttpServletResponse response) {
         // 내부 예외 정보는 응답엔 노출하지 않되, 원인 파악을 위해 서버 로그엔 남긴다.
         log.error("처리되지 않은 예외", exception);
         Sentry.captureException(exception);
+        if (response.isCommitted() || isEventStreamResponse(response)) {
+            return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status()).build();
+        }
         return ResponseEntity.status(ErrorCode.INTERNAL_SERVER_ERROR.status())
                 .body(ErrorResponse.of(ErrorCode.INTERNAL_SERVER_ERROR));
     }
 
+    private boolean isEventStreamResponse(HttpServletResponse response) {
+        String contentType = response.getContentType();
+        return contentType != null
+                && MediaType.parseMediaType(contentType).isCompatibleWith(MediaType.TEXT_EVENT_STREAM);
+    }
+
     private com.ktb4.team16.mulo.global.error.FieldError toFieldError(FieldError error) {
-        ErrorCode code = ErrorCode.valueOf(error.getDefaultMessage());
+        ErrorCode code = resolveValidationErrorCode(error.getDefaultMessage());
         return com.ktb4.team16.mulo.global.error.FieldError.of(error.getField(), code);
+    }
+
+    /** DTO가 지정한 오류 코드를 유지하고 일반 검증 문구에는 공통 입력 오류를 사용한다. */
+    private ErrorCode resolveValidationErrorCode(String message) {
+        if (message == null) {
+            return ErrorCode.INVALID_INPUT_VALUE;
+        }
+        try {
+            return ErrorCode.valueOf(message);
+        } catch (IllegalArgumentException ignored) {
+            return ErrorCode.INVALID_INPUT_VALUE;
+        }
     }
 
     private ResponseEntity<ErrorResponse> response(ErrorCode code, List<com.ktb4.team16.mulo.global.error.FieldError> errors) {

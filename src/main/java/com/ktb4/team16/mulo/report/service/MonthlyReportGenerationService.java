@@ -1,70 +1,63 @@
 package com.ktb4.team16.mulo.report.service;
 
-import com.ktb4.team16.mulo.report.client.MonthlyReportAiException;
-import com.ktb4.team16.mulo.report.client.MonthlyReportBatchAiClient;
+import com.ktb4.team16.mulo.report.batch.MonthlyReportJobService;
+import com.ktb4.team16.mulo.report.batch.MonthlyReportTestGuard;
+import com.ktb4.team16.mulo.report.exception.InvalidMonthlyReportGenerationRequestException;
 import java.time.Clock;
 import java.time.YearMonth;
-import java.util.UUID;
-import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
-@Slf4j
+/** 스케줄러·운영 API의 월 정책을 검증하고 실제 실행을 영속 Batch Job에 위임한다. */
 @Service
 public class MonthlyReportGenerationService {
-    private final MonthlyReportPreparationService preparationService;
-    private final MonthlyReportBatchAiClient aiClient;
+    private final MonthlyReportJobService jobs;
     private final Clock clock;
+    private final MonthlyReportTestGuard testGuard;
 
-    public MonthlyReportGenerationService(MonthlyReportPreparationService preparationService,
-            MonthlyReportBatchAiClient aiClient, Clock clock) {
-        this.preparationService = preparationService;
-        this.aiClient = aiClient;
-        this.clock = clock;
+    /** 월 정책 단위 검증에 필요한 생성자다. 테스트 실행은 기본 거절한다. */
+    public MonthlyReportGenerationService(MonthlyReportJobService jobs, Clock clock) {
+        this(jobs, clock, null);
     }
 
-    // 현재 KST 기준 지난달 스냅샷을 준비하고 AI 배치 생성 요청을 보낸다.
+    /** 실제 테스트 진입점은 프로파일·전용 DB·AI 대상 검사를 추가한다. */
+    @Autowired
+    public MonthlyReportGenerationService(MonthlyReportJobService jobs, Clock clock, MonthlyReportTestGuard testGuard) {
+        this.jobs = jobs;
+        this.clock = clock;
+        this.testGuard = testGuard;
+    }
+
+    /** KST Clock 기준 지난달 마감 Job을 실행한다. */
     public GenerationResult generatePreviousMonthReports() {
         return generate(YearMonth.now(clock).minusMonths(1));
     }
 
-    // 스냅샷과 요청 ID를 각각 커밋한 뒤 AI를 호출하고 접수·실패 상태를 반영한다.
+    /** 운영 신규 생성은 지난달만 허용한다. */
     public GenerationResult generate(YearMonth month) {
-        var batch = preparationService.prepare(month);
-        if (batch.userIds().isEmpty()) {
-            return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
+        if (!YearMonth.now(clock).minusMonths(1).equals(month)) {
+            throw new InvalidMonthlyReportGenerationRequestException();
         }
-        String batchRequestId = UUID.randomUUID().toString();
-        preparationService.reserveBatchRequestId(batch, batchRequestId);
-        MonthlyReportBatchAiClient.BatchAccepted accepted;
-        try {
-            accepted = aiClient.requestBatch(month, batch.userIds(), batchRequestId);
-        } catch (MonthlyReportAiException exception) {
-            String failureType = exception.getCause() == null
-                    ? exception.getClass().getSimpleName()
-                    : exception.getCause().getClass().getSimpleName();
-            log.error("월간 리포트 AI 배치 요청 실패: month={}, targetCount={}, failureType={}",
-                    month, batch.userIds().size(), failureType);
-            try {
-                preparationService.markFailed(batch, batchRequestId);
-            } catch (RuntimeException | Error statusException) {
-                log.error("월간 리포트 FAILED 상태 저장 롤백: month={}, targetCount={}, failureType={}",
-                        month, batch.userIds().size(), statusException.getClass().getSimpleName(),
-                        statusException);
-                throw statusException;
-            }
-            return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
-        }
-
-        try {
-            preparationService.markProcessing(batch, batchRequestId);
-        } catch (RuntimeException | Error statusException) {
-            log.error("AI 배치 접수 후 PROCESSING 상태 저장 롤백: month={}, targetCount={}, jobId={}, failureType={}",
-                    month, batch.userIds().size(), accepted.jobId(),
-                    statusException.getClass().getSimpleName(), statusException);
-            throw statusException;
-        }
-        return new GenerationResult(month, batch.createdCount(), batch.skippedCount());
+        return jobs.generate(month, false);
     }
 
+    /** 현재 월까지의 시험은 격리 환경 확인 뒤 별도 작업 키로 실행한다. */
+    public GenerationResult generateForTest(YearMonth month) {
+        if (testGuard == null || month == null || month.isAfter(YearMonth.now(clock))) {
+            throw new InvalidMonthlyReportGenerationRequestException();
+        }
+        testGuard.verify();
+        return jobs.generate(month, true);
+    }
+
+    /** 실패 확정 리포트는 과거 마감 월도 기존 집계를 보존하며 재요청한다. */
+    public GenerationResult retry(YearMonth month, String retryRequestId) {
+        if (month == null || !month.isBefore(YearMonth.now(clock))) {
+            throw new InvalidMonthlyReportGenerationRequestException();
+        }
+        return jobs.retry(month, retryRequestId);
+    }
+
+    /** 기존 동기 생성 API의 집계 건수 의미를 유지한다. */
     public record GenerationResult(YearMonth targetMonth, int createdCount, int skippedCount) { }
 }

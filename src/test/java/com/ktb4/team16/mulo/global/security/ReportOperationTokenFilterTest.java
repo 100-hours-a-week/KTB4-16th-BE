@@ -38,4 +38,16 @@ class ReportOperationTokenFilterTest {
 
         verify(chain).doFilter(same(request), any());
     }
+    /** 신규 재요청·복구 경로도 운영 토큰이 없으면 실행 체인에 도달하지 않는다. */
+    @org.junit.jupiter.api.Test
+    void protectsNewRetryEndpoint() throws Exception {
+        var filter = new ReportOperationTokenFilter(new ReportOperationProperties("token"),
+                new SecurityErrorWriter());
+        var request = new org.springframework.mock.web.MockHttpServletRequest("POST", "/internal/ops/monthly-reports/retry");
+        var response = new org.springframework.mock.web.MockHttpServletResponse();
+        var chain = new org.springframework.mock.web.MockFilterChain();
+        filter.doFilter(request, response, chain);
+        org.assertj.core.api.Assertions.assertThat(response.getStatus()).isEqualTo(401);
+        org.assertj.core.api.Assertions.assertThat(chain.getRequest()).isNull();
+    }
 }

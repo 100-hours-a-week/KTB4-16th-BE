@@ -67,7 +67,7 @@ public class SecurityConfig {
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
                                 HttpMethod.POST, "/internal/auth/verify"))
                         .ignoringRequestMatchers(PathPatternRequestMatcher.pathPattern(
-                                HttpMethod.POST, "/internal/ops/monthly-reports/generate")))
+                                HttpMethod.POST, "/internal/ops/monthly-reports/**")))
                 .formLogin(AbstractHttpConfigurer::disable)
                 .httpBasic(AbstractHttpConfigurer::disable)
                 // /logout 기본 엔드포인트 대신 이후 auth 도메인의 명시적 로그아웃을 사용한다.
@@ -77,9 +77,11 @@ public class SecurityConfig {
                 .authorizeHttpRequests(auth -> auth
                         // 내부 오류 디스패치가 기존 404/500을 401로 바꾸지 않도록 한다.
                         .dispatcherTypeMatchers(DispatcherType.ERROR).permitAll()
+                        .requestMatchers(request -> request.getDispatcherType() == DispatcherType.ASYNC
+                                && "/api/notifications/stream".equals(request.getServletPath())).permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/auth/verify").permitAll()
                         .requestMatchers(HttpMethod.POST, "/internal/ai/report-ready").permitAll()
-                        .requestMatchers(HttpMethod.POST, "/internal/ops/monthly-reports/generate")
+                        .requestMatchers("/internal/ops/monthly-reports/**")
                         .permitAll()
                         // Docker가 인증 없이 애플리케이션 준비 상태만 확인하도록 healthcheck GET만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()

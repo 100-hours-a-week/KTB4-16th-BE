@@ -4,5 +4,5 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 
 public record RecommendationPlaylistResponse(String message,
         @JsonInclude(JsonInclude.Include.NON_NULL) Long recommendationId,
-        RecommendationPlaylistData data) {
+        String recommendReason, RecommendationPlaylistData data) {
 }

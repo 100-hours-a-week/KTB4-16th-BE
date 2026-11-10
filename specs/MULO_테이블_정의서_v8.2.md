@@ -1,0 +1,1537 @@
+# MULO 테이블 정의서 v8.2
+
+> 작성일: 2026-09-21 (KST)<br>
+> 알림 Outbox 스키마 반영: 2026-10-11 (KST)<br>
+> AI 추천 이력·피드백 실제 사용 상태 반영: 2026-11-01 (KST)
+> 월간 리포트 Spring Batch 스키마 반영: 2026-11-04 (KST), Flyway V15 / BE PR #178 기준
+> 닉네임 버전 동기화 스키마 반영: 2026-11-09 (KST), Backend Flyway V20과 Chat Flyway V6 기준
+> 기본 테이블 정의 기준: 기존 절의 기준은 각 절을 따르며, AI 추천 피드백 테이블은 Flyway V13, 월간 리포트 Batch 메타데이터와 업무 일지는 Flyway V15 실제 스키마를 반영한다. V15 외 이전 migration 전체와 모든 기존 절의 정합성은 이번 변경 범위에서 재검토하지 않았다.
+> 설계·정책 기준: 서비스 정책 정의서 v2.2, OpenAPI v2.8, 현재 구현 문서
+> 원칙: Flyway에 존재하는 구조와 목표 정책이 다르면 둘을 분리해 기록하고 미확정 사항은 `Open Question`으로 유지한다.
+
+### 문서 상태 표기
+
+| 상태 | 의미 |
+| --- | --- |
+| `구현됨` | 각 절에 표기된 Flyway 기준에 실제 적용되는 구조 |
+| `구현됨·정책 확인 필요` | 실제 구조는 존재하지만 사용 또는 유지 정책이 확정되지 않음 |
+| `V1 제외·V2 구현` | V1 기능에서는 제외됐지만 V2에서 서버 기능으로 구현됨 |
+| `설계 규칙` | DB 컬럼 외에 서비스가 지켜야 하는 규칙 |
+| `스키마 및 서비스 구현됨` | Flyway/Entity와 추천 이력 저장·피드백 API 구현이 적용됨 |
+
+### 현재 스키마 기준 및 변경 사항
+
+- 기존 Backend 테이블 정의를 유지하고, Flyway V13의 AI 추천 피드백 테이블 3개를 §29~31에 추가
+- V6에서 `matches`를 추가하고 Backend의 `chat_rooms`, `chat_room_participants`, `chat_messages`를 제거
+- Chat Server가 소유하는 채팅 schema는 별도 DB에 있으며 이 문서에서 Backend 테이블로 정의하지 않음
+- V2의 레거시 `weather`를 실제 테이블로 추가하고 격자 캐시 테이블과 역할을 분리
+- V4의 `places` 컬럼 변경, 법정동 쌍 CHECK, 좌표 UNIQUE를 실제 구조로 반영
+- `record_drafts`는 V1 기능 제외 이력을 유지하고, V2 API 및 V5 실제 스키마를 반영
+- 현재 작업 트리에 구현된 월간 리포트 엔티티·집계·목록 조회 상태를 반영
+- V8 `outbox_events`를 알림 이벤트 처리 테이블로 추가
+- Backend V20의 `users.nickname_version`과 `chat_nickname_outbox`를 §1과 §38에 반영. Chat V6의 `chat_user_nickname_states`는 별도 Chat DB 절에 기록
+- V9 `monthly_reports.batch_request_id`를 AI 배치 요청 시도 식별용 nullable 컬럼으로 반영. 기존 리포트의 값은 NULL이며 V10~V11은 별도 대조 필요
+- V15에 추가한 Spring Batch JDBC 메타데이터 9개 테이블과 월간 리포트 업무 일지 5개 테이블을 §32~37에 반영
+- Batch 실행 상태는 Spring Batch 메타데이터에, 월별 소유권·고정 대상·AI 전송/접수·복구 근거는 별도 업무 일지에 저장
+- 설계 문서와 Flyway 사이의 차이는 문서 끝의 정합성 표에서 원본과 현재 상태를 함께 표시
+
+### v7.6에서 승계한 핵심 변경 사항
+
+- `places.legal_dong_code`, `places.legal_dong_name`은 기존/예외 데이터 조회를 위해 DB에서 NULL을 허용한다. 신규 Place는 서버 Kakao의 유효한 `region_type=B` code/name 확인이 필수이며 각각 `code`, `region_3depth_name`을 저장한다.
+- `legal_dong_code`와 `legal_dong_name`은 둘 다 존재하거나 둘 다 NULL이어야 하도록 CHECK 제약을 둔다
+- 자물쇠 생성 위치는 프론트가 브라우저 Geolocation API로 최초 좌표를 얻고 Kakao Maps SDK에서 사용자가 수정한 최종 좌표를 확정한다
+- 프론트의 `legalDongCode`, `legalDongName`은 호환성용 선택 입력이다. 백엔드는 정확히 동일한 좌표의 기존 Place를 먼저 재사용하고, 신규 Place에만 서버 Kakao 역지오코딩 결과의 법정동 code/name을 사용한다.
+- 대시보드 지역 그룹 키는 `legal_dong_code`이며 `legal_dong_name`은 표시용이다. `legal_dong_code IS NULL`인 데이터는 하나의 미확인 그룹으로 집계하고 화면에는 `확인할 수 없음`으로 표시한다
+- 홈의 인기 자물쇠 지도는 조회 시점 기준 최근 7일 이내 생성된 삭제되지 않은 자물쇠만 대상으로 한다
+- 인기 자물쇠 마커 클릭 후 음악 랭킹도 동일한 최근 7일 자물쇠만 집계하며 음악별 `count DESC`, 동률은 해당 음악의 가장 최근 Record 생성 시각 내림차순으로 정렬한다
+- 내 자물쇠 보기는 7일 제한을 적용하지 않고 현재 사용자의 삭제되지 않은 모든 자물쇠를 대상으로 한다
+- 지도 마커의 개별 장소와 클러스터는 담당 팀원 계약에 따라 `POST /api/places/popular-tracks/search`, `POST /api/users/me/records/search` Body의 `placeIds`로 함께 처리한다. ID 1개는 개별 장소, 여러 개는 클러스터를 의미하며 기존 단일 장소 GET 계약은 사용하지 않는다
+- 인기 지도 마커에는 최근 7일 기준 `recordsCount`, 내 자물쇠 지도 마커에는 전체 기간 기준 `myRecordsCount`를 제공한다
+- 사용자 자물쇠 대시보드는 별도 dashboard 테이블을 만들지 않고 `records`를 `places.legal_dong_code` 기준으로 그룹 조회한다. 폴더 표시명은 `legal_dong_name`이다
+- 커서 기반 목록 API의 `size`는 기본 20, 최대 100이며 채팅 메시지 내역만 기본 30을 유지한다
+- Kakao SDK 호출 자체가 실패한 경우에는 NULL 법정동으로 간주하지 않고 프론트에서 생성 요청을 중단하거나 재시도한다. 기존 OQ-025는 이 정책으로 해소된다
+- 레거시 `weather`를 23번으로 명시하고 `weather_grids`, `weather_grid_forecasts`를 24~25번으로 배치
+- 날씨 캐시는 `(weather_grid_id, forecast_at)` 유일성 보장
+- `records.weather_condition`은 7개 상태 `CLEAR/CLOUDY/OVERCAST/RAIN/SNOW/RAIN_SNOW/SHOWER`만 저장
+- `record_drafts`는 V1 제외였던 이력과 V2 구현 상태를 함께 표시
+- AI 기억 검색 및 Spotify 계정 저장 기능은 V1 범위에서 제외
+- 1:1 매칭은 같은 질문의 반대 선택지 사용자를 FIFO로 연결한다
+- 취향 투표 당일 그룹 및 질문은 일일 스냅샷으로 고정한다
+- `matches.chat_room_id`와 `notifications.chat_room_id`는 Chat DB의 논리 ID이며 Backend FK가 아니다
+- V1 당시 채팅 테이블 정의는 문서 하단에 역사 자료로만 남기며 현재 Backend schema로 취급하지 않는다
+
+---
+
+## 1. users
+
+#### 1. 테이블 설명
+
+사용자의 계정 및 기본 정보를 저장하는 테이블이다. 회원가입, 로그인, 마이페이지 등의 회원 기능에서 사용하며, 사용자와 관련된 서비스 데이터를 식별하는 기준이 된다. 사용자 선호 장르와 온보딩 상태를 저장한다. AI 최종 그룹의 최신본은 AI DB 읽기 전용 뷰에서 조회하고, 당일 투표 그룹은 날짜 스냅샷으로 고정한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `user_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 사용자 고유 ID | 사용자를 식별하는 숫자형 ID이며 향후 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 사용자 식별 및 다른 테이블에서 사용자를 참조하는 기준값으로 사용한다. |
+| `email` | `VARCHAR(254)` | NOT NULL | - | - | 로그인에 사용하는 이메일 | 이메일은 가변 길이 문자열이며 서비스에서 허용하는 이메일 최대 길이를 고려하여 254자로 설정한다. 탈퇴 후에도 기존 계정 정보를 보존해야 하므로 원본 이메일 값은 유지한다. | 로그인 계정 식별 및 사용자 이메일 정보 보존에 사용한다. |
+| `active_email` | `VARCHAR(254)` | NULL | - | UK | 활성 회원 이메일 | `deleted_at IS NULL`이면 `email` 값을 가지고, 탈퇴한 회원이면 `NULL`이 되도록 생성되는 Generated Column이다. | 활성 회원끼리만 이메일 UNIQUE 제약을 적용하여 탈퇴한 회원의 이메일을 재사용할 수 있도록 한다. |
+| `password_hash` | `VARCHAR(60)` | NOT NULL | - | - | 해시 처리된 비밀번호 | 비밀번호 원문을 저장하지 않고 bcrypt 해시값을 저장한다. bcrypt 인코딩 결과 문자열은 60자로 고정되므로 `VARCHAR(60)`을 사용한다. | 이메일 로그인 시 입력된 비밀번호와 저장된 해시값을 비교하여 사용자 인증에 사용한다. |
+| `nickname` | `VARCHAR(10)` | NOT NULL | - | - | 서비스에서 사용하는 사용자 닉네임 | 닉네임 정책인 2~10자를 반영한다. 탈퇴 후에도 기존 사용자 데이터를 보존하기 위해 실제 닉네임 값은 유지한다. | 프로필, 친구 목록, 채팅 등에서 사용자 표시 이름으로 사용한다. |
+| `nickname_version` | `BIGINT` | NOT NULL | `0` | - | 사용자별 닉네임 변경 버전 | 기존 사용자와 신규 사용자는 0에서 시작하며 실제 닉네임 변경마다 1씩 증가한다. | 변경 시점의 닉네임과 함께 Outbox에 저장해 순서를 판별한다. |
+| `active_nickname` | `VARCHAR(10)` | NULL | - | UK | 활성 회원 닉네임 | `deleted_at IS NULL`이면 `nickname` 값을 가지고, 탈퇴한 회원이면 `NULL`이 되도록 생성되는 Generated Column이다. | 활성 회원끼리만 닉네임 UNIQUE 제약을 적용하여 탈퇴한 회원의 닉네임을 재사용할 수 있도록 한다. |
+| `music_genre` | `VARCHAR(50)` | NULL | `NULL` | - | 레거시 대표 음악 장르 | 기존 스키마 호환을 위해 유지한다. AI 대표 그룹의 최신본은 `be_user_music_genres`에서 읽으며 BE가 이 컬럼을 그룹 계산값으로 갱신하지 않는다. | 기존 참조와 과거 데이터를 보존한다. 당일 투표에는 일일 배정 스냅샷을 사용한다. |
+| `preferred_genres` | `JSON` | NULL | `NULL` | - | 사용자가 선택한 선호 장르 | 온보딩에서 고른 고정 13개 장르 중 최대 3개를 선택 순서대로 저장한다. | AI 그룹 계산의 입력으로 제공하며 AI가 덮어쓰지 않는다. |
+| `genre_onboarding_done` | `BOOLEAN` | NOT NULL | `FALSE` | - | 장르 온보딩 응답 완료 여부 | 기본값 FALSE로 미응답 사용자를 표시한다. | 선택 또는 명시적 건너뛰기를 구분한다. |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 계정 생성 시각 | 계정이 생성된 날짜와 시각을 기록하기 위해 `DATETIME`을 사용한다. | 회원가입 시점을 기록한다. |
+| `updated_at` | `DATETIME` | NULL | `NULL` | - | 회원 정보 최종 수정 시각 | 닉네임 등 사용자 정보가 수정된 마지막 시점을 기록한다. 한 번도 수정되지 않은 경우 `NULL`을 허용한다. | 회원 정보 변경 시점을 추적한다. |
+| `deleted_at` | `DATETIME` | NULL | `NULL` | - | 계정 탈퇴 시각 | 활성 회원은 `NULL`이며, 탈퇴 시 탈퇴 시각을 기록한다. 해당 값에 따라 `active_email`,`active_nickname` 생성 컬럼 값이 자동으로 결정된다. | 소프트 삭제 여부를 판단하고 탈퇴 회원의 이메일·닉네임 재사용 여부를 제어한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_users` | PRIMARY KEY | `user_id` | - | 각 사용자를 고유하게 식별한다. |
+| `uk_users_active_email` | UNIQUE | `active_email` | - | 탈퇴하지 않은 활성 회원 사이에서 이메일 중복을 방지한다. 탈퇴 회원의 `active_email`은 `NULL`이므로 동일 이메일을 새로운 회원이 재사용할 수 있다. |
+| `uk_users_active_nickname` | UNIQUE | `active_nickname` | - | 탈퇴하지 않은 활성 회원 사이에서 닉네임 중복을 방지한다. 탈퇴 회원의 `active_nickname`은 `NULL`이므로 동일 닉네임을 새로운 회원이 재사용할 수 있다. |
+| `chk_users_nickname_length` | CHECK | `nickname` | - | 닉네임 길이를 서비스 정책인 2~10자로 제한한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_user_music_genre` | AI가 계산한 최종 대표 그룹은 AI DB `be_user_music_genres` 뷰에서 읽으며 BE는 그룹 계산·통합을 수행하지 않는다. |
+| `rule_user_genre_vote_question` | 취향 투표는 당일 `vote_user_daily_assignments`에 고정된 그룹과 질문 ID를 기준으로 제공한다. 오늘 날짜·그룹 질문이 `vote_questions`에 이미 있으면 질문 ID·문구·선택지·답변을 보존하여 AI 데이터보다 우선 재사용한다. |
+| `rule_user_genre_vote_assignment` | 질문 조회는 선호 장르 또는 자물쇠 생성 이력이 없어도 허용한다. AI 사용자 뷰에 행이 없으면 `공통` 그룹을 배정하며, 최초 저장한 당일 배정은 변경하지 않는다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `records` | `users.user_id` ↔ `records.user_id` | 1:N | 한 사용자는 여러 자물쇠를 생성할 수 있으며, 각 자물쇠는 작성자 한 명에게 속한다. |
+| `friendships` | `users.user_id` ↔ `friendships.user_low_id`, `user_high_id` | 1:N | 한 사용자는 여러 친구 관계에 참여할 수 있으며, 두 사용자 ID는 `user_low_id`, `user_high_id`로 정규화하여 `friendships` 테이블에서 방향 없는 친구 관계로 관리한다. |
+| `friend_requests` | `users.user_id`↔`friend_requests.requester_id` , `friend_requests.addressee_id` | 1:N | `friend_requests.requester_id` 한 사용자는 여러 친구 요청을 보낼 수 있으며, 각 친구 요청은 한 명의 요청자를 가진다.<br>
+`friend_requests.addressee_id` 한 사용자는 여러 친구 요청을 받을 수 있으며, 각 친구 요청은 한 명의 수신자를 가진다. |
+| `monthly_reports` | `users.user_id` ↔ `monthly_reports.user_id` | 1:N | 한 사용자는 월별로 여러 리포트를 가질 수 있으며, 각 월간 리포트는 한 사용자의 기록을 기준으로 생성된다. |
+| `vote_answers` | `users.user_id` ↔ `vote_answers.user_id` | 1:N | 한 사용자는 여러 취향 투표에 참여할 수 있으며 각 투표 답변의 작성자를 식별한다. |
+| `match_requests` | `users.user_id` ↔ `match_requests.user_id` | 1:N | 한 사용자는 서로 다른 날짜에 여러 매칭 요청을 생성할 수 있으며, 각 매칭 요청은 한 사용자에게 속한다. |
+| `notifications` | `users.user_id` ↔ `notifications.user_id` | 1:N | 한 사용자는 친구 요청, 매칭 완료 등 서비스에서 발생하는 여러 알림을 받을 수 있다. |
+| `refresh_tokens` | `users.user_id` ↔ `refresh_tokens.user_id` | 1:1 | 각 Refresh Token은 한 사용자에게 속하며, 한 사용자는 로그인 세션에서 한 Refresh Token을 발급받을 수 있다. |
+| `uploads` | `users.user_id` ↔ `uploads.user_id` | 1:N | 한 사용자는 자물쇠 생성 과정에서 여러 임시 이미지를 업로드할 수 있으며, 각 임시 업로드는 한 명의 소유 사용자에게 속한다. |
+| `record_drafts` | `users.user_id` ↔ `record_drafts.user_id` | 1:1 | 사용자당 임시저장은 최대 1개이며 `uk_record_drafts_user`로 보장한다. |
+
+---
+
+## 2. refresh_tokens - 로그인 유지 토큰 테이블
+
+#### 1. 테이블 설명
+
+Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버에서 관리하는 테이블이다. 사용자별 로그인 세션을 구분하고 토큰의 만료 및 폐기를 관리한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `refresh_token_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | Refresh Token 레코드의 고유 ID | 토큰 레코드를 고유하게 식별하며 향후 데이터 증가를 고려하여 `BIGINT`를 사용한다. | 각 로그인 세션의 Refresh Token 레코드를 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK, UK | Refresh Token을 발급받은 사용자 ID | `users.user_id`와 동일한 데이터 타입을 사용한다. 한 사용자당 하나의 Refresh Token만 유지하는 정책을 보장하기 위해 UNIQUE를 적용한다. | 어떤 사용자의 Refresh Token인지 식별하며, 동일 사용자의 Refresh Token 레코드가 여러 개 생성되지 않도록 한다. |
+| `token_hash` | `VARCHAR` | 64 | NOT NULL | - | UK | Refresh Token을 SHA-256으로 해시한 값 | Refresh Token 원문 대신 SHA-256 digest를 hexadecimal 문자열로 저장한다. NIST FIPS 180-4에서 SHA-256의 message digest 크기는 256 bit로 정의되며, 이는 32 byte이다. 1 byte를 hexadecimal 2자리로 표현하므로 총 64자가 되어 `VARCHAR(64)`을 사용한다. | 사용자가 제출한 Refresh Token을 동일한 방식으로 해시한 뒤 저장된 값과 비교하여 서버가 관리하는 유효한 토큰인지 확인한다. |
+| `expires_at` | `DATETIME` | - | NOT NULL | - | - | Refresh Token의 만료 시각 | 날짜와 시간이 모두 필요하므로 `DATETIME` 계열을 사용한다. | 토큰의 유효기간이 지났는지 판단하고 만료된 토큰의 사용을 차단한다. |
+| `revoked_at` | `DATETIME` | - | NULL | NULL | - | Refresh Token이 폐기된 시각 | 폐기되지 않은 토큰은 값이 존재하지 않으므로 NULL을 허용한다. | 로그아웃 등으로 토큰이 더 이상 유효하지 않게 된 시점을 기록한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | Refresh Token 레코드 생성 시각 | 토큰이 발급되어 저장된 시점을 기록하기 위해 날짜와 시간을 저장한다. | 토큰 발급 시점을 추적한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_refresh_tokens` | PRIMARY KEY | `refresh_token_id` | - | 각 Refresh Token 레코드를 고유하게 식별한다. |
+| `fk_refresh_tokens_user` | FOREIGN KEY | `user_id` | `users.user_id` | Refresh Token이 실제 사용자에게 속하도록 사용자 테이블과 연결한다. |
+| `uk_refresh_tokens_user` | UNIQUE | `user_id` | - | 한 사용자에게 Refresh Token 레코드가 두 개 이상 생성되지 않도록 하여 사용자와 Refresh Token의 1:1 관계를 보장한다. |
+| `uk_refresh_tokens_token_hash` | UNIQUE | `token_hash` | - | 동일한 Refresh Token 값이 여러 토큰 레코드에 중복 저장되지 않도록 한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `refresh_tokens.user_id` ↔ `users.user_id` | 0..1:1 | 각 Refresh Token은 반드시 한 사용자에게 속하며, 한 사용자는 동시에 최대 하나의 Refresh Token만 가질 수 있다. 로그인하지 않았거나 로그아웃한 사용자는 Refresh Token을 가지지 않을 수 있다. |
+
+#### 5. 설계 근거
+
+- SHA-256 digest 길이 근거: NIST FIPS 180-4, Secure Hash Standard (SHS), SHA-256 Message Digest Size = 256 bits.
+- 256 bit = 32 byte이며 hexadecimal 표현은 byte당 2문자를 사용하므로 저장 문자열 길이는 64자이다.
+- 참고: https://doi.org/10.6028/NIST.FIPS.180-4
+
+---
+
+## 3. places - 장소 테이블
+
+#### 1. 테이블 설명
+
+자물쇠가 기록된 좌표와 법정동 정보를 저장한다. 프론트는 Geolocation 및 Kakao 지도에서 최종 좌표를 확정해 전달한다. 백엔드는 정확히 동일한 좌표의 기존 Place를 Kakao 재검증·법정동 갱신 없이 재사용한다. 동일 좌표 Place가 없으면 서버 Kakao 좌표 → 행정구역정보 API의 유효한 법정동(B) code/name으로만 신규 Place를 생성한다. 요청의 법정동 값은 저장 신뢰값이 아니다. 법정동 미확인 위치에서는 신규 Place/Record 생성이 실패한다. 기존/예외 데이터의 NULL 법정동 조회 fallback과 대시보드 `legal_dong_code` 그룹화는 유지한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `place_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 장소 고유 ID | 개별 장소 식별 |
+| `legal_dong_code` | `VARCHAR` | 20 | NULL | `NULL` | IDX | 법정동 코드 | Kakao `region_type=B` 결과의 `code`. 값이 있으면 대시보드 지역 그룹의 기준 키이며, 법정동 미확인 시 NULL |
+| `legal_dong_name` | `VARCHAR` | 100 | NULL | `NULL` | - | 법정동 3depth 표시명 | Kakao `region_type=B` 응답의 `region_3depth_name`. 법정동 미확인 시 NULL이며 화면에서는 `확인할 수 없음`으로 표시 |
+| `latitude` | `DECIMAL` | 11,7 | NOT NULL | - | - | 위도 | 지도 표시 및 장소 좌표 식별 |
+| `longitude` | `DECIMAL` | 10,7 | NOT NULL | - | - | 경도 | 지도 표시 및 장소 좌표 식별 |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 생성 시각 | 생성 추적 |
+| `updated_at` | `DATETIME` | - | NULL | `NULL` | - | 최종 수정 시각 | 메타데이터 수정 추적 |
+
+#### 3. 제약조건 및 인덱스
+
+| 이름 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `pk_places` | PRIMARY KEY | `place_id` | 장소 식별 |
+| `idx_places_legal_dong_code` | INDEX | `legal_dong_code` | 법정동 기준 집계/조회 지원 |
+| `uk_places_coordinates` | UNIQUE | `latitude`, `longitude` | V4 기준 동일 좌표 장소 중복 방지 |
+| `chk_places_legal_dong_pair` | CHECK | `legal_dong_code`, `legal_dong_name` | 두 값이 모두 NULL이거나 모두 NOT NULL이어야 한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_place_location_frontend` | 프론트는 브라우저 Geolocation API로 최초 좌표를 얻고 Kakao Maps SDK 지도에서 사용자가 수정한 최종 `latitude`/`longitude`를 확정한다. |
+| `rule_place_legal_dong_frontend` | 프론트의 `legalDongCode`, `legalDongName`은 호환성용 선택 입력이며 신규 Place 저장에는 사용하지 않는다. 서버가 좌표로 확인한 Kakao B code/name을 사용한다. |
+| `rule_place_legal_dong_nullable_pair` | 기존/예외 데이터를 위해 두 법정동 컬럼의 NULL 허용 및 쌍 CHECK를 유지한다. 신규 Place는 서버 Kakao에서 null/blank가 아닌 B code/name을 확인한 경우에만 생성한다. |
+| `rule_place_kakao_sdk_failure` | Kakao Maps SDK 법정동 조회 호출 자체가 실패한 경우 이를 법정동 없음으로 간주하지 않는다. 프론트는 자물쇠 생성 요청을 중단하거나 재시도한다. |
+| `rule_dashboard_group_by_legal_dong_code` | 대시보드는 `legal_dong_code` 기준으로 그룹화하고 `legal_dong_name`은 표시용으로 사용한다. `legal_dong_code IS NULL`인 장소들은 하나의 미확인 그룹으로 집계하며 화면에는 `확인할 수 없음`으로 표시한다. |
+| `rule_place_reuse_exact_coordinates` | latitude와 longitude가 모두 정확히 동일한 기존 Place를 먼저 조회해 Kakao 재호출·법정동 재검증·갱신 없이 그대로 재사용한다. 근접 좌표는 재사용하지 않으며, 신규 Place에는 서버 Kakao 법정동 검증이 필요하다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 설명 |
+| --- | --- | --- | --- |
+| `records` | `places.place_id` ↔ `records.place_id` | 1:N | 하나의 장소에 여러 자물쇠가 존재할 수 있다. |
+| `monthly_reports` | `places.place_id` ↔ `monthly_reports.top_place_id` | 1:N | 월간 대표 법정동을 선정한 뒤 그 동의 대표 장소 행을 `top_place_id`에 저장한다. |
+| `record_drafts` | `uploads.upload_id` ↔ `record_drafts.upload_id` | N:1 | 사진이 있는 임시저장은 Upload 메타데이터를 참조한다. Draft의 유효기간 동안 새 Signed URL을 발급할 수 있으며 Draft 삭제만으로 Upload/GCS 객체를 삭제하지 않는다. |
+
+---
+
+## 4. music_tracks - 음악 정보 테이블
+
+#### 1. 테이블 설명
+
+음악의 기본 정보를 저장하는 테이블이다. 자물쇠에 기록할 음악을 식별하고 음악 정보 표시, 인기 음악 집계, 음악 추천 등의 기능에서 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `music_track_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 뮤로 내부에서 음악을 식별하는 고유 ID | 음악 데이터를 고유하게 식별하고 향후 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 다른 테이블에서 특정 음악을 참조하기 위한 기준 ID로 사용한다. |
+| `external_track_id` | `VARCHAR` | 22 | NOT NULL | - | UK | 외부 음악 서비스에서 제공하는 음악의 고유 ID | Spotify 공식 개발자 문서기준: “Spotify ID는 Spotify URI 끝에 붙는 **Base62 식별자**이며, 128비트 UUID/해시 값을 62진법(대소문자 영문 52자 + 숫자 10자)으로 압축하여 **정확히 22자의 고정 길이**를 갖는다" | 외부 음악 서비스의 음악과 뮤로 내부 음악 데이터를 연결하고 동일 음악을 식별한다. |
+| `title` | `VARCHAR` | 255 | NOT NULL | - | - | 곡 제목 | 음원 유통 메타데이터 표준 (DDEX) 규격 기준 | 자물쇠, 추천 결과, 인기 음악 등에서 곡 제목을 표시한다. |
+| `artist_name` | `VARCHAR` | 255 | NOT NULL | - | - | 아티스트명 | 음원 유통 메타데이터 표준 (DDEX) 규격 기준 | 사용자에게 음악의 아티스트 정보를 표시한다. |
+| `album_image_url` | `VARCHAR` | 255 | NOT NULL | - | - | 앨범 이미지 URL | 저작권 및 정책으로 Spotify가 제공하는 이미지url을 사용해야한다. Spotify에서 제공하는 앨범 이미지 URL을 저장하며, URL 길이의 변동 가능성을 고려하여 `VARCHAR(255)`를 사용한다. | 자물쇠나 음악 추천 결과에서 앨범 이미지를 표시한다. |
+| `external_url` | `VARCHAR` | 255 | NOT NULL | - | - | Spotify에서 해당 곡을 확인하거나 재생하기 위한 외부 페이지 URL | 외부 URL은 길이가 가변적이므로 `VARCHAR`를 사용한다. | 사용자가 해당 음악을 외부 음악 서비스에서 확인하거나 재생할 수 있도록 연결한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 음악 정보가 뮤로에 최초 저장된 시각 | 날짜와 시간이 모두 필요하므로 `DATETIME` 계열을 사용한다. | 음악 데이터가 최초 등록된 시점을 기록한다. |
+| `updated_at` | `DATETIME` | - | NULL | `NULL` | - | 음악 정보가 마지막으로 수정된 시각 | 최초 생성 이후 실제 음악 메타데이터 수정이 발생한 마지막 시각을 저장한다. 생성 후 수정 이력이 없는 경우 `NULL`을 유지하여 `created_at`과 역할을 구분한다. | 외부 음악 정보가 실제로 갱신된 마지막 시점을 추적한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_music_tracks` | PRIMARY KEY | `music_track_id` | - | 각 음악 데이터를 뮤로 내부에서 고유하게 식별한다. |
+| `uk_music_tracks_external_track_id` | UNIQUE | `external_track_id` | - | 동일한 외부 음악이 `music_tracks`에 중복 저장되지 않도록 한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `records` | `music_tracks.music_track_id` ↔ `records.music_track_id` | 1:N | 하나의 음악은 여러 사용자의 여러 자물쇠에 기록될 수 있으며, 각 자물쇠는 하나의 음악을 참조한다. |
+
+---
+
+## 5. records - 자물쇠(음악기록핀) 테이블
+
+#### 1. 테이블 설명
+
+사용자가 특정 장소에서 음악, 날씨, 기분, 코멘트 등의 정보를 기록한 자물쇠 데이터를 저장하는 테이블이다. 지도 표시, 사용자 자물쇠 지역 그룹, 월간 리포트, 음악 추천 및 친구 간 자물쇠 조회 등의 핵심 기능에서 사용한다. 사용자 자물쇠 지역 그룹은 별도 dashboard 테이블을 만들지 않고 `records.place_id → places.legal_dong_code` 경로를 이용해 현재 사용자의 삭제되지 않은 자물쇠를 법정동 코드 단위로 조회·집계한다.<br>
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `record_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 자물쇠 고유 ID | 자물쇠 데이터를 고유하게 식별하고 향후 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 자물쇠 한 건을 식별하고 사진 등 관련 데이터가 해당 자물쇠를 참조하는 기준이 된다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 자물쇠를 생성한 사용자 ID | `users.user_id`와 동일한 타입을 사용하여 작성자와 자물쇠를 연결한다. | 자물쇠의 소유자를 식별하고 본인의 자물쇠 조회·수정·삭제 권한 판단 등에 사용한다. |
+| `place_id` | `BIGINT` | - | NOT NULL | - | FK | 자물쇠가 기록된 장소 ID | 장소 정보는 `places`에서 별도로 관리하므로 해당 장소의 PK를 참조한다. | 지도에서 자물쇠 위치를 표시하고 장소·지역 기준 조회 및 집계에 사용한다. |
+| `music_track_id` | `BIGINT` | - | NOT NULL | - | FK | 자물쇠에 기록된 음악 ID | 음악 기본 정보를 중복 저장하지 않고 `music_tracks`의 음악을 참조하기 위해 FK를 사용한다. | 해당 자물쇠에 어떤 음악이 기록되었는지 식별하고 인기 음악 집계·추천 등에 활용한다. |
+| `weather_condition` | `ENUM` | - | NULL | `NULL` | - | 자물쇠 생성 당시의 날씨 상태 | 외부 날씨 API 응답을 그대로 저장하지 않고 백엔드에서 MULO 내부 날씨 분류값으로 변환하여 저장한다. 날씨 상태는 정해진 값의 집합으로 관리하므로 `ENUM`을 사용한다. V1에서 허용하는 값은 `CLEAR`, `CLOUDY`, `OVERCAST`, `RAIN`, `SNOW`, `RAIN_SNOW`, `SHOWER`이다. | 과거 기록 표시 및 날씨 기반 리포트 등에 활용한다. 자물쇠 생성 시 날씨 정보를 자동 조회하며 날씨 확보 실패 시 기록 생성 자체는 실패시키지 않고 `NULL`로 저장한다. |
+| `temperature` | `DECIMAL` | 3, 1 | NULL | - | - | 자물쇠 생성 당시의 기온 | 기온은 음수와 소수점 이하 값을 포함할 수 있으므로 숫자형인 `DECIMAL`을 사용한다. `DECIMAL(3,1)`은 소수점 이하 1자리까지 표현하며 `-99.9 ~ 99.9` 범위의 값을 저장할 수 있어 국내 기온 데이터를 충분히 수용할 수 있다. | 자물쇠 생성 시 기온 정보를 자동 조회하여 저장하며, 외부 날씨 정보 조회에 실패할 수 있으므로 `NULL`을 허용한다. |
+| `mood_score` | `TINYINT` | - | NOT NULL | -
+( 화면 초기값 0 → 항상 요청 body에 mood_score 전달 ) | - | 사용자가 선택한 기분 점수 | 기분은 -50~50 범위의 정수값으로 저장하므로 MySQL TINYINT 범위 안에 충분히 포함된다. 문자열 기분값 대신 수치형으로 저장하여 평균 계산 및 구간별 대표 이모지 매핑에 활용하기 쉽다. | 자물쇠 생성 당시 사용자의 기분을 수치로 기록하고 월간 평균 기분 계산, 기준으로 활용한다. |
+| `comment` | `VARCHAR` | 80 | NULL | NULL | - | 사용자가 작성한 자물쇠 코멘트 | 현재 요구사항에서 최대 80자의 짧은 문장이므로 `VARCHAR(80)`으로 충분하다. | 사용자가 해당 순간에 대한 짧은 기록을 남길 수 있도록 한다. |
+| `deleted_at` | `DATETIME` | - | NULL | NULL | - | 자물쇠가 삭제된 시각 | 삭제되지 않은 자물쇠에는 값이 없으므로 NULL을 허용한다. 논리 삭제 정책을 사용하는 경우에만 필요하다. | 삭제 시점 추적 및 AI 검색·리포트 등에서 삭제 데이터 제외 여부를 판단하는 데 활용한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 자물쇠 생성 시각 | 날짜와 시간이 모두 필요하므로 `DATETIME` 계열을 사용한다. | 최신순 정렬, 월간 리포트 기간 산정, 기간 기반 조회 및 월간 리포트 산정 등에 사용한다. |
+| `updated_at` | `DATETIME` | - | NULL | `NULL` | - | 자물쇠가 마지막으로 수정된 시각 | 최초 생성 이후 코멘트 등 실제 수정이 발생한 마지막 시각을 저장한다. 생성 후 수정 이력이 없는 경우 `NULL`을 유지하여 `created_at`과 역할을 구분한다. | 자물쇠 정보의 최종 수정 시점을 기록한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_records` | PRIMARY KEY | `record_id` | - | 각 자물쇠를 고유하게 식별한다. |
+| `fk_records_user` | FOREIGN KEY | `user_id` | `users.user_id` | 자물쇠가 실제 사용자에게 속하도록 작성자와 연결한다. |
+| `fk_records_place` | FOREIGN KEY | `place_id` | `places.place_id` | 자물쇠가 기록된 장소와 연결한다. |
+| `fk_records_music_track` | FOREIGN KEY | `music_track_id` | `music_tracks.music_track_id` | 자물쇠에 저장된 음악과 연결한다. |
+| `ck_records_mood_score` | CHECK | `mood_score` | - | `CHECK (mood_score BETWEEN -50 AND 50)`를 적용하여 사용자의 기분 점수가 서비스에서 정의한 -50~50 범위를 벗어나지 않도록 한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_record_photo_required` | 자물쇠 생성 시 사진은 필수이다. 생성 요청에는 현재 사용자가 소유한 유효한 `uploadId`가 반드시 포함되어야 하며, 사진 연결에 실패하면 자물쇠 생성을 완료하지 않는다. |
+| `rule_record_photo_single` | 하나의 자물쇠에는 사진 한 장만 연결한다. 최종 사진 정보는 `record_photos`에서 관리한다. |
+| `rule_popular_records_recent_7d` | 홈의 인기 자물쇠 지도/목록은 조회 시점 기준 `records.created_at >= 조회 시점 - 7일`이고 `deleted_at IS NULL`인 자물쇠만 대상으로 한다. 최근 7일 내 자물쇠가 없는 장소는 인기 자물쇠 마커 대상에서 제외한다. |
+| `rule_popular_track_ranking` | 인기 자물쇠 마커 선택 후 음악 랭킹은 같은 최근 7일 자물쇠만 `music_track_id`별로 집계한다. 1차 정렬은 저장 횟수(`recordCount`) 내림차순, 동률 시 `music_track_id` 오름차순이다. |
+| `rule_my_records_all_time` | 내 자물쇠 지도/목록에는 최근 7일 제한을 적용하지 않는다. 현재 사용자의 `deleted_at IS NULL`인 모든 자물쇠가 조회 대상이다. |
+| `rule_map_cluster_multi_place` | 지도 축소로 여러 장소 마커가 하나의 클러스터로 묶이면 클러스터에 포함된 모든 `place_id`를 `placeIds` 목록으로 조회할 수 있어야 한다. 인기/내 자물쇠 모두 동일하다. |
+| `rule_popular_marker_count` | 인기 자물쇠 지도 마커의 `recordsCount`는 해당 장소에서 조회 시점 기준 최근 7일 이내 생성되고 삭제되지 않은 자물쇠 수다. |
+| `rule_my_marker_count` | 내 자물쇠 지도 마커의 `myRecordsCount`는 해당 장소에 저장된 현재 사용자의 전체 삭제되지 않은 자물쇠 수이며 7일 제한을 적용하지 않는다. |
+| `rule_user_record_region_group` | 현재 사용자의 자물쇠 지역 폴더는 `places.legal_dong_code` 기준으로 그룹화하고 `places.legal_dong_name`을 표시명으로 사용한다. `legal_dong_code IS NULL`은 하나의 미확인 그룹으로 묶어 UI에서 `확인할 수 없음`으로 표시한다. |
+| `rule_user_record_region_detail` | 지역 폴더 선택 시 해당 법정동 그룹에 속한 현재 사용자의 삭제되지 않은 자물쇠 목록을 조회하며, 자물쇠 선택 시 기존 자물쇠 상세 조회를 사용한다. |
+| `rule_cursor_page_size` | 커서 기반 목록 조회의 `size` 기본값은 20, 최대값은 100이다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `records.user_id` ↔ `users.user_id` | N:1 | 각 자물쇠는 한 사용자가 생성하며, 한 사용자는 여러 자물쇠를 생성할 수 있다. |
+| `places` | `records.place_id` ↔ `places.place_id` | N:1 | 각 자물쇠는 하나의 장소를 참조하며, 하나의 장소에는 여러 자물쇠가 기록될 수 있다. |
+| `music_tracks` | `records.music_track_id` ↔ `music_tracks.music_track_id` | N:1 | 각 자물쇠는 하나의 음악을 참조하며, 하나의 음악은 여러 자물쇠에서 사용될 수 있다. |
+| `record_photos` | `records.record_id` ↔ `record_photos.record_id` | 1:1 | 서비스 정책상 자물쇠 생성 완료 시 사진 한 장이 반드시 연결된다. `record_photos.record_id`의 UNIQUE 제약은 하나의 자물쇠에 두 장 이상의 사진이 연결되는 것을 방지한다. |
+
+---
+
+## 6. record_photos - 자물쇠 사진
+
+#### 1. 테이블 설명
+
+자물쇠에 최종 연결된 사진 정보를 저장하는 테이블이다. 실제 이미지 파일은 Google Cloud Storage에 저장하고, DB에는 자물쇠와 연결된 이미지의 저장 위치와 파일 메타데이터를 저장한다. 자물쇠 상세 조회, 지도·대시보드의 사진 표시 및 AI 사진 분석 등에 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `record_photo_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 자물쇠 사진 레코드의 고유 ID | 사진 데이터를 고유하게 식별하고 향후 사진 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 개별 자물쇠 사진 정보를 식별한다. |
+| `record_id` | `BIGINT` | - | NOT NULL | - | FK | 사진이 첨부된 자물쇠 ID | `records.record_id`와 동일한 타입을 사용하여 사진과 자물쇠를 연결한다. | 어떤 자물쇠에 첨부된 사진인지 식별한다. |
+| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | 자물쇠 사진을 조회하고 화면에 표시할 때 이미지의 저장 위치를 확인한다. |
+| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | `image/jpeg`, `image/png`, `image/heic`, `image/webp` 등 파일 형식을 문자열로 표현하므로 `VARCHAR`를 사용한다. | 업로드된 이미지 형식을 확인하고 파일 검증·처리에 활용한다. |
+| `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 파일 크기는 정수이며 파일 크기가 커질 가능성을 충분히 수용하기 위해 `BIGINT`를 사용할 수 있다. | 이미지 업로드 용량 제한 검증 및 파일 관리에 활용한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사진 정보가 생성된 시각 | 사진 등록 시점을 날짜와 시간으로 기록하기 위해 `DATETIME` 계열을 사용한다. | 사진이 자물쇠에 등록된 시점을 기록한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_record_photos` | PRIMARY KEY | `record_photo_id` | - | 각 자물쇠 사진 정보를 고유하게 식별한다. |
+| `fk_record_photos_lock` | FOREIGN KEY | `record_id` | `records.record_id` | 사진이 실제 자물쇠에 속하도록 자물쇠와 연결한다. |
+| `uk_record_photos_lock` | UNIQUE | `record_id` | - | 하나의 자물쇠에 두 장 이상의 사진이 연결되지 않도록 한다. 자물쇠 생성 시 사진 한 장을 필수로 연결하는 규칙은 서비스 계층에서 함께 보장한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_record_photo_required` | 자물쇠 생성 완료 시 사진 한 장이 반드시 연결되어야 한다. 사진 없이 자물쇠 생성을 완료하지 않는다. |
+| `rule_record_photo_storage` | 실제 이미지 파일은 Google Cloud Storage에 저장하고, `record_photos`에는 최종 자물쇠에 연결된 이미지의 위치와 메타데이터를 저장한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `records` | `record_photos.record_id` ↔ `records.record_id` | 1:1 | 각 사진은 하나의 자물쇠에 속한다. 서비스 정책상 자물쇠 생성 완료 시 사진 한 장이 반드시 연결되며, `UNIQUE(record_id)`로 두 장 이상의 연결을 방지한다. |
+| `uploads` | 최종 자물쇠 생성 시 `uploadId`에 해당하는 임시 업로드 정보를 사용하여 `record_photos`를 생성 | 논리적 연계 | 임시 업로드 단계에서 저장한 이미지 위치와 파일 메타데이터를 최종 자물쇠 사진 정보로 연결한다. 직접 FK 관계는 두지 않는다. |
+
+---
+
+## 7. uploads - 임시 이미지 업로드 테이블
+
+#### 1. 테이블 설명
+
+자물쇠 생성 전에 업로드된 임시 이미지의 메타데이터를 저장하는 테이블이다. 실제 이미지 파일은 Google Cloud Storage에 저장하며, 백엔드는 `upload_id`를 통해 업로드 소유 사용자와 이미지 저장 위치를 식별한다. 발급된 `uploadId`는 사진 기반 AI 음악 추천과 최종 자물쇠 생성에서 재사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `upload_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 임시 업로드 고유 ID | `/api/uploads`가 `uploadId: Long`을 발급하므로 다른 서비스 내부 식별자와 동일하게 `BIGINT`를 사용한다. | 사진 기반 음악 추천과 최종 자물쇠 생성에서 동일한 임시 이미지를 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 임시 이미지를 업로드한 사용자 ID | 임시 업로드는 인증된 사용자가 소유하는 리소스이며, `users.user_id`와 연결하여 소유권을 확인한다. | 다른 사용자의 `uploadId` 사용을 방지하고 현재 사용자 소유 업로드인지 검증한다. |
+| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 임시 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | AI 사진 추천 및 최종 자물쇠 생성 시 사용할 이미지의 저장 위치를 확인한다. |
+| `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | 업로드 API에서 JPG, JPEG, PNG, HEIC, WebP 이미지를 허용하며 파일 형식을 서버에서 검증하므로 MIME 타입을 저장한다. | 파일 형식 확인 및 최종 `record_photos` 메타데이터 생성에 사용한다. |
+| `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 업로드 API는 최대 10MB 제한을 적용하며 파일 크기는 정수이므로 `BIGINT`를 사용한다. | 업로드 용량 검증 및 최종 사진 메타데이터 생성에 사용한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 임시 업로드 생성 시각 | 임시 업로드가 생성된 시점을 기록한다. | 미연결 임시 업로드 cleanup 대상 판단의 기준 시각으로 사용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_uploads` | PRIMARY KEY | `upload_id` | - | 각 임시 업로드를 고유하게 식별한다. |
+| `fk_uploads_user` | FOREIGN KEY | `user_id` | `users.user_id` | 임시 업로드가 실제 사용자에게 속하도록 소유 사용자와 연결한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_upload_owner` | `uploadId`는 현재 로그인한 사용자가 소유한 유효한 임시 업로드여야 한다. 존재하지 않거나, 다른 사용자 소유이거나, 생성 후 1시간이 지나 만료된 경우 동일하게 `UPLOAD_NOT_FOUND`로 처리한다. |
+| `rule_upload_reuse` | 동일한 `uploadId`를 유효시간 내 사진 기반 AI 음악 추천과 최종 자물쇠 생성에서 재사용한다. |
+| `rule_upload_required_for_record` | 자물쇠 생성 시 사진이 필수이므로 유효한 `uploadId`를 반드시 전달해야 한다. |
+| `rule_upload_validity` | 임시 업로드는 생성 시점부터 1시간 동안 유효하다. 유효시간이 지난 업로드는 사진 기반 음악 추천 및 자물쇠 생성에 사용할 수 없다. |
+| `rule_upload_cleanup` | 생성 후 1시간이 지나도록 최종 자물쇠에 연결되지 않은 임시 업로드는 `uploads` 레코드와 Google Cloud Storage의 임시 이미지 cleanup 대상이다. |
+| `rule_upload_finalize` | 자물쇠 생성 성공 시 임시 업로드의 이미지 위치 및 메타데이터를 `record_photos`에 저장하고 해당 `uploads` 레코드는 삭제한다. |
+| `rule_upload_format` | 허용 이미지 형식은 JPG, JPEG, PNG, HEIC, WebP이며 최대 파일 크기는 10MB이다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `uploads.user_id` ↔ `users.user_id` | N:1 | 한 사용자는 여러 임시 이미지를 업로드할 수 있으며, 각 임시 업로드는 한 사용자에게 속한다. |
+| `record_photos` | `uploadId`를 이용한 최종 자물쇠 생성 처리 | 논리적 연계 | 자물쇠 생성 시 임시 업로드의 이미지 위치와 파일 메타데이터를 사용하여 최종 `record_photos` 데이터를 생성한다. 직접 FK 관계는 두지 않는다. |
+
+---
+
+## 8. record_drafts - 자물쇠 임시저장 [V1 제외, V2 구현]
+
+#### 1. 테이블 설명
+
+> **상태: V1 제외, V2 구현** — V1에서는 사용하지 않았으며 V2에서 사용자당 1개의 서버 임시저장 API를 제공한다.
+
+자물쇠 작성 중인 전체 스냅샷을 사용자별로 저장하고, 다른 기기·브라우저에서도 다시 불러올 수 있도록 한다. `updated_at`부터 14일이 지난 Draft는 조회되지 않으며, PUT으로 다시 저장하면 같은 행을 갱신하여 보관 기간을 연장한다. 만료 행은 별도 물리 삭제하지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `record_draft_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 임시저장 데이터 고유 ID | 임시저장 데이터를 고유하게 식별하기 위한 숫자형 PK이다. | 임시저장 한 건을 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 임시저장을 작성한 사용자 ID | `users.user_id`를 참조하며 `uk_record_drafts_user`로 사용자당 한 행만 허용한다. | 임시저장의 소유자를 식별한다. |
+| `latitude` | `DECIMAL` | `11,7` | NULL | NULL | - | 작성 중 선택한 위도 | 위치 선택 전에는 NULL을 허용한다. | 작성 화면 복원에 사용한다. |
+| `longitude` | `DECIMAL` | `10,7` | NULL | NULL | - | 작성 중 선택한 경도 | 위치 선택 전에는 NULL을 허용한다. | 작성 화면 복원에 사용한다. |
+| `legal_dong_code` | `VARCHAR` | 20 | NULL | NULL | - | 법정동 코드 | 위치 정보가 있을 때 선택적으로 저장한다. | 위치 표시 및 복원에 사용한다. |
+| `legal_dong_name` | `VARCHAR` | 100 | NULL | NULL | - | 법정동 이름 | 위치 정보가 있을 때 선택적으로 저장한다. | 위치 표시 및 복원에 사용한다. |
+| `external_track_id` | `VARCHAR` | 22 | NULL | NULL | - | 외부 음악 트랙 ID | 음악 선택 전에는 NULL을 허용한다. | 선택한 음악 정보를 복원한다. |
+| `title` | `VARCHAR` | 255 | NULL | NULL | - | 음악 제목 | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `artist_name` | `VARCHAR` | 255 | NULL | NULL | - | 아티스트명 | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `album_image_url` | `VARCHAR` | 255 | NULL | NULL | - | 앨범 이미지 URL | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `external_url` | `VARCHAR` | 255 | NULL | NULL | - | 외부 음악 URL | 음악 정보와 함께 저장한다. | 선택한 음악 정보를 복원한다. |
+| `mood_score` | `TINYINT` | - | NULL | NULL | - | 작성 중 선택한 기분 | API에서 null/생략된 값은 0으로 저장하며 허용 범위는 `-50 ~ 50`이다. | 임시저장 시점의 기분값을 복원한다. |
+| `comment` | `VARCHAR` | 80 | NULL | NULL | - | 작성 중 입력한 코멘트 | 자물쇠의 코멘트 최대 길이와 동일하게 관리한다. | 작성 중이던 코멘트를 복원한다. |
+| `upload_id` | `BIGINT` | - | NULL | NULL | FK | 연결된 임시 Upload ID | 사진이 선택되지 않았을 수 있으므로 NULL이며 `uploads.upload_id`를 참조한다. | Draft 사진의 Upload 메타데이터를 찾고 Signed URL을 발급한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 임시저장 생성 시각 | 임시저장이 처음 생성된 시점을 기록한다. | 임시저장 생성 시점을 관리한다. |
+| `updated_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 마지막 임시저장 시각 | 작성 내용이 갱신된 마지막 시점을 기록한다. | 가장 최근 작성 상태와 임시저장 시점을 관리한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_record_drafts` | PRIMARY KEY | `record_draft_id` | - | 각 임시저장 데이터를 고유하게 식별한다. |
+| `uk_record_drafts_user` | UNIQUE | `user_id` | - | 사용자당 임시저장 행을 최대 1개로 제한한다. |
+| `fk_record_drafts_user` | FOREIGN KEY | `user_id` | `users.user_id` | 임시저장 데이터의 소유 사용자와 연결한다. |
+| `fk_record_drafts_upload` | FOREIGN KEY | `upload_id` | `uploads.upload_id` | 선택된 사진의 Upload 메타데이터를 참조한다. |
+| `chk_record_drafts_mood_score` | CHECK | `mood_score` | - | `mood_score`가 서비스에서 정의한 `-50 ~ 50` 범위를 벗어나지 않도록 `CHECK (mood_score BETWEEN -50 AND 50)`를 적용한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_record_draft_count` | 사용자당 임시저장은 최대 1개이며 `uk_record_drafts_user`로 보장한다. |
+| `rule_record_draft_upsert` | PUT은 전체 스냅샷 Upsert다. 생략/null 선택 필드는 제거하며 moodScore 생략/null은 0으로 저장한다. |
+| `rule_record_draft_expiration` | 마지막 저장 시각 `updated_at`부터 14일이 되는 시점부터 만료한다. GET은 만료 Draft를 반환하지 않고 updated_at을 변경하지 않으며, PUT 재저장은 기존 행을 갱신한다. |
+| `rule_record_draft_upload` | 일반 Upload는 생성 후 1시간 동안 사용 가능하다. 활성 Draft가 이미 참조하는 본인 Upload는 Draft 유효기간 내 조회를 위해 새 10분 Signed URL을 발급할 수 있다. |
+| `rule_record_draft_gcs` | Draft 사진 교체·삭제·만료 시 Upload 메타데이터와 GCS 객체를 삭제하지 않는다. GCS 객체 물리 삭제 및 만료 cleanup은 V2 범위에 포함하지 않는다. |
+| `rule_record_draft_record_create` | 최종 Record 생성 성공 시 해당 사용자의 Draft를 같은 DB 트랜잭션에서 삭제한다. RecordPhoto는 최종 요청의 Upload를 사용하며 해당 Upload 메타데이터만 기존 정책대로 삭제한다. GCS 객체는 유지한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `record_drafts.user_id` ↔ `users.user_id` | 1:1 | `uk_record_drafts_user`는 사용자당 Draft 최대 1개를 보장한다. |
+| `uploads` | `record_drafts.upload_id` ↔ `uploads.upload_id` | N:1 | Draft가 임시 사진을 선택한 경우 Upload 메타데이터를 참조한다. Draft 사진 조회는 10분 Signed URL을 발급하며 일반 Upload 1시간 제한은 유지한다. |
+
+---
+
+## 9. friend_requests - 친구 요청 테이블
+
+#### 1. 테이블 설명
+
+사용자 간의 **현재 대기 중인 친구 요청**을 저장하는 테이블이다. 데이터가 존재한다는 것 자체가 아직 처리되지 않은 친구 요청을 의미한다. 요청이 수락되면 friendships 테이블에 친구 관계를 생성한 뒤 해당 요청을 삭제하고, 거절 또는 요청 취소 시에는 요청 데이터만 삭제한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `friend_request_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 친구 요청 고유 ID | 각 친구 요청을 고유하게 식별하고 향후 요청 데이터 증가를 고려하여 `BIGINT`를 사용한다. | 하나의 친구 요청 데이터를 식별한다. |
+| `requester_id` | `BIGINT` | - | NOT NULL | - | FK | 친구 요청을 보낸 사용자 ID | `users.user_id`와 동일한 타입을 사용하여 요청자를 참조한다. | 누가 친구 요청을 보냈는지 식별한다. |
+| `addressee_id` | `BIGINT` | - | NOT NULL | - | FK | 친구 요청을 받은 사용자 ID | `users.user_id`와 동일한 타입을 사용하여 요청 대상 사용자를 참조한다. | 누가 친구 요청을 받았는지 식별한다. |
+| `user_low_id` | `BIGINT` | - | NOT NULL | `GENERATED` | - | 요청 사용자 쌍 중 작은 사용자 ID | `LEAST(requester_id, addressee_id)` 값으로 자동 생성하여 요청 방향과 관계없이 동일 사용자 쌍을 같은 값으로 정규화한다. | 역방향 포함 동일 사용자 쌍의 중복 친구 요청을 방지하는 기준으로 사용한다. |
+| `user_high_id` | `BIGINT` | - | NOT NULL | `GENERATED` | - | 요청 사용자 쌍 중 큰 사용자 ID | `GREATEST(requester_id, addressee_id)` 값으로 자동 생성하여 요청 방향과 관계없이 동일 사용자 쌍을 같은 값으로 정규화한다. | 역방향 포함 동일 사용자 쌍의 중복 친구 요청을 방지하는 기준으로 사용한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 친구 요청 생성 시각 | 요청 생성 시점을 기록하기 위해 날짜와 시간을 저장한다. | 친구 요청 목록 정렬 및 요청 생성 시점 확인에 사용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_friend_requests` | PRIMARY KEY | `friend_request_id` | - | 각 친구 요청을 고유하게 식별한다. |
+| `fk_friend_requests_requester` | FOREIGN KEY | `requester_id` | `users.user_id` | 친구 요청을 보낸 사용자가 실제 존재하는 사용자인지 보장한다. |
+| `fk_friend_requests_addressee` | FOREIGN KEY | `addressee_id` | `users.user_id` | 친구 요청을 받은 사용자가 실제 존재하는 사용자인지 보장한다. |
+| `chk_friend_requests_not_self` | CHECK | `requester_id`, `addressee_id` | - | `CHECK (requester_id <> addressee_id)`를 적용하여 자기 자신에게 친구 요청을 보내는 것을 방지한다. |
+| `uk_friend_requests_user_pair` | UNIQUE | `user_low_id`, `user_high_id` | - | 요청 방향과 관계없이 동일한 두 사용자 사이에 대기 중인 친구 요청이 두 개 이상 존재하지 않도록 한다. |
+
+역방향 요청 처리는 비즈니스 규칙으로 관리하며, `user_low_id`, `user_high_id`에 대한 UNIQUE 제약으로 동일 사용자 쌍의 정방향·역방향 요청이 동시에 중복 저장되는 것을 방지한다.
+
+#### **3-1. 비즈니스 규칙**
+
+| 규칙명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `rule_friend_requests_reverse` | 비즈니스 규칙 | `requester_id`, `addressee_id` | `friend_requests` | `A → B` 요청이 존재할 때 `B → A` 요청이 들어오면 새로운 요청을 생성하지 않고, 기존 친구 요청을 삭제한 뒤 `friendships`에 두 사용자 간 친구 관계를 생성한다. |
+| `rule_friend_requests_existing_friend` | 비즈니스 규칙 | `requester_id`, `addressee_id` | `friendships` | 두 사용자가 이미 친구 관계라면 새로운 친구 요청을 생성하지 않는다. |
+
+#### 4. 관계
+
+| FK 컬럼 | 참조 테이블 | 참조 컬럼 | 관계 |
+| --- | --- | --- | --- |
+| `requester_id` | `users` | `user_id` | users 1 : N friend_requests |
+| `addressee_id` | `users` | `user_id` | users 1 : N friend_requests |
+
+#### 5. 설계 설명
+
+| 항목 내용 |  |
+| --- | --- |
+| **테이블 설계 이유** | 친구 요청은 요청자와 수신자가 구분되는 방향성이 있는 데이터이므로, 방향성이 없는 실제 친구 관계와 분리하여 관리한다. `friend_requests`에는 현재 처리 대기 중인 요청만 저장하며, 수락·거절·취소가 완료되면 해당 요청 데이터는 삭제한다. |
+| **주요 관계 설계 이유** | 요청자와 수신자 모두 `users`에 존재하는 사용자이므로 각각 FK로 연결한다. 요청이 수락되면 `friendships`에 실제 양방향 친구 관계를 생성한다. |
+| **주요 데이터 타입 선정 이유** | 사용자 식별자는 `users.user_id`와 동일하게 `BIGINT`를 사용한다. 친구 요청 생성 시점은 날짜와 시간이 필요하므로 `created_at`에 `DATETIME`을 사용한다. |
+| **주요 제약조건 설정 이유** | 요청자와 수신자는 반드시 존재하는 사용자여야 하므로 FK를 설정한다. 자기 자신에게 요청할 수 없도록 CHECK 제약을 두며, `UNIQUE(user_low_id, user_high_id)`를 통해 요청 방향과 관계없이 동일한 두 사용자 사이에 대기 중인 친구 요청이 중복 생성되는 것을 방지한다. |
+| **동시성 고려** | `A → B`와 `B → A` 요청은 `user_low_id`, `user_high_id`가 동일한 사용자 쌍으로 계산되므로 `UNIQUE(user_low_id, user_high_id)` 제약을 통해 두 요청이 동시에 중복 저장되는 것을 방지한다. 역방향 요청이 감지되면 애플리케이션 트랜잭션에서 기존 요청을 삭제하고 `friendships`를 생성하여 친구 관계로 전환한다. |
+
+---
+
+## 10. friendships - 친구 관계 테이블
+
+#### 1. 테이블
+
+친구 요청이 수락된 이후 실제로 성립된 사용자 간 친구 관계를 저장하는 테이블이다. 친구 관계는 방향성이 없는 양방향 관계로 관리하며 친구 목록 조회 등에 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `friendship_id` | BIGINT | - | NOT NULL | AUTO_INCREMENT | PK | 친구 관계 고유 식별자 | 친구 관계 레코드를 고유하게 식별하기 위해 사용 | 친구 관계 식별 |
+| `user_low_id` | BIGINT | - | NOT NULL | - | FK | 친구 관계 사용자 중 ID가 작은 사용자 | 동일 사용자 쌍을 항상 같은 순서로 저장하기 위해 사용 | 친구 관계 중복 방지 및 친구 목록 조회 |
+| `user_high_id` | BIGINT | - | NOT NULL | - | FK | 친구 관계 사용자 중 ID가 큰 사용자 | 동일 사용자 쌍을 항상 같은 순서로 저장하기 위해 사용 | 친구 관계 중복 방지 및 친구 목록 조회 |
+| `created_at` | DATETIME | - | NOT NULL | CURRENT_TIMESTAMP | - | 친구 관계가 성립된 시각 | 친구가 된 시점을 기록 | 친구 관계 생성 시각 확인 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_friendships` | PRIMARY KEY | `friendship_id` | - | 각 친구 관계를 고유하게 식별한다. |
+| `fk_friendships_user_low` | FOREIGN KEY | `user_low_id` | `users.user_id` | 친구 관계에 포함된 사용자가 실제 존재하는 사용자인지 보장한다. |
+| `fk_friendships_user_high` | FOREIGN KEY | `user_high_id` | `users.user_id` | 친구 관계에 포함된 사용자가 실제 존재하는 사용자인지 보장한다. |
+| `chk_friendships_user_order` | CHECK | `user_low_id`, `user_high_id` | - | 항상 `user_low_id < user_high_id`가 되도록 하여 자기 자신과의 친구 관계를 막고 사용자 순서를 고정한다. |
+| `uk_friendships_user_pair` | UNIQUE | `user_low_id`, `user_high_id` | - | 동일한 두 사용자 사이에 친구 관계가 중복 생성되는 것을 방지한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `friendships.user_low_id` ↔ `users.user_id` | N:1 | 한 사용자는 여러 친구 관계에서 `user_low_id`로 포함될 수 있다. |
+| `users` | `friendships.user_high_id` ↔ `users.user_id` | N:1 | 한 사용자는 여러 친구 관계에서 `user_high_id`로 포함될 수 있다. |
+| `friend_requests` | 친구 요청 수락 결과로 `friendships` 생성 | 논리적 연계 | 요청이 수락되면 실제 친구 관계를 생성하고 기존 요청은 삭제한다. |
+
+#### 5. 설계 설명
+
+| 항목 | 내용 |
+| --- | --- |
+| **테이블 설계 이유** | 친구 요청이 수락된 이후 실제로 성립된 친구 관계만 저장하기 위해 `friend_requests`와 분리하여 설계한다. 친구 관계는 방향성이 없는 양방향 관계이므로 두 사용자 사이에 하나의 레코드만 저장한다. |
+| **주요 관계 설계 이유** | 하나의 친구 관계에는 두 명의 사용자가 포함되므로 `user_low_id`, `user_high_id`를 각각 `users.user_id`에 FK로 연결한다. 두 사용자 ID를 항상 작은 값과 큰 값으로 정렬하여 저장함으로써 `A-B`와 `B-A`를 동일한 친구 관계로 표현한다. |
+| **주요 데이터 타입 선정 이유** | 사용자 식별자는 `users.user_id`와 동일하게 `BIGINT`를 사용한다. 친구 관계 성립 시점은 날짜와 시간이 필요하므로 `DATETIME`을 사용한다. |
+| **주요 제약조건 설정 이유** | `user_low_id < user_high_id` CHECK 제약을 통해 자기 자신과의 친구 관계를 방지하고 사용자 저장 순서를 고정한다. 또한 `UNIQUE(user_low_id, user_high_id)`를 적용하여 동일한 두 사용자 사이의 친구 관계가 중복 생성되는 것을 방지한다. |
+| **친구 삭제 처리 방식** | 친구 관계를 한 행으로 관리하므로 친구 삭제 시 해당 `friendships` 레코드 하나를 삭제하면 양쪽 사용자의 친구 관계가 동시에 해제된다. 별도의 양방향 레코드를 각각 삭제할 필요가 없다. |
+| **동시성 고려** | 동일한 두 사용자에 대해 친구 관계 생성 요청이 동시에 처리될 수 있으므로 애플리케이션 로직만으로 중복을 판단하지 않고 `UNIQUE(user_low_id, user_high_id)` 제약을 최종 방어선으로 사용한다. |
+| **이력이 필요하다면** | 현재는 친구 삭제 시 관계 데이터를 물리적으로 삭제하는 방식을 기준으로 한다. 추후 친구 관계 이력, 삭제 시점, 재친구 요청 제한 등의 요구사항이 생기면 `deleted_at` 또는 별도 이력 테이블 도입을 검토한다. |
+
+---
+
+## 11. monthly_reports - 월간 리포트 테이블
+
+> AI 회고 300자 정의는 [BE PR #189](https://github.com/100-hours-a-week/KTB4-16th-BE/pull/189)의 Flyway V18 적용을 전제로 한다. 서버 검증은 기존 Java `String.length()` 기준을 유지한다.
+
+#### 1. 테이블 설명
+
+사용자의 월별 자물쇠 기록을 기반으로 생성된 월간 리포트의 대표 통계와 AI 요약 결과를 저장하는 테이블이다. 한 번 생성된 월간 리포트는 스냅샷 형태로 보존하며, 이후 원본 자물쇠 데이터가 변경되더라도 기존 리포트의 결과는 재계산하지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `monthly_report_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 월간 리포트 고유 ID | 각 리포트를 고유하게 식별하고 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 하나의 월간 리포트를 식별하고 기분·사진 통계 등 하위 테이블이 해당 리포트를 참조하는 기준이 된다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 리포트 소유 사용자 ID | `users.user_id`를 참조하여 누구의 리포트인지 식별한다. | 사용자별 월간 리포트를 조회할 때 사용한다. |
+| `report_year` | `SMALLINT` | - | NOT NULL | - | - | 리포트 대상 연도 | 연도 값은 범위가 매우 작으므로 `SMALLINT`로 충분하다. | 특정 연도의 리포트를 조회하는 기준이 된다. |
+| `report_month` | `SMALLINT` | - | NOT NULL | - | - | 리포트 대상 월 | 월은 1~12의 작은 정수값이므로 `SMALLINT`를 사용한다. | 특정 월의 리포트를 조회하는 기준이 된다. |
+| `record_count` | `INTEGER` | - | NOT NULL | 0 | - | 해당 월에 포함된 자물쇠 개수 | 월별 자물쇠 개수는 정수값이므로 `INTEGER`를 사용한다. | 월간 기록 개수를 리포트에 표시한다. |
+| `top_place_id` | `BIGINT` | - | NULL | NULL | FK | 대표 법정동 안의 대표 장소 ID | 대상 월 활성 기록을 법정동 코드별로 합산해 기록 수 내림차순, 해당 동 최신 기록 시각 내림차순, 코드 오름차순으로 대표 동을 정한다. 미분류 코드는 한 그룹으로 합산하고 최종 동률에서 뒤에 둔다. 선정된 동 안에서는 장소별 기록 수 내림차순, 최신 시각 내림차순, `place_id` 오름차순으로 저장할 장소 행을 정한다. 기록이 없는 달에는 NULL을 허용한다. | 기존 FK를 유지하면서 대표 법정동의 이름을 표시한다. |
+| `top_artist_name` | `VARCHAR` | 255 | NULL | NULL | - | 해당 월에 가장 많이 기록된 아티스트명 | 음원 유통 메타데이터 표준 (DDEX) 규격 기준 | 월간 대표 아티스트를 표시한다. |
+| `ai_recap_text` | `VARCHAR` | 300 | NULL | NULL | - | AI가 생성한 월간 요약 문장 | AI가 생성한 월간 회고를 최대 300자로 저장하기 위해 `VARCHAR(300)`을 사용한다. | 월간 리포트의 AI RECAP 문장을 표시한다. |
+| `ai_recap_status` | `ENUM('PENDING', 'PROCESSING', 'COMPLETED', 'FAILED')` | - | NOT NULL | PENDING | - | AI 월간 요약 생성 상태
+(`PENDING`, `PROCESSING`, `COMPLETED,` `FAILED` ) | AI 요약 상태가 `PENDING`, `PROCESSING`, `COMPLETED`, `FAILED` 네 가지로 제한되므로 `ENUM`을 사용한다. | AI 요약이 준비되었는지 판단하고 화면 상태를 제어한다. |
+| `batch_request_id` | `VARCHAR` | 36 | NULL | NULL | - | AI 배치 요청·callback 상관관계 ID | Flyway V9에서 추가한 UUID 문자열이며 이전 리포트의 호환을 위해 NULL을 허용한다. V15 업무 일지의 `report_ai_dispatches.batch_request_id`와 같은 요청을 가리킨다. | AI 요청과 callback이 같은 요청인지 확인하고 이전 요청의 늦은 callback이 현재 리포트에 적용되지 않도록 한다. AI `jobId`는 상관관계 필수값이 아니다. |
+| `created_at` | `DATETIME` | - | NOT NULL | CURRENT_TIMESTAMP | - | 월간 리포트가 최초 생성·저장된 시각 | 리포트는 최초 생성 결과를 스냅샷으로 저장하므로 생성 시각을 기록한다. | 리포트의 최초 생성 시점을 관리한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_monthly_reports` | PRIMARY KEY | `monthly_report_id` | - | 각 월간 리포트를 고유하게 식별한다. |
+| `fk_monthly_reports_user` | FOREIGN KEY | `user_id` | `users.user_id` | 월간 리포트의 소유 사용자와 연결한다. |
+| `uk_monthly_reports_user_period` | UNIQUE | `user_id`, `report_year`, `report_month` | - | 한 사용자가 같은 연도와 월에 두 개 이상의 월간 리포트를 가지지 않도록 한다. |
+| `fk_monthly_reports_top_place` | FOREIGN KEY | `top_place_id` | `places.place_id` | 월간 리포트의 대표 장소가 실제 존재하는 장소 데이터를 참조하도록 한다. |
+| `chk_monthly_reports_month` | CHECK | `report_month` | - | `report_month`가 유효한 월 범위인 `1~12`를 벗어나지 않도록 `CHECK (report_month BETWEEN 1 AND 12)`를 적용한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `monthly_reports.user_id` ↔ `users.user_id` | N:1 | 하나의 월간 리포트는 한 사용자에게 속하며, 한 사용자는 여러 달에 걸쳐 여러 월간 리포트를 가질 수 있다. |
+| `places` | `monthly_reports.top_place_id` ↔ `places.place_id` | N:1 | 하나의 월간 리포트는 대표 장소가 있는 경우 하나의 장소를 참조하며, 하나의 장소가 여러 사용자의 여러 월간 리포트에서 대표 장소가 될 수 있다. |
+| `monthly_mood_stats` | `monthly_reports.monthly_report_id` ↔ `monthly_mood_stats.monthly_report_id` | 1:1 | 하나의 월간 리포트는 하나의 월 평균 기분 통계 데이터를 가지며, 각 월간 기분 통계는 하나의 월간 리포트에 속한다. |
+| `monthly_photo_scene_stats` | `monthly_reports.monthly_report_id` ↔ `monthly_photo_scene_stats.monthly_report_id` | 1:N | 하나의 월간 리포트는 여러 사진 분위기·장면별 통계 데이터를 가진다. |
+
+---
+
+## 12. monthly_mood_stats - 월간 기분 통계 테이블
+
+#### 1. 테이블 설명
+
+월간 리포트 생성 시 해당 월에 작성된 자물쇠의 기분 점수를 집계하여 **월 평균 기분 점수**를 저장하는 테이블이다.
+
+각 자물쇠의 기분은 `-50 ~ 50` 범위의 정수값으로 기록하며, 월간 리포트에서는 평균 기분 점수에 해당하는 대표 이모지를 표시한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `mood_stat_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 월간 기분 통계 고유 ID | 각 월간 기분 통계 데이터를 고유하게 식별하고 데이터 증가를 고려하여 `BIGINT`를 사용한다. | 하나의 월간 기분 통계 데이터를 식별한다. |
+| `monthly_report_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 기분 통계가 속한 월간 리포트 ID | `monthly_reports.monthly_report_id`를 참조한다. 하나의 월간 리포트에는 하나의 평균 기분 통계만 존재하므로 `UNIQUE`를 적용한다. | 월간 기분 통계와 해당 월간 리포트를 연결한다. |
+| `average_mood_score` | `DECIMAL` | `3,1` | NOT NULL | - | - | 해당 월의 평균 기분 점수 | 개별 기분 점수는 정수지만 여러 자물쇠의 평균은 소수점이 발생할 수 있다. 서비스 범위가 `-50.0 ~ 50.0`이므로 `DECIMAL(3,1)`로 충분히 표현할 수 있다. | 월간 평균 기분을 나타내며 대표 이모지를 결정하는 기준으로 사용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_monthly_mood_stats` | PRIMARY KEY | `mood_stat_id` | - | 각 월간 기분 통계 데이터를 고유하게 식별한다. |
+| `fk_monthly_mood_stats_report` | FOREIGN KEY | `monthly_report_id` | `monthly_reports.monthly_report_id` | 기분 통계를 해당 월간 리포트와 연결한다. |
+| `uk_monthly_mood_stats_report` | UNIQUE | `monthly_report_id` | - | 하나의 월간 리포트에 월 평균 기분 통계가 두 개 이상 생성되지 않도록 한다. |
+| `ck_monthly_mood_stats_score` | CHECK | `average_mood_score` | `average_mood_score BETWEEN -50 AND 50` | 평균 기분 점수가 서비스에서 정의한 `-50 ~ 50` 범위를 벗어나지 않도록 한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `monthly_reports` | `monthly_mood_stats.monthly_report_id` ↔ `monthly_reports.monthly_report_id` | **1:1** | 하나의 월간 리포트에는 하나의 월 평균 기분 통계가 존재하며, 각 기분 통계는 하나의 월간 리포트에 속한다. |
+
+---
+
+## 13. monthly_photo_scene_stats - 월간 사진 분위기 통계 테이블
+
+#### 1. 테이블 설명
+
+월간 리포트 생성 시 해당 월에 기록된 자물쇠 사진을 분석하여 사진 분위기 또는 장면별 개수와 비율을 저장하는 테이블이다. 월별 상세 리포트에서 사진 분위기 분포를 표시하는 데 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `photo_scene_stat_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 월간 사진 분위기 통계 고유 ID | 각 사진 분위기 통계 행을 고유하게 식별하고 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 하나의 사진 분위기별 통계 데이터를 식별한다. |
+| `monthly_report_id` | `BIGINT` | - | NOT NULL | - | FK | 사진 분위기 통계가 속한 월간 리포트 ID | `monthly_reports.monthly_report_id`를 참조하여 어떤 월간 리포트의 통계인지 식별한다. | 사진 분위기 통계와 월간 리포트를 연결한다. |
+| `scene_tag` | `VARCHAR` | 50 (임시) | NOT NULL | - | - | 사진 분석을 통해 분류된 분위기 또는 장면 태그 | `카페`, `노을`, `밤거리`, `자연` 등 문자열 형태의 분류값을 저장하므로 `VARCHAR`를 사용한다. 실제 태그 종류와 최대 길이는 AI 분석 정책 확정 후 결정한다. | 어떤 사진 분위기 또는 장면에 대한 통계인지 구분한다. |
+| `count` | `INTEGER` | - | NOT NULL | 0 | - | 해당 장면 태그로 분류된 사진 개수 | 사진 개수는 정수값이므로 `INTEGER`를 사용한다. | 특정 장면이나 분위기가 한 달 동안 몇 번 나타났는지 표시한다. |
+| `ratio` | `TINYINT UNSIGNED` | - | NOT NULL | 0 | - | 해당 장면 태그가 차지하는 비율 | 비율을 소수점 없이 0~100의 정수 퍼센트로 저장하므로 `TINYINT UNSIGNED`를 사용하고, `CHECK` 제약으로 실제 허용 범위를 0~100으로 제한한다. | 월간 리포트에서 사진 분위기 비율과 그래프를 표시하는 데 사용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_monthly_photo_scene_stats` | PRIMARY KEY | `photo_scene_stat_id` | - | 각 월간 사진 분위기 통계 데이터를 고유하게 식별한다. |
+| `fk_monthly_photo_scene_stats_report` | FOREIGN KEY | `monthly_report_id` | `monthly_reports.monthly_report_id` | 사진 분위기 통계를 해당 월간 리포트와 연결하며, 존재하지 않는 월간 리포트에 통계가 저장되지 않도록 한다. |
+| `uk_monthly_photo_scene_stats_report_tag` | UNIQUE | `monthly_report_id`, `scene_tag` | - | 하나의 월간 리포트에 동일한 장면 태그 통계가 중복 저장되지 않도록 한다. |
+| `chk_monthly_photo_scene_stats_ratio` | CHECK | `ratio` | `ratio BETWEEN 0 AND 100` | 사진 분위기 비율이 유효한 백분율 범위인 0~100의 정수 값만 가지도록 제한한다. |
+| chk_monthly_photo_scene_stats_count | CHECK | count |  | 사진 개수는 음수가 될 수 없으므로 `CHECK (count >= 0)`를 적용한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `monthly_reports` | `monthly_photo_scene_stats.monthly_report_id` ↔ `monthly_reports.monthly_report_id` | N:1 | 하나의 사진 분위기 통계는 하나의 월간 리포트에 속하며, 하나의 월간 리포트에는 여러 사진 분위기 또는 장면별 통계가 존재할 수 있다. |
+
+---
+
+## 14. recommendation_playlists - V14에서 제거
+
+화면 추천은 컴포넌트 수명 동안만 유지한다. `V14__drop_session_playlist_tables.sql`에서 제거하며 사용자별 현재 목록을 복원하지 않는다. 기존 생성 migration V1은 수정하지 않는다. 평가용 `ai_recommendation_results`는 별도 테이블로 보존한다.
+
+---
+
+## 15. recommendation_playlist_items - V14에서 제거
+
+복원용 곡 연결 테이블도 V14에서 부모보다 먼저 제거한다. 음악 카탈로그 `music_tracks`와 평가용 `ai_recommendation_result_tracks`는 유지한다. API의 `musicTrackId`와 평가용 `recommendationId`는 보존하고 `recommendationPlaylistId`만 제거한다.
+
+---
+
+## 16. vote_questions - 취향 투표 질문 테이블
+
+#### 1. 테이블 설명
+
+사용자에게 제공할 장르별 취향 투표 질문과 선택지를 저장하는 테이블이다. 질문은 날짜와 그룹으로 구분하며, 사용자의 당일 배정은 `vote_user_daily_assignments`에 고정한다. 해당 날짜·그룹 질문이 이미 존재하면 AI 원본과 내용이 달라도 기존 행·ID·답변을 유지해 재사용한다. 기존 질문이 없을 때 AI 오늘 질문을 저장하고, 오늘 질문이 없으면 전날 같은 그룹 질문을 오늘 날짜의 새 행으로 복사한다. 답변과 매칭은 BE 질문 ID를 기준으로 연계한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `vote_question_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 취향 투표 질문 고유 ID | 각 투표 질문을 고유하게 식별하기 위해 사용한다. 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | `vote_answers`, `match_requests` 등에서 어떤 투표 질문에 대한 데이터인지 식별하는 기준이 된다. |
+| `question_text` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자에게 보여줄 취향 투표 질문 내용 | 질문 문장은 최대 100자가 넘지 않도록 한다. | 취향 투표 화면에 질문을 표시한다. |
+| `option_a` | `VARCHAR` | 100 | NOT NULL | - | - | 첫 번째 선택지 | 선택지는 짧은 문자열이므로 `VARCHAR`를 사용한다. | 사용자가 선택할 첫 번째 답변을 표시한다. |
+| `option_b` | `VARCHAR` | 100 | NOT NULL | - | - | 두 번째 선택지 | 선택지는 짧은 문자열이므로 `VARCHAR`를 사용한다. | 사용자가 선택할 두 번째 답변을 표시한다. |
+| `music_genre` | `VARCHAR` | 50 | NOT NULL | - | - | 질문이 속한 AI 취향 그룹 | 날짜별 그룹 질문을 식별하는 문자열이다. | 동일 그룹의 질문과 투표·매칭 대상을 구분한다. |
+| `vote_date` | `DATE` | - | NOT NULL | - | - | 질문이 배정되는 KST 날짜 | 투표 데이터를 날짜 단위로 분리한다. | BE 자체 질문 ID와 기존 투표·매칭 관계를 유지한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 투표 질문이 생성된 시각 | 해당 질문이 시스템에 등록된 시점을 기록하기 위해 사용한다. | 질문 생성 이력을 관리한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_vote_questions` | PRIMARY KEY | `vote_question_id` | - | 각 취향 투표 질문을 고유하게 식별한다. |
+| `uk_vote_questions_genre_date` | UNIQUE | `music_genre`, `vote_date` | - | 동일한 장르와 날짜 조합에 둘 이상의 질문이 등록되지 않도록 하여 장르별 하루 하나의 질문만 존재하도록 한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_vote_question_by_genre` | 사용자는 당일 일일 배정의 그룹·질문을 제공받는다. 오늘 AI 질문이 없으면 같은 그룹의 전날 질문 내용을 오늘 날짜의 새 행으로 복사한다. |
+| `rule_matching_within_genre_question` | 사용자의 장르는 질문에 귀속되어 있으므로 매칭 시 별도 장르 컬럼을 중복 저장하지 않고 `vote_answer_id → vote_question_id → music_genre` 경로로 동일 장르·동일 질문 여부를 확인할 수 있다. |
+| `rule_vote_question_genre_required` | 당일 그룹과 질문 배정은 선호 장르 변경, 자물쇠 생성 및 AI 뷰 갱신으로 덮어쓰지 않는다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `vote_answers` | `vote_questions.vote_question_id` ↔ `vote_answers.vote_question_id` | 1:N | 하나의 취향 투표 질문에 여러 사용자의 답변이 존재할 수 있다. |
+| `matches` | `matches.vote_question_id` → `vote_questions.vote_question_id` | 1:N | 하나의 질문으로 여러 Match를 만들 수 있으며, 별도 Chat DB 방은 `matches.chat_room_id` 논리 ID로 연결한다. |
+
+---
+
+## 17. vote_answers - 취향 투표 답변 테이블
+
+#### 1. 테이블 설명
+
+사용자가 취향 투표 질문에서 선택한 답변을 저장하는 테이블이다. 어떤 사용자가 어떤 질문에서 어떤 선택지를 선택했는지 기록하며, 이후 같은 질문에서 서로 반대 선택지를 고른 두 사용자를 1:1로 매칭하는 기준 데이터로 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `vote_answer_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 취향 투표 답변 고유 ID | 각각의 투표 답변을 고유하게 식별하기 위해 사용하며 데이터 증가 가능성을 고려해 `BIGINT`를 사용한다. | 개별 투표 답변을 식별하고 매칭 등의 다른 데이터에서 특정 답변을 참조할 수 있게 한다. |
+| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 사용자가 답변한 취향 투표 질문 ID | `vote_questions.vote_question_id`를 참조한다. | 어떤 질문에 대한 답변인지 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 취향 투표에 참여한 사용자 ID | `users.user_id`를 참조한다. | 누가 해당 답변을 선택했는지 식별한다. |
+| `selected_option` | `VARCHAR` | 100 | NOT NULL | - | - | 사용자가 선택한 선택지 | 두 개의 선택지 중 어떤 것을 선택했는지 실제 선택지 텍스트로 저장한다. | 같은 질문에서 서로 반대 선택지를 고른 WAITING 사용자를 찾아 1:1 매칭하는 데 사용한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사용자가 투표한 시각 | 사용자가 실제로 답변을 제출한 시점을 기록한다. | 투표 참여 시점을 확인하고 답변 이력을 관리한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_vote_answers` | PRIMARY KEY | `vote_answer_id` | - | 각 취향 투표 답변을 고유하게 식별한다. |
+| `fk_vote_answers_question` | FOREIGN KEY | `vote_question_id` | `vote_questions.vote_question_id` | 존재하는 취향 투표 질문에 대해서만 답변을 저장할 수 있도록 한다. |
+| `fk_vote_answers_user` | FOREIGN KEY | `user_id` | `users.user_id` | 존재하는 사용자의 투표 답변만 저장할 수 있도록 한다. |
+| `uk_vote_answers_user_question` | UNIQUE | `user_id`, `vote_question_id` | - | 한 사용자가 동일한 취향 투표 질문에 두 번 이상 답변하는 것을 방지한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `vote_answers.user_id` → `users.user_id` | N:1 | 한 사용자는 여러 취향 투표 질문에 답변할 수 있으며, 각 투표 답변은 한 명의 사용자에게 속한다. |
+| `vote_questions` | `vote_answers.vote_question_id` → `vote_questions.vote_question_id` | N:1 | 하나의 취향 투표 질문에는 여러 사용자의 답변이 존재할 수 있으며, 각 투표 답변은 하나의 질문에 속한다. |
+
+---
+
+## 18. match_requests - 매칭 요청 테이블
+
+#### 1. 테이블 설명
+
+사용자가 오늘의 취향 투표 답변을 기준으로 1:1 매칭을 요청한 정보를 저장한다. 같은 질문의 반대 선택지(A/B) 사용자를 FIFO로 연결하며, Chat Server 채팅방 생성 전후를 구분해 요청 상태를 관리한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `match_request_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 매칭 요청 고유 ID | 각 매칭 요청을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 개별 매칭 요청을 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 매칭을 요청한 사용자 ID | `users.user_id`를 참조하여 요청자를 식별한다. | 누가 매칭을 요청했는지 확인한다. |
+| `vote_answer_id` | `BIGINT` | - | NOT NULL | - | FK, UK | 매칭 기준이 되는 취향 투표 답변 ID | `vote_answers.vote_answer_id`를 참조하며 하나의 답변당 요청은 하나만 허용한다. | 동일 질문의 반대 선택지 WAITING 후보를 찾는 기준이다. |
+| `status` | `ENUM('WAITING', 'MATCHING', 'MATCHED', 'EXPIRED')` | - | NOT NULL | `WAITING` | - | 요청 상태 | Flyway V6에서 MATCHING을 추가했다. | 요청 대기, 상대 결정/ChatRoom 생성 대기, ChatRoom 생성 완료, 만료를 구분한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 매칭 요청 생성 시각 | 실제 매칭 요청이 발생한 시점을 기록한다. | 매칭 요청 시점 기록, 대기 순서 확인 및 일자별 요청 조회 등에 활용한다. |
+| `match_id` | `BIGINT` | - | NULL | NULL | FK | 이 요청이 연결된 Match ID | `matches.match_id`를 참조한다. | MATCHING/MATCHED pair를 연결한다. WAITING/EXPIRED에서는 NULL이다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_match_requests` | PRIMARY KEY | `match_request_id` | - | 각 매칭 요청을 고유하게 식별한다. |
+| `fk_match_requests_user` | FOREIGN KEY | `user_id` | `users.user_id` | 존재하는 사용자만 매칭을 요청할 수 있도록 한다. |
+| `fk_match_requests_vote_answer` | FOREIGN KEY | `vote_answer_id` | `vote_answers.vote_answer_id` | 존재하는 취향 투표 답변을 기준으로만 매칭을 요청할 수 있도록 한다. |
+| `uk_match_requests_vote_answer` | UNIQUE | `vote_answer_id` | - | 하나의 투표 답변으로 매칭 요청이 중복 생성되는 것을 방지한다. |
+| `fk_match_requests_match` | FOREIGN KEY | `match_id` | `matches.match_id` | 연결된 Backend Match를 참조한다. |
+| `chk_match_requests_match_by_status` | CHECK | `status`, `match_id` | - | WAITING/EXPIRED는 `match_id IS NULL`, MATCHING/MATCHED는 `match_id IS NOT NULL`이어야 한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_match_pair` | 같은 질문에 답한 반대 선택지 사용자 2명을 FIFO로 골라 Match 하나에 연결한다. |
+| `rule_match_state` | WAITING→MATCHING→MATCHED, WAITING→EXPIRED 상태 전이를 사용한다. WAITING/EXPIRED는 match_id NULL, MATCHING/MATCHED는 match_id 존재다. |
+| `rule_match_cutoff` | KST 23:00부터 신규 요청을 막고 남은 WAITING을 EXPIRED 처리한다. 이미 MATCHING인 pair는 만료하지 않는다. 현재 서비스와 Scheduler에서 구현한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `match_requests.user_id` → `users.user_id` | N:1 | 한 사용자는 날짜별로 여러 매칭 요청을 가질 수 있으며 각 매칭 요청은 한 사용자에게 속한다. |
+| `vote_answers` | `match_requests.vote_answer_id` → `vote_answers.vote_answer_id` | 1:0..1 | 하나의 투표 답변으로 최대 한 번의 매칭 요청을 할 수 있으며, 매칭 요청은 하나의 투표 답변을 기준으로 한다. |
+| `matches` | `match_requests.match_id` → `matches.match_id` | N:0..1 | 한 Match에 두 반대 선택지의 MatchRequest가 연결된다. |
+
+## 19. matches - 매칭 결과 테이블
+
+V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 발급한 ChatRoom 논리 ID를 연결하며 자체 status는 없다. 매칭 lifecycle은 `match_requests.status`가 표현한다.
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `match_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | Backend Match 식별자 |
+| `vote_question_id` | `BIGINT` | NOT NULL | - | FK | 매칭 기준 질문 |
+| `chat_room_id` | `BIGINT` | NULL | NULL | 논리 참조 | Chat Server가 소유하는 ChatRoom ID. Backend FK 없음 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | Match 생성 시각 |
+| `matched_at` | `DATETIME` | NULL | NULL | - | ChatRoom 연결 완료 시각 |
+
+제약조건: `pk_matches`, `fk_matches_vote_question`. `chat_room_id`에는 FK가 없고 `status` 컬럼도 없다.
+
+---
+
+## V1 역사 자료: chat_rooms - V6 이전 Backend schema
+
+> **현재 Backend schema가 아니다.** 아래 chat_rooms/chat_room_participants/chat_messages 정의는 Flyway V1 당시 구조를 보존한 역사 자료다. Flyway V6에서 세 테이블을 Backend DB에서 제거했으며, 별도 Chat DB의 schema는 이 문서에서 정의하지 않는다.
+
+#### 1. 테이블 설명
+
+동일한 `vote_question_id`의 매칭 요청 중 A 선택 사용자 1명과 B 선택 사용자 1명이 모였을 때 생성되는 1:1 채팅방을 저장하는 테이블이다. 채팅방 생성 시 매칭된 두 사용자가 배정되며, 이후 채팅 참여자와 메시지를 관리하는 기준이 된다. 채팅방은 생성 당일에만 유지되며, 자정이 되거나 두 참여자 모두 퇴장하면 삭제된다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `chat_room_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 채팅방 고유 ID | 각 채팅방을 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 채팅 참여자와 메시지가 특정 채팅방을 참조할 때 기준 ID로 사용한다. |
+| `vote_question_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방 매칭의 기준이 된 취향 투표 질문 ID | 동일한 질문에서 A 선택 사용자 1명과 B 선택 사용자 1명을 한 채팅방으로 구성하므로 `vote_questions.vote_question_id`를 참조한다. | 어떤 투표 질문을 기준으로 생성된 채팅방인지 식별한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 채팅방 생성 시각 | 두 사용자가 모여 채팅방이 실제 생성된 시점을 기록한다. | 채팅방 생성 시점을 확인한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_chat_rooms` | PRIMARY KEY | `chat_room_id` | - | 각 채팅방을 고유하게 식별한다. |
+| `fk_chat_rooms_vote_question` | FOREIGN KEY | `vote_question_id` | `vote_questions.vote_question_id` | 존재하는 취향 투표 질문을 기준으로 생성된 채팅방만 저장하도록 한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_chat_room_match_composition` | 하나의 채팅방은 동일한 `vote_question_id`에서 A 선택 사용자 1명과 B 선택 사용자 1명으로 구성한다. 선택지는 참여자의 `vote_answers.selected_option`에서 판별하며 `chat_rooms`에 단일 선택지 컬럼을 중복 저장하지 않는다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `vote_questions` | `chat_rooms.vote_question_id` → `vote_questions.vote_question_id` | N:1 | 하나의 취향 투표 질문을 기준으로 여러 개의 채팅방이 생성될 수 있으며, 각 채팅방은 하나의 질문을 기준으로 한다. |
+| `chat_room_participants` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여자는 하나의 채팅방에 속한다. |
+| `chat_messages` | `chat_messages.chat_room_id` → `chat_rooms.chat_room_id` | 1:N | 하나의 채팅방에는 여러 개의 메시지가 존재할 수 있으며, 각 메시지는 하나의 채팅방에 속한다. |
+
+---
+
+## V1 역사 자료: chat_room_participants - V6 이전 Backend schema
+
+#### 1. 테이블 설명
+
+사용자가 어떤 채팅방에 참여했는지 저장하는 테이블이다. 채팅방과 사용자 간 참여 관계를 관리하며, 사용자의 입장 시점과 퇴장 시점을 기록한다. 한 사용자는 같은 채팅방에 한 번만 참여할 수 있고, 퇴장 후 재입장은 허용하지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `chat_room_participant_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 채팅방 참여 정보 고유 ID | 각 참여 정보를 고유하게 식별하고 데이터 증가 가능성을 고려하여 `BIGINT`를 사용한다. | 개별 채팅방 참여 정보를 식별한다. |
+| `chat_room_id` | `BIGINT` | - | NOT NULL | - | FK | 사용자가 참여한 채팅방 ID | `chat_rooms.chat_room_id`를 참조한다. | 어떤 채팅방에 참여했는지 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 채팅방에 참여한 사용자 ID | `users.user_id`를 참조한다. | 어떤 사용자가 채팅방에 참여했는지 식별한다. |
+| `joined_at` | `DATETIME` | - | NULL | NULL | - | 채팅방 최초 입장 시각 | 매칭 완료 시 참여자 정보가 먼저 생성되고 사용자가 실제 채팅방에 입장하기 전에는 입장 시각이 없으므로 `NULL`을 허용한다. | 사용자가 실제로 채팅방에 최초 입장한 시점을 기록한다. |
+| `left_at` | `DATETIME` | - | NULL | NULL | - | 채팅방 퇴장 시각 | 사용자가 아직 채팅방을 나가지 않은 경우 값이 존재하지 않으므로 `NULL`을 허용한다. | `NULL`이면 아직 퇴장하지 않은 상태이고, 값이 있으면 해당 시점에 채팅방을 나간 것으로 판단한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_chat_room_participants` | PRIMARY KEY | `chat_room_participant_id` | - | 각 채팅방 참여 정보를 고유하게 식별한다. |
+| `fk_chat_room_participants_room` | FOREIGN KEY | `chat_room_id` | `chat_rooms.chat_room_id` | 존재하는 채팅방에 대해서만 참여 정보를 저장할 수 있도록 하며, 채팅방 삭제 시 해당 채팅방의 참여자 정보도 함께 삭제되도록 `ON DELETE CASCADE`를 적용한다. |
+| `fk_chat_room_participants_user` | FOREIGN KEY | `user_id` | `users.user_id` | 존재하는 사용자에 대해서만 채팅방 참여 정보를 저장할 수 있도록 한다. |
+| `uk_chat_room_participants_room_user` | UNIQUE | `chat_room_id`, `user_id` | - | 동일한 사용자가 같은 채팅방에 중복으로 참여자 등록되는 것을 방지한다. 퇴장 후 재입장 여부는 `left_at`을 기준으로 애플리케이션 로직에서 판단한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_chat_room_join` | 매칭 완료 시 두 참여자의 정보를 먼저 생성하고, 사용자가 실제 채팅방에 입장하면 `joined_at`을 기록한다. |
+| `rule_chat_room_reentry` | `left_at`이 존재하는 사용자는 해당 채팅방에 다시 입장할 수 없다. |
+| `rule_chat_room_delete` | 채팅방 두 참여자가 모두 퇴장했거나 자정이 되면 채팅방을 삭제한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `chat_rooms` | `chat_room_participants.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 매칭이 완료된 두 참여자의 정보가 생성되며, 각 참여 정보는 하나의 채팅방에 속한다. 채팅방이 삭제되면 해당 참여자 정보도 함께 삭제된다. |
+| `users` | `chat_room_participants.user_id` → `users.user_id` | N:1 | 한 사용자는 서로 다른 여러 채팅방에 참여할 수 있으며, 각 참여 정보는 한 명의 사용자에게 속한다. |
+
+---
+
+## V1 역사 자료: chat_messages - V6 이전 Backend schema
+
+#### 1. 테이블 설명
+
+채팅방에서 사용자가 전송한 메시지를 저장하는 테이블이다. 어떤 채팅방에서 어떤 사용자가 어떤 메시지를 언제 전송했는지 기록하고, 해당 사용자가 실제 채팅방 참여자인지는 애플리케이션 로직에서 검증한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `chat_message_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 채팅 메시지 고유 ID | 각 메시지를 고유하게 식별하고 메시지가 지속적으로 누적되는 특성을 고려하여 `BIGINT`를 사용한다. | 개별 채팅 메시지를 식별한다. |
+| `chat_room_id` | `BIGINT` | - | NOT NULL | - | FK | 메시지가 전송된 채팅방 ID | `chat_rooms.chat_room_id`를 참조하여 메시지가 어느 채팅방에 속하는지 연결한다. | 특정 채팅방의 메시지 내역을 조회하는 데 사용한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 메시지를 전송한 사용자 ID | `users.user_id`를 참조하여 메시지 작성자를 식별한다. | 메시지를 누가 전송했는지 확인한다. |
+| `content` | `VARCHAR` | 500 | NOT NULL | - | - | 메시지 내용 | 일반 텍스트 채팅 메시지를 저장하며, UI 정책상 메시지 최대 길이를 500자로 제한하므로 `VARCHAR(500)`을 사용한다. | 사용자가 채팅방에서 전송한 실제 메시지 내용을 저장한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 메시지 전송 시각 | 메시지가 생성된 시점을 기록한다. | 메시지의 전송 시각을 표시하고 메시지 순서를 조회하는 데 활용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_chat_messages` | PRIMARY KEY | `chat_message_id` | - | 각 채팅 메시지를 고유하게 식별한다. |
+| `fk_chat_messages_room` | FOREIGN KEY | `chat_room_id` | `chat_rooms.chat_room_id` | 메시지가 실제 존재하는 채팅방에 속하도록 참조 관계를 보장하며, 채팅방 삭제 시 해당 채팅방의 메시지도 함께 삭제되도록 `ON DELETE CASCADE`를 적용한다. |
+| `fk_chat_messages_user` | FOREIGN KEY | `user_id` | `users.user_id` | 메시지의 발신자가 실제 존재하는 사용자인지 보장한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_chat_message_sender` | 메시지 전송 시 사용자가 해당 채팅방의 참여자인지 확인하고, `joined_at`이 존재하며 `left_at`이 `NULL`인 경우에만 메시지 전송을 허용한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `chat_rooms` | `chat_messages.chat_room_id` → `chat_rooms.chat_room_id` | N:1 | 하나의 채팅방에는 여러 메시지가 존재할 수 있으며, 각 메시지는 하나의 채팅방에 속한다. |
+| `users` | `chat_messages.user_id` → `users.user_id` | N:1 | 한 사용자는 여러 메시지를 전송할 수 있으며, 각 메시지는 한 명의 발신자에 의해 작성된다. |
+
+---
+
+## 20. notifications - 알림 테이블
+
+#### 1. 테이블 설명
+
+사용자에게 전달할 서비스 알림 정보를 저장하는 테이블이다. 알림의 대상 사용자, 알림 유형, 내용, 발생 시점과 읽음 여부를 관리하며 사용자가 자신의 알림 목록을 조회할 때 사용한다. V7부터 알림 유형은 4종이며 `source_event_id`는 Outbox 이벤트 식별자 스냅샷으로 저장하고 실제 Outbox FK는 두지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | 길이 | NULL 여부 | 기본값 | Key | 설명 | 타입/설계 근거 | 기능적 역할 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| `notification_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 알림 고유 ID | 각 알림을 고유하게 식별하기 위해 사용한다. | 개별 알림을 식별한다. |
+| `user_id` | `BIGINT` | - | NOT NULL | - | FK | 알림 수신 사용자 ID | `users.user_id`를 참조한다. | 누구에게 전달되는 알림인지 식별한다. |
+| `type` | `ENUM` | - | NOT NULL | - | - | 알림 유형
+`MONTHLY_REPORT_CREATED`,<br>
+`MATCH_COMPLETED`,<br>
+`FRIEND_REQUEST`,<br>
+`FRIEND_ACCEPTED` | 발생 원인과 알림 클릭 시 처리할 동작을 구분하기 위해 사용한다. | 월별 리포트, 매칭 완료, 친구 요청/수락 알림을 구분한다. |
+| `monthly_report_id` | `BIGINT` | - | NULL | NULL | FK | 생성된 월별 리포트 ID | `MONTHLY_REPORT_CREATED` 알림일 때만 사용하므로 `NULL`을 허용한다. | 알림 클릭 시 해당 월별 리포트와 연결한다. |
+| `chat_room_id` | `BIGINT` | - | NULL | NULL | 논리 참조 | 매칭 완료로 생성된 채팅방 ID | V6 이후 채팅방은 별도 Chat DB 소유이므로 Backend DB FK 없이 ID만 저장한다. | 알림 클릭 시 매칭된 채팅방으로 이동하는 데 사용한다. |
+| `friendship_id` | `BIGINT` | - | NULL | NULL | FK | 친구 관계 ID | `FRIEND_ACCEPTED` 알림에서 사용하며 `friendships.friendship_id`를 참조한다. | 수락 결과 생성된 친구 관계를 식별한다. |
+| `friend_request_id` | `BIGINT` | - | NULL | NULL | FK | 친구 요청 ID | 친구 요청 알림에서 사용하며 `friend_requests.friend_request_id`를 참조한다. | 어떤 친구 요청으로 발생한 알림인지 식별하고, 수락·거절 처리 시 해당 친구 요청을 참조하는 데 사용한다. |
+| `source_event_id` | `CHAR` | 36 | NULL | NULL | UNIQUE 구성 | 원본 Outbox 이벤트 UUID | 기존 알림은 `NULL`을 허용하고 신규 알림은 애플리케이션에서 값을 기록한다. Outbox FK는 두지 않는다. | 이벤트당 사용자 알림 중복을 방지한다. |
+| `title` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 제목 | 알림 목록에서 주요 내용을 간단히 보여준다. | 사용자에게 알림 종류와 핵심 내용을 표시한다. |
+| `content` | `VARCHAR` | 100 | NOT NULL | - | - | 알림 내용 | 사용자에게 전달할 구체적인 알림 문구를 저장한다. | 알림 상세 내용을 표시한다. |
+| `read_at` | `DATETIME` | - | NULL | NULL | - | 알림을 읽은 시각 | 읽기 전에는 값이 없으므로 `NULL`을 허용한다. | `NULL`이면 읽지 않은 알림, 값이 있으면 읽은 알림으로 판단한다. |
+| `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 알림 생성 시각 | 알림이 발생한 시점을 기록한다. | 알림 정렬 및 발생 시각 표시에 사용한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_notifications` | PRIMARY KEY | `notification_id` | - | 각 알림을 고유하게 식별한다. |
+| `fk_notifications_user` | FOREIGN KEY | `user_id` | `users.user_id` | 알림 수신자가 실제 사용자 데이터를 참조하도록 한다. |
+| `fk_notifications_monthly_report` | FOREIGN KEY, UNIQUE | `monthly_report_id` | `monthly_reports.monthly_report_id` | `MONTHLY_REPORT_CREATED` 알림이 실제 생성된 리포트를 참조하도록 하며, 리포트가 삭제되면 알림은 유지하고 `monthly_report_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
+| `fk_notifications_friendship` | FOREIGN KEY | `friendship_id` | `friendships.friendship_id` | 친구 관계가 삭제되면 알림은 유지하고 `friendship_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. 같은 관계에 여러 수신자의 알림을 연결할 수 있다. |
+| `fk_notifications_friend_request` | FOREIGN KEY, UNIQUE | `friend_request_id` | `friend_requests.friend_request_id` | `FRIEND_REQUEST` 알림이 실제 친구 요청 데이터를 참조하도록 하며, 친구 요청이 삭제되면 알림은 유지하고 `friend_request_id`만 `NULL`이 되도록 `ON DELETE SET NULL`을 적용한다. |
+| `uk_notifications_source_event_user` | UNIQUE | `source_event_id`, `user_id` | - | 같은 이벤트가 한 사용자에게 알림을 중복 생성하지 못하게 한다. `source_event_id`가 `NULL`인 기존 이력은 허용한다. |
+| `idx_notifications_friendship` | INDEX | `friendship_id` | - | UNIQUE를 제거해 여러 수신자의 알림을 허용하면서 친구 관계 FK를 지원한다. |
+
+#### 3-1. 비즈니스 규칙
+
+| 규칙명 | 설명 |
+| --- | --- |
+| `rule_notification_target_delete` | 알림이 참조하는 Target Resource가 삭제되어도 알림 자체는 과거 이력으로 유지한다. Backend DB FK가 있는 Target은 `ON DELETE SET NULL`로 연결을 해제한다. Chat DB의 채팅방 삭제는 Backend FK가 처리하지 않으므로 후속 알림 코드에서 처리한다. |
+| `rule_notification_target_action` | Target FK가 `NULL`인 과거 알림은 화면에 표시할 수 있으나 해당 리소스로 이동하는 액션은 비활성화한다. |
+
+#### 4. 관계
+
+| 관련 테이블 | 연결 컬럼 | 관계 | 관계 설명 |
+| --- | --- | --- | --- |
+| `users` | `notifications.user_id` → `users.user_id` | N:1 | 한 사용자는 여러 알림을 받을 수 있으며 각 알림은 한 명의 수신자에게 전달된다. |
+| `monthly_reports` | `notifications.monthly_report_id` → `monthly_reports.monthly_report_id` | 0..1:1 | 월별 리포트 생성 알림인 경우 해당 리포트와 연결된다. 리포트 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+| `chat_rooms` (별도 Chat DB) | `notifications.chat_room_id` → 채팅방 ID | N:0..1 논리 참조 | Backend DB FK는 없다. 알림 생성 또는 클릭 시 채팅방 존재 여부를 별도 도메인에서 확인해야 한다. |
+| `friend_requests` | `notifications.friend_request_id` → `friend_requests.friend_request_id` | 0..1:1 | 하나의 친구 요청에는 하나의 `FRIEND_REQUEST` 알림이 연결될 수 있다. 친구 요청 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+| `friendships` | `notifications.friendship_id` → `friendships.friendship_id` | 0..N:1 | 하나의 친구 관계에 서로 다른 수신자의 `FRIEND_ACCEPTED` 알림을 연결할 수 있다. 친구 관계 삭제 후에는 FK가 `NULL`이 되고 알림 자체는 유지된다. |
+---
+
+## 구현·설계 정합성 표
+
+| 대상 | 원본/목표 설계 | Flyway V1~V15 및 현재 코드 | 문서 처리 |
+| --- | --- | --- | --- |
+| `places` | 법정동 코드·이름 nullable 쌍, 좌표 기반 장소 | V4에서 `external_place_id`, `place_name` 제거, `legal_dong_code`, `legal_dong_name`, 좌표 UNIQUE, 법정동 쌍 CHECK 적용 | V4 실제 구조를 본문에 반영 |
+| `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
+| `friend_requests` | 대기 요청만 저장하고 처리 후 삭제 | V1에 별도 `status` 컬럼 없이 사용자 쌍 UNIQUE로 구성 | 현재 구조와 정책이 일치하며 `status` 컬럼을 임의 추가하지 않음 |
+| `recommendation_playlists` | 화면 복원용 저장 제거 | V14에서 items와 함께 삭제 | 평가 이력과 음악 카탈로그만 유지 |
+| `record_drafts` | V1에서는 브라우저 로컬 임시저장을 사용하고 서버 기능에서 제외 | Flyway V1 생성, V5에서 현재 임시저장 스키마로 조정 | V1 제외 이력 유지, V2에서 사용자당 1개·14일 보관의 서버 임시저장 API 구현 |
+| `weather` | 현재 날씨 조회는 기상청 격자 캐시 사용 | V2의 도시 단위 `weather`가 존재하지만 현재 JPA/서비스는 사용하지 않음 | `구현됨·정책 확인 필요` 레거시 테이블로 보존 |
+| `weather_grids`, `weather_grid_forecasts` | 날짜·격자별 최초 성공 단기예보 묶음 캐시 | V3 및 현재 날씨 서비스에서 사용 | 구현됨 |
+| `monthly_reports`, `monthly_mood_stats` | 월 종료 후 스냅샷 생성 및 목록/상세 조회 | V1 기본 스키마, V9 callback 상관관계 ID, V15 Spring Batch 생성·재요청 흐름 | 공개 조회 API는 유지하고 Batch 실행·전송·복구 일지는 아래 §32~37에 분리 기록 |
+| Spring Batch JDBC metadata | Job/Step 실행과 재시작 정보 저장 | V15에서 Spring Batch 6.0.5 MySQL schema 적용 | Batch 프레임워크 메타데이터이며 월간 리포트 업무 일지와 분리 |
+| `report_batch_runs`, `report_batch_months`, `report_batch_targets`, `report_ai_dispatches`, `report_batch_recoveries` | 월간 실행·월별 소유권·대상/전송/복구 상태를 업무 DB에 저장 | Flyway V15 | 각 업무 테이블의 필드와 제약을 §33~37에 기록 |
+| `match_requests`, `matches` | 1:1 매칭 상태와 ChatRoom 논리 참조 | V6에서 `MATCHING`, `match_id`, `matches`를 추가하고 상태 CHECK를 적용 | 현재 Backend schema로 반영. `matches.chat_room_id`는 Chat DB 논리 ID이며 FK가 아님 |
+| `notifications.chat_room_id` | Chat Server ChatRoom 논리 ID | V6에서 `fk_notifications_chat_room` 제거, 컬럼 유지 | 현재 Backend schema에는 FK가 없음 |
+| `chat_rooms`, `chat_room_participants`, `chat_messages` | Chat Server가 소유 | V6에서 Backend DB 테이블 삭제 | 본문은 V1 당시 역사 자료이며 현재 schema에 포함하지 않음 |
+| `notifications`, `outbox_events` | 사용자 알림 이력과 비즈니스 이벤트를 원본 트랜잭션에 함께 보존 | `notifications`는 V7, `outbox_events`는 V8에서 생성되며 현재 알림 API 및 친구·리포트 이벤트 처리가 구현됨 | MATCH_COMPLETED 발행은 배포 환경별 4인 이력 및 Chat DB 참가자 등록 근거 확인 전까지 보류 |
+
+## Open Questions
+
+| ID | 내용 |
+| --- | --- |
+| `OQ-001` | 음악 장르의 정식 목록 |
+| `OQ-022` | 알림 보관 기간 |
+| `WTH-002` | 국내 기상청 격자 범위 밖 좌표의 HTTP 상태와 오류 코드 |
+
+---
+
+## 21. weather - 도시 단위 레거시 날씨 테이블
+
+#### 1. 테이블 설명
+
+초기 도시 단위 날씨 캐시를 저장하기 위해 Flyway V2에서 추가된 테이블이다. 현재 날씨 조회 구현은 `weather_grids`, `weather_grid_forecasts`를 사용하므로 이 테이블은 `구현됨·정책 확인 필요` 상태다. 삭제 또는 데이터 이전은 기존 migration 수정이 아니라 별도 승인된 신규 Flyway migration으로만 수행한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `weather_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 레거시 날씨 행 식별자 |
+| `city_name` | `VARCHAR(20)` | NOT NULL | - | UK | 도시명 |
+| `weather_condition` | `VARCHAR(20)` | NOT NULL | - | - | 날씨 상태 문자열 |
+| `temperature` | `DECIMAL(3,1)` | NOT NULL | - | - | 도시 단위 기온 |
+| `fetched_at` | `DATETIME` | NOT NULL | - | - | 외부 날씨를 수신한 시각 |
+
+#### 3. 제약조건
+
+| 이름 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `pk_weather` | PRIMARY KEY | `weather_id` | 레거시 날씨 행 식별 |
+| `uk_weather_city_name` | UNIQUE | `city_name` | 도시당 한 행 유지 |
+
+#### 3-1. 운영 상태
+
+- 현재 `weather` 엔티티와 Repository는 존재하지 않는다.
+- `GET /api/weather`는 이 테이블이 아니라 격자 캐시를 사용한다.
+- 유지·데이터 이전·삭제 정책은 아직 확정되지 않았다.
+
+---
+
+## 22. weather_grids - 기상청 격자 테이블
+
+#### 1. 테이블 설명
+
+기상청 단기예보 조회에 사용하는 격자 좌표 `(grid_x, grid_y)`를 중복 없이 관리한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `weather_grid_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 격자 내부 식별자 |
+| `grid_x` | `SMALLINT` | NOT NULL | - | UK(복합) | 기상청 X 격자 |
+| `grid_y` | `SMALLINT` | NOT NULL | - | UK(복합) | 기상청 Y 격자 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 최초 저장 시각 |
+
+> `weather_grid_id`, `SMALLINT`, `created_at`은 동기화 설계서의 저장 개념을 v7 물리 스키마로 구체화한 명칭/타입이다.
+
+#### 3. 제약조건
+
+| 이름 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `pk_weather_grids` | PRIMARY KEY | `weather_grid_id` | 격자 식별 |
+| `uk_weather_grids_xy` | UNIQUE | `grid_x`, `grid_y` | 동일 격자 중복 방지 |
+
+---
+
+## 23. weather_grid_forecasts - 격자별 날씨 예보 캐시 테이블
+
+#### 1. 테이블 설명
+
+기상청 단기예보 `getVilageFcst` 결과를 KST 날짜·격자·예보시각별로 캐시한다. 동일 KST 날짜·격자의 최초 성공 예보 묶음을 유지하며, 같은 날 새 발표본으로 갱신하지 않는다.
+
+예보시각은 **KST 기준 1시간 단위 시간대(hour bucket)** 로 사용한다. 요청 시각의 분이 `00~29`이면 현재 정각, `30~59`이면 다음 정각으로 반올림한다. 예를 들어 `15:10` 요청은 `15:00`, `15:50` 요청은 `16:00` 예보를 사용한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `weather_grid_forecast_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 예보 캐시 고유 ID |
+| `weather_grid_id` | `BIGINT` | NOT NULL | - | FK, UK(복합) | `weather_grids.weather_grid_id` 참조 |
+| `cache_date` | `DATE` | NOT NULL | - | UK(복합) | 최초 성공 예보 묶음을 구분하는 요청일 KST 날짜 |
+| `forecast_at` | `DATETIME` | NOT NULL | - | UK(복합) | KST 기준 1시간 단위 예보 대상 시각. 요청 시각에 가장 가까운 정각으로 선택한다. 예: `15:50 → 16:00` |
+| `temperature` | `DECIMAL(3,1)` | NOT NULL | - | - | 예보 기온 |
+| `weather_condition` | `ENUM('CLEAR','CLOUDY','OVERCAST','RAIN','SNOW','RAIN_SNOW','SHOWER')` | NOT NULL | - | - | MULO 최종 날씨 상태 |
+| `base_at` | `DATETIME` | NOT NULL | - | - | 기상청 발표 기준시각 |
+| `fetched_at` | `DATETIME` | NOT NULL | - | - | MULO가 기상청 응답을 수신한 시각 |
+
+> `cache_date`는 동일한 미래 `forecast_at`이 전날과 오늘의 캐시에 함께 있을 수 있음을 구분한다. `fetched_at`은 최초 예보 묶음을 수신한 시각이다.
+
+#### 3. 제약조건
+
+| 이름 | 유형 | 컬럼 | 참조/설명 |
+| --- | --- | --- | --- |
+| `pk_weather_grid_forecasts` | PRIMARY KEY | `weather_grid_forecast_id` | 예보 캐시 식별 |
+| `fk_weather_grid_forecasts_grid` | FOREIGN KEY | `weather_grid_id` | `weather_grids.weather_grid_id` |
+| `uk_weather_grid_forecasts_daily_slot` | UNIQUE | `weather_grid_id`, `cache_date`, `forecast_at` | 동일 날짜·격자·예보시각 중복 방지 |
+| `idx_weather_grid_forecasts_lookup` | INDEX | `weather_grid_id`, `cache_date`, `forecast_at` | 날짜·격자·예보시각 조회 성능 지원 |
+
+#### 3-1. 예보시각 정규화 및 캐시 갱신 규칙
+
+- 서비스 시간 기준은 `Asia/Seoul (KST)`이다.
+- `forecast_at`은 1시간 단위의 정각 시각으로 관리한다.
+- 요청 시각의 분이 `00~29`이면 현재 정각, `30~59`이면 다음 정각을 사용한다.
+- 예: `2026-09-19 15:10 KST` → `15:00`, `15:50 KST` → `16:00`.
+- 요청 `at`은 KST로 정규화한다. 서버의 현재 KST 시간대 시작보다 이른 요청은 `400 INVALID_WEATHER_REQUEST_TIME`으로 거부한다.
+- 기상청 `getVilageFcst`를 한 번 호출하면 목표 예보시각 이후 항목을 시간대별로 파싱하여 `weather_grid_forecasts`에 일괄 저장한다.
+- 동일 KST 날짜·격자의 캐시가 하나도 없을 때만 외부 API를 호출한다.
+- 최초 후보 회차가 실패하거나 목표 예보시각을 포함하지 않으면 바로 이전 후보 회차를 한 번만 시도한다.
+- 같은 날짜에 캐시가 있으면 더 최신 발표본으로 갱신하지 않는다.
+- 당일 캐시가 있으나 요청한 `forecast_at` 행이 없으면 외부 API를 다시 호출하지 않고 `502 WEATHER_API_ERROR`로 처리한다.
+
+
+#### 3-2. 날씨 변환 규칙
+
+| 우선순위 | 원시값 | 최종 상태 |
+| --- | --- | --- |
+| 1 | `PTY=1` | `RAIN` |
+| 1 | `PTY=2` | `RAIN_SNOW` |
+| 1 | `PTY=3` | `SNOW` |
+| 1 | `PTY=4` | `SHOWER` |
+| 2 | 강수 없음 + `SKY=1` | `CLEAR` |
+| 2 | 강수 없음 + `SKY=2` 또는 `3` | `CLOUDY` |
+| 2 | 강수 없음 + `SKY=4` | `OVERCAST` |
+
+---
+
+## 26. outbox_events - 알림 Outbox 이벤트 테이블
+
+#### 1. 테이블 설명
+
+원본 비즈니스 트랜잭션에서 알림 이벤트를 기록하고, COMMIT 이후 별도 트랜잭션의 Processor가 알림 이력을 생성하도록 V8에서 추가했다. 이벤트 payload와 처리 상태를 보존하며 `aggregate_id`는 원본 도메인 ID 스냅샷이다. 원본 리소스와 FK를 두지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `event_id` | `CHAR(36)` | NOT NULL | - | PK | Outbox 이벤트 UUID |
+| `event_type` | `ENUM` | NOT NULL | - | UK(복합) | `MONTHLY_REPORT_CREATED`, `MATCH_COMPLETED`, `FRIEND_REQUEST`, `FRIEND_ACCEPTED` 중 하나 |
+| `aggregate_id` | `BIGINT` | NOT NULL | - | UK(복합) | 이벤트 유형에 해당하는 원본 리소스 ID 스냅샷. 원본 테이블 FK는 두지 않는다. |
+| `payload` | `JSON` | NOT NULL | - | - | 수신자 및 이벤트 처리에 필요한 payload v1 |
+| `status` | `ENUM('PENDING','COMPLETED','FAILED')` | NOT NULL | `PENDING` | INDEX | 처리 상태 |
+| `retry_count` | `INT` | NOT NULL | `0` | - | 최초 처리를 제외한 추가 재시도 횟수 |
+| `next_retry_at` | `DATETIME(6)` | NULL | NULL | INDEX | 다음 재시도 예정 시각. NULL이면 최초 처리를 기다리는 이벤트다. |
+| `last_error_code` | `VARCHAR(100)` | NULL | NULL | - | 마지막 처리 실패의 안전한 오류 코드 |
+| `last_error_at` | `DATETIME(6)` | NULL | NULL | - | 마지막 처리 실패 시각 |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | INDEX | 원본 트랜잭션에서 이벤트를 기록한 시각 |
+| `processed_at` | `DATETIME(6)` | NULL | NULL | - | 모든 알림 생성이 성공한 시각. FAILED에서는 NULL을 유지한다. |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_outbox_events` | PRIMARY KEY | `event_id` | - | Outbox 이벤트 UUID를 고유하게 식별한다. |
+| `uk_outbox_events_type_aggregate` | UNIQUE | `event_type`, `aggregate_id` | - | 같은 원본 리소스·이벤트 유형의 중복 발행을 방지한다. |
+| `idx_outbox_events_schedule` | INDEX | `status`, `next_retry_at`, `created_at` | - | Scheduler가 처리 가능한 이벤트를 상태·예정 시각·생성 시각 순으로 찾는다. |
+
+#### 3-1. 처리 규칙
+
+- 원본 변경과 Outbox INSERT는 같은 트랜잭션에 기록한다. 원본 COMMIT 후 Processor가 독립 트랜잭션에서 즉시 처리를 시도한다.
+- 한 이벤트의 모든 `notifications` INSERT와 Outbox `COMPLETED` 변경은 원자적으로 처리한다. 일부 수신자만 알림을 받는 상태는 허용하지 않는다.
+- 최초 실패 뒤 최대 5회 추가 재시도한다. 간격은 1, 2, 4, 8, 16분에 사용자 확정 지터 0~30초를 더하며 Scheduler는 1분 주기로 한 번에 최대 20건을 조회한다.
+- 재시도 후보는 `FOR UPDATE SKIP LOCKED` 방식으로 잠가 여러 Worker가 같은 이벤트를 처리하지 않게 한다.
+- 최대 횟수 초과 또는 영구 오류는 `FAILED`로 기록한다. `COMPLETED`에만 `processed_at`을 기록한다.
+- `MATCH_COMPLETED` 발행은 배포 환경별 기존 4인 매칭 이력 0건 확인과 Chat DB 참가자 등록 근거가 확인될 때까지 보류한다.
+
+## 27. vote_daily_snapshots - 일일 취향 투표 스냅샷 상태 테이블
+
+#### 1. 테이블 설명
+
+KST 날짜별 사용자 배정이 원자적으로 준비되었는지 기록한다. 스냅샷 생성은 하나의 BE DB 트랜잭션에서 BUILDING으로 시작해 배정 저장 후 READY로 전환한다. 트랜잭션이 실패하면 질문 복사본, 사용자 배정, 상태 변경이 모두 롤백된다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `vote_date` | `DATE` | NOT NULL | - | PK | 스냅샷 기준 KST 날짜 |
+| `status` | `VARCHAR(16)` | NOT NULL | - | CHECK | `BUILDING` 또는 `READY` |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 스냅샷 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `PRIMARY` | PRIMARY KEY | `vote_date` | 날짜별 스냅샷을 하나만 유지한다. |
+| `chk_vote_daily_snapshots_status` | CHECK | `status` | 허용 상태를 제한한다. |
+
+## 28. vote_user_daily_assignments - 사용자별 일일 취향 투표 배정 테이블
+
+#### 1. 테이블 설명
+
+사용자별 당일 AI 그룹과 BE 질문 ID를 고정한다. 자정 이후 가입자는 스냅샷 READY 이후 첫 질문 조회에서 배정되며, 유일 제약과 insert-if-absent 처리로 기존 배정을 덮어쓰지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `vote_date` | `DATE` | NOT NULL | - | PK, FK | 스냅샷 기준 KST 날짜 |
+| `user_id` | `BIGINT` | NOT NULL | - | PK, FK | 배정 사용자 |
+| `music_genre` | `VARCHAR(50)` | NOT NULL | - | - | 당일 고정 AI 그룹 |
+| `vote_question_id` | `BIGINT` | NULL | NULL | FK, INDEX | 당일 그룹의 BE 질문 ID. 사용 가능한 질문이 없으면 NULL |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 배정 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `PRIMARY` | PRIMARY KEY | `vote_date`, `user_id` | - | 사용자당 날짜별 배정 한 건을 보장한다. |
+| `fk_vote_user_daily_assignments_snapshot` | FOREIGN KEY | `vote_date` | `vote_daily_snapshots.vote_date` | 배정의 스냅샷 날짜를 보장한다. |
+| `fk_vote_user_daily_assignments_user` | FOREIGN KEY | `user_id` | `users.user_id` | 실제 사용자에 대한 배정만 허용한다. |
+| `fk_vote_user_daily_assignments_question` | FOREIGN KEY | `vote_question_id` | `vote_questions.vote_question_id` | 설정된 질문 ID를 검증한다. |
+| `idx_vote_user_daily_assignments_question` | INDEX | `vote_question_id` | - | 질문별 배정을 조회한다. |
+
+#### 4. 처리 규칙
+
+- 스냅샷 테이블의 READY 행은 날짜 데이터 전체가 원자적으로 저장됐음을 의미한다. 미준비 상태는 API에서 503으로 반환한다.
+- AI 그룹은 AI DB 뷰에서 읽으며 BE는 그룹화 또는 인원 부족 그룹 통합을 하지 않는다. AI 사용자 행이 없으면 `공통` 그룹으로 배정한다.
+- 오늘 그룹 질문이 없으면 AI 뷰의 같은 그룹 전날 질문 내용을 오늘 날짜의 새 `vote_questions` 행으로 저장한다. 같은 그룹의 전날 질문도 없으면 질문 ID를 비우고 조회 시 404를 반환한다.
+- 기존 `vote_questions(music_genre, vote_date)` UNIQUE 제약을 유지한다. 같은 날짜·그룹의 기존 BE 질문이 있으면 AI 질문 내용과 달라도 기존 BE 질문·ID·답변을 우선 재사용하고 덮어쓰지 않는다.
+
+## 29. ai_recommendation_results - AI 추천 결과 이력 테이블
+
+#### 1. 테이블 설명
+
+Flyway V13에서 추가한 AI 추천 결과 이력이다. 사진 기반 정상 추천은 요청마다 별도 결과를 만들고, 플레이리스트 정상 추천은 전달된 세션 회차별 결과를 저장한다. 추천 결과는 생성 응답의 최상위 `recommendationId`로 식별하며 플레이리스트 fallback은 새 결과를 만들지 않는다. 기존 플레이리스트 GET 결과는 추천 이력과 연결하지 않는다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 추천 결과 ID |
+| `user_id` | `BIGINT` | NOT NULL | - | FK | 추천을 요청한 사용자 ID (`users.user_id`) |
+| `recommendation_type` | `ENUM('PHOTO','PLAYLIST')` | NOT NULL | - | - | 추천 유형 |
+| `recommendation_attempt` | `TINYINT` | NULL | NULL | CHECK | PHOTO는 NULL, PLAYLIST는 1~3 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 추천 결과 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_results` | PRIMARY KEY | `id` | - | 추천 결과 식별 |
+| `fk_ai_recommendation_results_user` | FOREIGN KEY | `user_id` | `users.user_id` | 추천 결과 소유 사용자 연결 |
+| `chk_ai_recommendation_results_type_attempt` | CHECK | `recommendation_type`, `recommendation_attempt` | PHOTO와 NULL 또는 PLAYLIST와 1~3 | 유형과 회차 조합을 제한 |
+
+## 30. ai_recommendation_result_tracks - 추천 결과 곡 스냅샷 테이블
+
+#### 1. 테이블 설명
+
+추천 결과 생성 시점에 포함된 모든 Spotify Track ID와 순서를 보존한다. 현재 추천 플레이리스트의 곡 테이블과 독립된 스냅샷이다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 추천 결과 곡 행 ID |
+| `recommendation_id` | `BIGINT` | NOT NULL | - | FK, UK(복합) | `ai_recommendation_results.id` 참조 |
+| `external_track_id` | `VARCHAR(22)` | NOT NULL | - | - | Spotify Track ID 스냅샷 |
+| `rank` | `INTEGER` | NOT NULL | - | UK(복합), CHECK | 추천 결과 안에서의 순서, 1 이상 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_result_tracks` | PRIMARY KEY | `id` | - | 곡 스냅샷 행 식별 |
+| `fk_ai_recommendation_result_tracks_result` | FOREIGN KEY | `recommendation_id` | `ai_recommendation_results.id` | 곡을 추천 결과에 연결 |
+| `uk_ai_recommendation_result_tracks_rank` | UNIQUE | `recommendation_id`, `rank` | - | 결과별 순서 중복 방지 |
+| `chk_ai_recommendation_result_tracks_rank` | CHECK | `rank` | `rank > 0` | 순서는 양수 |
+
+## 31. ai_recommendation_feedbacks - AI 추천 피드백 테이블
+
+#### 1. 테이블 설명
+
+사용자가 피드백을 제출한 경우에만 행을 생성한다. 미제출은 행이 없는 상태로 표현한다. 추천 결과당 최대 하나의 피드백을 저장하며 현재 플레이리스트 교체와 독립적으로 보존한다. 조건부 입력 검증은 피드백 API의 Backend 서비스가 수행하며 DB CHECK 제약에는 포함되어 있지 않다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 피드백 행 ID |
+| `recommendation_id` | `BIGINT` | NOT NULL | - | FK, UK | 피드백 대상 추천 결과 (`ai_recommendation_results.id`) |
+| `user_id` | `BIGINT` | NOT NULL | - | FK | 피드백 제출 사용자 (`users.user_id`) |
+| `feedback` | `ENUM('LIKE','DISLIKE')` | NOT NULL | - | - | 추천 결과 전체에 대한 평가 |
+| `selected_track_id` | `VARCHAR(22)` | NULL | NULL | - | PLAYLIST + LIKE에서 선택한 Spotify Track ID. 조건부 필수 여부는 서비스 검증 사항 |
+| `created_at` | `DATETIME` | NOT NULL | `CURRENT_TIMESTAMP` | - | 피드백 제출 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조/조건 | 설명 |
+| --- | --- | --- | --- | --- |
+| `pk_ai_recommendation_feedbacks` | PRIMARY KEY | `id` | - | 피드백 행 식별 |
+| `fk_ai_recommendation_feedbacks_result` | FOREIGN KEY | `recommendation_id` | `ai_recommendation_results.id` | 피드백 대상을 추천 결과에 연결 |
+| `fk_ai_recommendation_feedbacks_user` | FOREIGN KEY | `user_id` | `users.user_id` | 제출 사용자를 연결 |
+| `uk_ai_recommendation_feedbacks_result` | UNIQUE | `recommendation_id` | - | 추천 결과당 피드백 최대 1개 |
+
+#### 4. 처리 규칙
+
+- 추천 API는 정상 결과와 곡 스냅샷을 저장한다. 피드백 API는 사용자가 제출한 경우에만 피드백 행을 저장한다.
+- 선택 곡이 해당 결과의 추천 곡 목록에 포함되는지, PLAYLIST + LIKE에 선택 곡이 있는지, PHOTO/DISLIKE에 선택 곡이 없는지는 Backend가 검증한다.
+- 이 테이블들은 `recommendation_playlists` 또는 `recommendation_playlist_items`에 FK를 두지 않는다. 화면 복원용 두 테이블은 V14에서 제거하며 과거 추천/피드백 이력은 보존한다.
+
+## 32. Spring Batch JDBC 실행 메타데이터 테이블
+
+#### 1. 테이블 설명
+
+Spring Batch의 Job/Step 실행 이력과 재시작 정보를 JDBC `JobRepository`에 보존한다. Flyway V15는 Spring Batch 6.0.5의 MySQL schema를 기준으로 메타데이터 테이블 6개와 ID 시퀀스 테이블 3개를 추가한다. 이 테이블은 프레임워크 실행 메타데이터이며 월간 리포트 업무 일지와 역할이 다르다.
+
+#### 2. 테이블과 역할
+
+| 테이블명 | 역할 | 대표 저장 내용 |
+| --- | --- | --- |
+| `BATCH_JOB_INSTANCE` | 논리 Job 인스턴스 식별 | `JOB_NAME`, 식별 파라미터에서 만들어진 `JOB_KEY` |
+| `BATCH_JOB_EXECUTION` | Job 실행 시도와 최종 상태 저장 | 시작/종료 시각, `STATUS`, 종료 코드·메시지 |
+| `BATCH_JOB_EXECUTION_PARAMS` | 실행 파라미터 저장 | `runKey`, `targetMonth` 등 이름·타입·값·식별 여부 |
+| `BATCH_STEP_EXECUTION` | Step 단위 실행 및 처리량 저장 | Step 상태, 읽기·쓰기·commit·rollback 건수 |
+| `BATCH_JOB_EXECUTION_CONTEXT` | Job 재시작 문맥 저장 | 직렬화된 Job `ExecutionContext` |
+| `BATCH_STEP_EXECUTION_CONTEXT` | Step 재시작 문맥 저장 | 직렬화된 Step `ExecutionContext` |
+| `BATCH_JOB_INSTANCE_SEQ` | Job instance ID 발급용 시퀀스 | 현재 ID와 유일성 키 |
+| `BATCH_JOB_EXECUTION_SEQ` | Job execution ID 발급용 시퀀스 | 현재 ID와 유일성 키 |
+| `BATCH_STEP_EXECUTION_SEQ` | Step execution ID 발급용 시퀀스 | 현재 ID와 유일성 키 |
+
+#### 3. 제약·관리 원칙
+
+- 실제 컬럼 길이와 FK는 Flyway V15의 Spring Batch 6.0.5 MySQL DDL을 따른다. Batch 프레임워크가 관리하므로 애플리케이션 Entity로 중복 모델링하지 않는다.
+- Job/Step 실행 상태 및 체크포인트는 프레임워크 메타데이터에 기록한다. 동일 청크에서 처리하는 업무 대상 상태와 집계 건수는 아래 `report_batch_targets`, `report_batch_runs`에 별도로 기록한다.
+
+## 33. report_batch_runs - 월간 리포트 업무 실행 일지
+
+#### 1. 테이블 설명
+
+사용자가 요청한 월 마감 또는 AI 실패 재요청을 Backend의 `runKey`별 업무 실행으로 관리한다. Spring Batch 실행 ID가 아직 만들어지지 않은 예약 상태도 기록할 수 있도록 Batch 메타데이터와 별도로 둔다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `run_key` | `VARCHAR(100)` | NOT NULL | - | PK | Backend 실행의 안정 식별자. 생성/시험은 월별 키, 재요청은 `retryRequestId` 기반 키를 사용한다. |
+| `target_month` | `CHAR(7)` | NOT NULL | - | - | 대상 월 `YYYY-MM` |
+| `kind` | `VARCHAR(10)` | NOT NULL | - | - | 실행 종류: `GENERATE`, `RETRY`, `TEST` |
+| `status` | `VARCHAR(20)` | NOT NULL | `READY` | - | 업무 상태: `READY`, `RUNNING`, `COMPLETE`, `FAILED` |
+| `targets_fixed` | `BOOLEAN` | NOT NULL | `FALSE` | - | 실행 대상 명단이 최초 1회 확정됐는지 여부 |
+| `created_count` | `INT` | NOT NULL | `0` | - | 새로 생성한 월간 리포트 수 |
+| `skipped_count` | `INT` | NOT NULL | `0` | - | 기록이 없거나 현재 상태가 달라 건너뛴 사용자 수 |
+| `execution_id` | `BIGINT` | NULL | NULL | - | 연결된 최신 Spring Batch Job 실행 ID. FK는 설정하지 않는다. |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | - | 업무 실행 일지 생성 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `PRIMARY KEY` | PRIMARY KEY | `run_key` | 업무 실행을 중복 없이 식별한다. |
+
+## 34. report_batch_months - 월별 실행 소유권
+
+#### 1. 테이블 설명
+
+월별 생성 Job이 동시에 중복 실행되지 않도록 각 대상 월의 현재 실행 소유자를 기록한다. `owner_run_key`가 NULL이면 해당 월의 실행 잠금이 풀린 상태다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `target_month` | `CHAR(7)` | NOT NULL | - | PK | 잠금 대상 월 `YYYY-MM` |
+| `owner_run_key` | `VARCHAR(100)` | NULL | NULL | - | 현재 월 실행을 소유한 `report_batch_runs.run_key`. 고아 실행 복구를 고려해 FK는 설정하지 않는다. |
+
+## 35. report_batch_targets - 실행 대상·callback 결과 일지
+
+#### 1. 테이블 설명
+
+한 업무 실행이 처리할 사용자 명단을 고정해 저장하고 각 대상의 집계·재요청 진행 및 AI callback 결과를 기록한다. `NEW` 대상은 최대 500명씩 ID 순서로 읽으며, 완료한 청크의 대상 상태·건수와 Batch 체크포인트를 함께 커밋한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `run_key` | `VARCHAR(100)` | NOT NULL | - | 복합 PK, FK | 대상이 속한 `report_batch_runs.run_key` |
+| `user_id` | `BIGINT` | NOT NULL | - | 복합 PK | 처리할 사용자 ID |
+| `state` | `VARCHAR(12)` | NOT NULL | `NEW` | - | 업무 대상 상태: `NEW`, `READY`, `SKIPPED` |
+| `callback_status` | `VARCHAR(12)` | NULL | NULL | - | 기록된 AI callback 결과: `COMPLETED` 또는 `FAILED` |
+| `callback_fingerprint` | `CHAR(64)` | NULL | NULL | - | 같은 callback 재전달 판별에 사용하는 결과 지문 |
+
+#### 3. 제약조건·인덱스
+
+| 제약조건/인덱스명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `PRIMARY KEY` | 복합 PRIMARY KEY | `run_key`, `user_id` | - | 한 실행의 동일 사용자 중복 등록을 방지한다. |
+| `fk_report_target_run` | FOREIGN KEY | `run_key` | `report_batch_runs.run_key` | 대상의 소유 실행을 보장한다. |
+| `idx_report_targets_run_state_user` | INDEX | `run_key`, `state`, `user_id` | - | 미처리 대상 조회와 사용자 순서 복원에 사용한다. |
+
+## 36. report_ai_dispatches - AI 전송·접수 확인 일지
+
+#### 1. 테이블 설명
+
+AI에 월간 리포트 묶음을 보낸 단일 요청의 전송 상태를 `batchRequestId` 중심으로 기록한다. 응답 timeout처럼 AI 접수 여부를 판단할 수 없는 요청은 `UNKNOWN`으로 보존해 자동 재전송을 막고, 운영자가 확인한 담당자와 근거를 저장한다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `batch_request_id` | `CHAR(36)` | NOT NULL | - | PK | AI 요청 및 callback 상관관계 UUID |
+| `run_key` | `VARCHAR(100)` | NOT NULL | - | UK, FK | 이 전송을 실행한 `report_batch_runs.run_key` |
+| `state` | `VARCHAR(20)` | NOT NULL | `PREPARED` | - | 전송 상태: `PREPARED`, `SENDING`, `UNKNOWN`, `ACCEPTED`, `NOT_ACCEPTED` |
+| `sent_at` | `DATETIME(6)` | NULL | NULL | - | AI 요청 전송 시각 |
+| `confirmed_by` | `VARCHAR(100)` | NULL | NULL | - | 접수 여부를 대조한 운영 담당자 |
+| `confirmation_note` | `VARCHAR(500)` | NULL | NULL | - | AI 기록 조회 등 접수 확인 근거 |
+| `confirmed_at` | `DATETIME(6)` | NULL | NULL | - | 접수 여부를 확인한 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `PRIMARY KEY` | PRIMARY KEY | `batch_request_id` | - | AI 요청 식별자를 유일하게 유지한다. |
+| `uk_report_dispatch_run` | UNIQUE | `run_key` | - | 업무 실행 하나에 AI 배치 전송 일지 하나만 허용한다. |
+| `fk_report_dispatch_run` | FOREIGN KEY | `run_key` | `report_batch_runs.run_key` | 전송 일지의 업무 실행을 보장한다. |
+
+## 37. report_batch_recoveries - 운영자 중단 복구 근거
+
+#### 1. 테이블 설명
+
+운영자가 실행 프로세스의 종료를 확인한 뒤 Batch 실행을 복구했을 때 대상 실행, 담당자, 근거를 기록한다. 자동 시간 초과만으로 실행을 회수하지 않는다. Batch Job 실행 ID를 아직 얻기 전인 업무 예약 복구는 `execution_id`가 NULL일 수 있다.
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | Key | 설명 |
+| --- | --- | --- | --- | --- | --- |
+| `recovery_id` | `BIGINT` | NOT NULL | `AUTO_INCREMENT` | PK | 복구 기록 ID |
+| `execution_id` | `BIGINT` | NULL | NULL | UK | 복구한 Batch Job 실행 ID. 예약 상태에서 복구한 경우 NULL |
+| `run_key` | `VARCHAR(100)` | NOT NULL | - | FK | 복구 대상 업무 실행 |
+| `actor` | `VARCHAR(100)` | NOT NULL | - | - | 복구를 확인한 운영 담당자 |
+| `evidence` | `VARCHAR(500)` | NOT NULL | - | - | 프로세스 종료 확인 근거 |
+| `confirmed_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | - | 운영자가 복구를 확인한 시각 |
+
+#### 3. 제약조건
+
+| 제약조건명 | 유형 | 컬럼 | 참조 | 설명 |
+| --- | --- | --- | --- | --- |
+| `PRIMARY KEY` | PRIMARY KEY | `recovery_id` | - | 복구 기록을 식별한다. |
+| `uk_report_recovery_execution_id` | UNIQUE | `execution_id` | - | 하나의 Batch 실행에 복구 기록을 하나만 둔다. MySQL에서는 NULL 복구 예약 여러 건을 허용한다. |
+| `fk_report_recovery_run` | FOREIGN KEY | `run_key` | `report_batch_runs.run_key` | 복구 기록의 업무 실행을 보장한다. |
+
+#### 4. ID와 상태 의미
+
+- `run_key`는 Backend의 업무 실행을 가리킨다. `batch_request_id`는 AI 요청과 callback을 연결한다. 두 ID는 서로 다른 목적이다.
+- AI `jobId` 컬럼은 추가하지 않는다. AI `jobId`는 필수 상관관계 키가 아니다.
+- 위 `VARCHAR` 상태값은 서비스에서 사용되는 상태이며 DB의 ENUM/CHECK 제약으로 제한하지 않는다.
+- V15에서 생성한 `monthly_reports.batch_request_id`와 `report_ai_dispatches.batch_request_id`는 같은 AI 요청을 연결한다. 사용자별 callback 결과와 중복 전달 판별은 `report_batch_targets`에 기록한다. 동일 ID 재전달의 AI 측 멱등 처리와 요청 조회 방식은 서비스 정책 `OQ-028`에서 확인한다.
+
+---
+
+---
+
+## 38. chat_nickname_outbox - 채팅 닉네임 변경 Outbox
+
+#### 1. 테이블 설명
+
+Backend DB `mulo`의 [Flyway V20](../src/main/resources/db/migration/V20__add_chat_nickname_outbox.sql)에 정의한다. 닉네임과 버전을 변경하는 트랜잭션에서 변경 당시 값을 발행 대기 이벤트로 함께 저장한다. Outbox 저장에 실패하면 사용자 변경도 롤백된다. [BE 기능 PR #197](https://github.com/100-hours-a-week/KTB4-16th-BE/pull/197)
+
+#### 2. 컬럼 정의
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `event_id` | `CHAR(36)` | NOT NULL | - | 닉네임 변경 이벤트 UUID |
+| `user_id` | `BIGINT` | NOT NULL | - | 변경한 사용자의 ID 스냅샷 |
+| `nickname_version` | `BIGINT` | NOT NULL | - | 변경 시점의 사용자별 닉네임 버전 |
+| `payload` | `JSON` | NOT NULL | - | 변경 당시 이벤트 본문 |
+| `status` | `ENUM('PENDING', 'PUBLISHING', 'PUBLISHED', 'FAILED')` | NOT NULL | `PENDING` | 발행 상태. BE-1은 최초 `PENDING`만 기록한다. |
+| `attempt_count` | `INT` | NOT NULL | `0` | 발행 시도 횟수 |
+| `retry_at` | `DATETIME(6)` | NULL | `NULL` | 다음 발행 재시도 예정 시각 |
+| `published_at` | `DATETIME(6)` | NULL | `NULL` | 발행 완료 시각 |
+| `claim_token` | `CHAR(36)` | NULL | `NULL` | 발행 작업 선점 토큰 |
+| `lease_until` | `DATETIME(6)` | NULL | `NULL` | 작업 선점 만료 시각 |
+| `created_at` | `DATETIME(6)` | NOT NULL | `CURRENT_TIMESTAMP(6)` | 이벤트 생성 시각 |
+| `last_error_code` | `VARCHAR(100)` | NULL | `NULL` | 마지막 발행 오류 코드 |
+
+#### 3. 제약조건과 인덱스
+
+| 이름 | 유형 | 컬럼 | 설명 |
+| --- | --- | --- | --- |
+| `pk_chat_nickname_outbox` | PRIMARY KEY | `event_id` | 이벤트 식별 |
+| `uk_chat_nickname_outbox_user_version` | UNIQUE | `user_id`, `nickname_version` | 사용자별 동일 버전의 중복 저장 방지 |
+| `idx_chat_nickname_outbox_schedule` | INDEX | `status`, `retry_at`, `created_at` | 상태·재시도 시각·생성 시각 기준 조회 |
+| `idx_chat_nickname_outbox_lease` | INDEX | `status`, `lease_until` | 만료된 선점 조회 |
+
+`user_id`는 이벤트의 원본 식별자이며 물리 FK를 두지 않는다.
+
+#### 4. 처리 범위
+
+- `payload`에는 `schemaVersion`(현재 1), `eventId`, `eventType`(`USER_NICKNAME_CHANGED`), `userId`, `nickname`, `nicknameVersion`, `occurredAt`을 기록한다.
+- 닉네임과 선호 장르 변경은 같은 사용자 행 잠금을 사용한다. 닉네임을 변경할 때만 버전을 올리고 이벤트를 만든다.
+- BE-1은 Outbox 저장까지 구현했다. 채팅 서버 갱신은 기존 커밋 후 HTTP 호출로 수행하며, RabbitMQ 발행과 상태 전이는 후속 범위다.
+
+---
+
+## 별도 Chat DB: 메시지 복구 인덱스 추가 계약 (#330)
+
+- 상태: [CHAT 기능 PR #36](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/36) develop 반영 완료(2026-11-06 KST), 운영 적용 미확인.
+- 소유 저장소: `KTB4-16th-CHAT`, 데이터베이스: `mulo_chat`. Backend의 `mulo` DB migration이 아니다.
+- 기존 V1 역사 자료의 `chat_messages` 정의는 V6 이전 Backend schema이며 수정하지 않는다. 아래 내용은 별도 Chat DB에 대한 추가 계약이다.
+- Chat migration V1~V4는 유지되며 `V5__add_chat_message_sync_index.sql`이 CHAT develop에 추가되었다. 이 문서 PR은 migration을 변경하지 않는다. Backend V5와는 독립적인 버전이다.
+
+| 테이블 | 인덱스명 | 종류 | 컬럼 순서 | 목적 |
+|---|---|---|---|---|
+| `mulo_chat.chat_messages` | `idx_chat_messages_room_id` | 비고유 복합 인덱스 | `chat_room_id`, `chat_message_id` | 특정 방의 MAX ID 및 `after < chat_message_id <= through` 오름차순 복구 범위 조회 |
+
+```sql
+CREATE INDEX idx_chat_messages_room_id
+    ON chat_messages (chat_room_id, chat_message_id);
+```
+
+먼저 방을 동등 조건으로 좁히고 그 안에서 메시지 ID 범위를 읽는다. `chat_message_id`는 전체 테이블에서 발급하므로 방 안에서 연속일 필요가 없다. AUTO_INCREMENT 자체는 커밋 순서를 보장하지 않으며 같은 방 INSERT 전 기존 참가자 잠금으로 직렬화하는 조건을 유지한다.
+
+메시지 컬럼·기존 UNIQUE·기존 이력 조회 계약을 변경하지 않는다. Redis 채널과 전송 큐는 영구 메시지 저장소가 아니고 Outbox 테이블을 새로 만들지 않는다. 방 또는 메시지가 삭제되거나 접근 권한이 사라진 뒤까지 복구를 보장하지 않는다.
+
+---
+
+## 별도 Chat DB: chat_user_nickname_states - 사용자별 닉네임 적용 상태 (#337)
+
+Chat DB `mulo_chat`의 [Flyway V6](https://github.com/100-hours-a-week/KTB4-16th-CHAT/blob/7f07a640b9faae64fbb1d3caf104adefb185fdf8/src/main/resources/db/migration/V6__create_chat_user_nickname_states.sql)에 정의한다. 채팅 서버가 마지막으로 적용한 닉네임과 버전을 사용자당 한 행에 저장한다. [Chat 기능 PR #41](https://github.com/100-hours-a-week/KTB4-16th-CHAT/pull/41)
+
+| 컬럼명 | 데이터 타입 | NULL 여부 | 기본값 | 설명 |
+| --- | --- | --- | --- | --- |
+| `user_id` | `BIGINT` | NOT NULL | - | 사용자 ID. `pk_chat_user_nickname_states`의 기본 키 |
+| `nickname` | `VARCHAR(10)` | NOT NULL | - | 마지막으로 적용한 닉네임 |
+| `nickname_version` | `BIGINT` | NOT NULL | - | 마지막으로 적용한 BE 닉네임 버전 |
+| `updated_at` | `DATETIME(6)` | NOT NULL | - | 채팅 서버에서 상태를 적용한 KST 시각 |
+
+- 물리 FK를 두지 않는다. V6 적용 시 새 테이블은 비어 있고, 버전 처리 함수가 첫 입력의 이름과 버전으로 상태를 생성한다. 채팅방 참가 기록이 없어도 상태를 저장한다.
+- 새 버전은 사용자 상태와 기존 방 참가자의 표시 이름을 같은 트랜잭션에서 갱신한다. 과거 버전과 같은 이름의 동일 버전은 생략한다. 같은 버전에 다른 이름이 오면 갱신을 거절하고 ERROR 로그에 사용자 ID·버전·이벤트 ID를 기록한다.
+- Chat-1은 내부 처리 함수까지 제공한다. 기존 닉네임 HTTP 경로는 참가자 이름을 갱신하며, RabbitMQ 소비 연결과 BE 기준 전체 초기화는 후속 단계에서 진행한다.

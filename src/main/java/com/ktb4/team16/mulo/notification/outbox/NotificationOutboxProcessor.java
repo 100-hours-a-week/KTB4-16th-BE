@@ -1,12 +1,15 @@
 package com.ktb4.team16.mulo.notification.outbox;
 
 import com.ktb4.team16.mulo.notification.event.NotificationEventType;
+import com.ktb4.team16.mulo.notification.sse.NotificationCreatedNotifier;
 import java.sql.Connection;
 import java.sql.Savepoint;
 import java.sql.SQLException;
 import java.time.Clock;
 import java.time.LocalDateTime;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ThreadLocalRandom;
 import javax.sql.DataSource;
@@ -16,6 +19,8 @@ import org.springframework.jdbc.datasource.DataSourceUtils;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.PlatformTransactionManager;
 import org.springframework.transaction.TransactionDefinition;
+import org.springframework.transaction.support.TransactionSynchronization;
+import org.springframework.transaction.support.TransactionSynchronizationManager;
 import org.springframework.transaction.support.TransactionTemplate;
 
 /** 이벤트별 짧은 트랜잭션에서 전체 알림 생성과 Outbox 상태를 함께 처리한다. */
@@ -35,16 +40,18 @@ public class NotificationOutboxProcessor {
     private final Clock clock;
     private final DataSource dataSource;
     private final TransactionTemplate transactionTemplate;
+    private final NotificationCreatedNotifier notificationCreatedNotifier;
 
     /** 원본 작업과 분리된 새 트랜잭션에서 JDBC savepoint를 사용하도록 준비한다. */
     public NotificationOutboxProcessor(NotificationOutboxRepository outbox,
             NotificationEventHandler handler, Clock clock, DataSource dataSource,
-            PlatformTransactionManager transactionManager) {
+            PlatformTransactionManager transactionManager, NotificationCreatedNotifier notificationCreatedNotifier) {
         this.outbox = outbox;
         this.handler = handler;
         this.clock = clock;
         this.dataSource = dataSource;
         this.retryPolicy = new NotificationRetryPolicy();
+        this.notificationCreatedNotifier = notificationCreatedNotifier;
         this.transactionTemplate = new TransactionTemplate(transactionManager);
         this.transactionTemplate.setPropagationBehavior(TransactionDefinition.PROPAGATION_REQUIRES_NEW);
     }
@@ -82,11 +89,28 @@ public class NotificationOutboxProcessor {
                 outbox.lockExistingRecipientsInIdOrder(drafts.stream()
                         .map(NotificationDraft::recipientUserId).toList());
             }
+            Set<Long> createdRecipientIds = new HashSet<>();
             for (NotificationDraft draft : drafts) {
-                outbox.insertNotification(eventId, draft);
+                if (outbox.insertNotification(eventId, draft) > 0) {
+                    createdRecipientIds.add(draft.recipientUserId());
+                }
             }
             outbox.markCompleted(eventId, LocalDateTime.now(clock));
             releaseSavepoint(connection, savepoint);
+            if (!createdRecipientIds.isEmpty()) {
+                Set<Long> recipients = Set.copyOf(createdRecipientIds);
+                TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+                    @Override
+                    public void afterCommit() {
+                        try {
+                            notificationCreatedNotifier.notificationCreated(recipients);
+                        } catch (RuntimeException exception) {
+                            log.warn("커밋된 알림의 SSE 신호를 제출하지 못했습니다: failureType={}",
+                                    exception.getClass().getSimpleName());
+                        }
+                    }
+                });
+            }
             return ProcessOutcome.COMPLETED;
         } catch (RuntimeException exception) {
             rollbackSavepoint(connection, savepoint);

@@ -46,6 +46,17 @@ public class MonthlyReportPreparationChunkService {
     // 지정 사용자 묶음의 월간 집계와 리포트·기분 통계를 독립 트랜잭션으로 저장한다.
     @Transactional(propagation = Propagation.REQUIRES_NEW)
     public PreparedChunk prepareChunk(YearMonth targetMonth, List<Long> userIds) {
+        return prepare(targetMonth, userIds, true);
+    }
+
+    /** Batch의 청크 트랜잭션에 참여하며 생성 작업에서 FAILED를 자동 재요청하지 않는다. */
+    @Transactional(propagation = Propagation.MANDATORY)
+    public PreparedChunk prepareForBatch(YearMonth targetMonth, List<Long> userIds) {
+        return prepare(targetMonth, userIds, false);
+    }
+
+    /** 집계 규칙은 공유하되 기존 독립 실행과 Batch의 실패분 정책을 구분한다. */
+    private PreparedChunk prepare(YearMonth targetMonth, List<Long> userIds, boolean retryFailures) {
         LocalDateTime start = targetMonth.atDay(1).atStartOfDay();
         LocalDateTime end = targetMonth.plusMonths(1).atDay(1).atStartOfDay();
         short year = (short) targetMonth.getYear();
@@ -58,7 +69,12 @@ public class MonthlyReportPreparationChunkService {
             var existing = reports.findByUser_UserIdAndReportYearAndReportMonth(userId, year, month);
             if (existing.isPresent()) {
                 MonthlyReport report = existing.get();
-                if (report.getAiRecapStatus() == MonthlyReport.AiRecapStatus.FAILED) {
+                // 신규 Batch는 이전 실행의 일지 없는 PENDING/FAILED를 임의 회수하지 않는다.
+                if (!retryFailures) {
+                    skipped++;
+                    continue;
+                }
+                if (retryFailures && report.getAiRecapStatus() == MonthlyReport.AiRecapStatus.FAILED) {
                     // 기존 월간 집계를 보존하고 실패한 AI 회고만 다시 요청한다.
                     report.retryFailedRecap();
                     preparedUserIds.add(userId);

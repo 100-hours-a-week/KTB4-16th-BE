@@ -5,13 +5,11 @@ import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistDa
 import com.ktb4.team16.mulo.recommendation.dto.response.RecommendationPlaylistResponse;
 import com.ktb4.team16.mulo.recommendation.message.RecommendationMessage;
 import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistCommandService;
-import com.ktb4.team16.mulo.recommendation.service.RecommendationPlaylistQueryService;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.security.core.annotation.AuthenticationPrincipal;
-import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
@@ -21,16 +19,7 @@ import org.springframework.web.bind.annotation.RestController;
 @RequestMapping("/api/recommendations/playlists")
 @RequiredArgsConstructor
 public class RecommendationPlaylistController {
-    private final RecommendationPlaylistQueryService queryService;
     private final RecommendationPlaylistCommandService commandService;
-
-    // 인증 사용자가 마지막으로 저장한 플레이리스트만 조회한다.
-    @GetMapping
-    public RecommendationPlaylistResponse getCurrentPlaylist(
-            @AuthenticationPrincipal Long userId) {
-        return new RecommendationPlaylistResponse(RecommendationMessage.PLAYLIST_RETRIEVED.message(),
-                null, queryService.getCurrentPlaylist(userId));
-    }
 
     // 좌표를 검증하고 현재 날씨 기반 추천 플레이리스트 생성을 서비스 계층에 위임한다.
     @PostMapping
@@ -42,6 +31,7 @@ public class RecommendationPlaylistController {
                 ? RecommendationMessage.PLAYLIST_CREATED : RecommendationMessage.PLAYLIST_RETAINED;
         HttpStatus status = result.replaced() ? HttpStatus.CREATED : HttpStatus.OK;
         return ResponseEntity.status(status).body(new RecommendationPlaylistResponse(message.message(),
-                result.recommendationId(), new RecommendationPlaylistData(result.playlist(), result.replaced())));
+                result.recommendationId(), result.recommendReason(),
+                new RecommendationPlaylistData(result.playlist(), result.replaced())));
     }
 }

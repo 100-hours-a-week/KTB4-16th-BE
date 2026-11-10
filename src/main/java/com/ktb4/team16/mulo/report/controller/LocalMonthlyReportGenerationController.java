@@ -29,7 +29,7 @@ public class LocalMonthlyReportGenerationController {
             @RequestParam(required = false) Integer year,
             @RequestParam(required = false) Integer month) {
         YearMonth targetMonth = resolveTargetMonth(year, month);
-        var result = generationService.generate(targetMonth);
+        var result = generationService.generateForTest(targetMonth);
         return new LocalMonthlyReportGenerationResponse(result.targetMonth().getYear(),
                 result.targetMonth().getMonthValue(), result.createdCount(), result.skippedCount());
     }

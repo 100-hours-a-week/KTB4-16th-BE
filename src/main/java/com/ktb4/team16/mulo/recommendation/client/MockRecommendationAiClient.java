@@ -29,6 +29,6 @@ public class MockRecommendationAiClient implements RecommendationAiClient {
         var tracks = java.util.stream.Stream.concat(initialTracks.stream(), extraTracks)
                 .filter(track -> !context.excludeTrackIds().contains(track.externalTrackId()))
                 .limit(5).toList();
-        return new RecommendationResult(tracks, false);
+        return new RecommendationResult("현재 날씨와 분위기에 어울리는 곡들을 추천해요.", tracks, false);
     }
 }

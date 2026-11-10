@@ -52,6 +52,17 @@ class MonthlyReportBatchAiClientTest {
                 .hasMessageNotContaining("sensitive-ai-detail");
     }
 
+    // AI 내부 jobId가 없어도 유효한 접수 응답을 수용한다.
+    @Test
+    void acceptsQueuedResponseWithoutJobId() {
+        Fixture fixture = fixture();
+        fixture.server.expect(requestTo("http://ai.test/api/reports/batch-generate"))
+                .andRespond(withStatus(HttpStatus.ACCEPTED).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"status\":\"QUEUED\",\"targetCount\":1}"));
+        assertThat(fixture.client.requestBatch(YearMonth.of(2026, 9), List.of(7L), "batch-123")
+                .targetCount()).isEqualTo(1);
+    }
+
     private Fixture fixture() {
         RestClient.Builder builder = RestClient.builder();
         MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();

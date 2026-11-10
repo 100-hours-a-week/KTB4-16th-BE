@@ -91,7 +91,7 @@ public class PhotoRecommendationAiClient implements PhotoRecommendationAiGateway
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
-    public record PhotoRecommendationAiResponse(List<Track> tracks, boolean degraded) {
+    public record PhotoRecommendationAiResponse(String recommendReason, List<Track> tracks, boolean degraded) {
         @JsonIgnoreProperties(ignoreUnknown = true)
         public record Track(String title, String artistName, String externalTrackId,
                 String spotifyUri, String albumImageUrl, String externalUrl) {
