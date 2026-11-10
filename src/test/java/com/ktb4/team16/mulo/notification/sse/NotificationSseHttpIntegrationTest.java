@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import com.ktb4.team16.mulo.friend.service.FriendCommandTransactionalService;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
+import com.ktb4.team16.mulo.global.security.session.SessionRevocationStore;
 import com.ktb4.team16.mulo.notification.outbox.NotificationOutboxProcessor;
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -14,11 +15,16 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.UUID;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.boot.test.web.server.LocalServerPort;
 import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.when;
 
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "server.address=127.0.0.1")
@@ -42,8 +48,18 @@ class NotificationSseHttpIntegrationTest {
     @Autowired
     private NotificationSseConnectionManager connections;
 
+    @MockitoBean
+    private SessionRevocationStore sessionRevocationStore;
+
     private final List<Long> createdUsers = new ArrayList<>();
     private UUID eventId;
+
+    /** SSE HTTP 통합 테스트에서 Redis 세션을 활성 상태로 둔다. */
+    @BeforeEach
+    void setUp() {
+        when(sessionRevocationStore.isSessionRevoked(anyString())).thenReturn(false);
+        when(sessionRevocationStore.areLegacyUserTokensRevoked(anyLong())).thenReturn(false);
+    }
 
     @Test
     void authenticatedStreamReceivesCommittedNotificationAndClosesCleanly() throws Exception {

@@ -65,7 +65,7 @@ public class NotificationController {
             }
             response.setHeader(HttpHeaders.CACHE_CONTROL, "no-cache");
             response.setHeader("X-Accel-Buffering", "no");
-            return sseConnections.connect(userId, token.expiresAt());
+            return sseConnections.connect(userId, token.expiresAt(), token.sessionId());
         } catch (JwtException exception) {
             throw new UnauthenticatedUserException();
         }

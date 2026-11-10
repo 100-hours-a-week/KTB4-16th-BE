@@ -2,6 +2,7 @@ package com.ktb4.team16.mulo.notification.sse;
 
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
 import com.ktb4.team16.mulo.global.exception.AsyncRequestFailureClassifier;
+import com.ktb4.team16.mulo.global.security.session.SessionRevocationStore;
 import jakarta.annotation.PreDestroy;
 import java.io.IOException;
 import java.time.Clock;
@@ -34,10 +35,12 @@ public class NotificationSseConnectionManager {
     private final Clock clock;
     private final Duration heartbeatInterval;
     private final Duration maximumConnectionDuration;
+    private final SessionRevocationStore sessionRevocationStore;
 
     public NotificationSseConnectionManager(Clock clock,
             @Value("${mulo.notification.sse.heartbeat-interval:PT25S}") Duration heartbeatInterval,
-            @Value("${mulo.notification.sse.maximum-connection-duration:PT1H}") Duration maximumConnectionDuration) {
+            @Value("${mulo.notification.sse.maximum-connection-duration:PT1H}") Duration maximumConnectionDuration,
+            SessionRevocationStore sessionRevocationStore) {
         if (heartbeatInterval.isNegative() || heartbeatInterval.isZero()
                 || maximumConnectionDuration.isNegative() || maximumConnectionDuration.isZero()
                 || heartbeatInterval.toMillis() == 0 || maximumConnectionDuration.toMillis() == 0) {
@@ -46,6 +49,7 @@ public class NotificationSseConnectionManager {
         this.clock = clock;
         this.heartbeatInterval = heartbeatInterval;
         this.maximumConnectionDuration = maximumConnectionDuration;
+        this.sessionRevocationStore = sessionRevocationStore;
         AtomicInteger sequence = new AtomicInteger();
         this.timer = Executors.newScheduledThreadPool(2, task -> {
             Thread thread = new Thread(task, "notification-sse-timer-" + sequence.incrementAndGet());
@@ -56,9 +60,13 @@ public class NotificationSseConnectionManager {
                 heartbeatInterval.toMillis(), TimeUnit.MILLISECONDS);
     }
 
-    public SseEmitter connect(Long userId, Instant tokenExpiresAt) {
+    /** 인증된 세션의 만료·폐기 상태를 확인하고 수명이 제한된 SSE 연결을 등록한다. */
+    public SseEmitter connect(Long userId, Instant tokenExpiresAt, String sessionId) {
         Instant now = clock.instant();
         if (!now.isBefore(tokenExpiresAt)) {
+            throw new UnauthenticatedUserException();
+        }
+        if (isSessionRevoked(userId, sessionId)) {
             throw new UnauthenticatedUserException();
         }
         Instant deadline = now.plus(maximumConnectionDuration);
@@ -67,7 +75,8 @@ public class NotificationSseConnectionManager {
         }
         long timeoutMillis = Math.max(1, Duration.between(now, deadline).toMillis() + 1);
         SseEmitter emitter = createEmitter(timeoutMillis);
-        Connection connection = new Connection(UUID.randomUUID(), userId, tokenExpiresAt, deadline, emitter);
+        Connection connection = new Connection(UUID.randomUUID(), userId, sessionId,
+                tokenExpiresAt, deadline, emitter);
         emitter.onCompletion(() -> cleanup(connection));
         emitter.onTimeout(() -> close(connection));
         emitter.onError(error -> cleanup(connection));
@@ -139,6 +148,10 @@ public class NotificationSseConnectionManager {
         if (connection.closed.get()) {
             return false;
         }
+        if (isRevokedOrUnavailable(connection)) {
+            close(connection);
+            return false;
+        }
         if (!clock.instant().isBefore(connection.deadline)) {
             expire(connection);
             return false;
@@ -148,6 +161,24 @@ public class NotificationSseConnectionManager {
 
     private boolean sendWithoutDeadline(Connection connection, SseEmitter.SseEventBuilder event) {
         return sendFrame(connection, event, false);
+    }
+
+    /** 세션 폐기 여부를 Redis에서 읽고, 연결 중 저장소 오류는 닫을 대상으로 처리한다. */
+    private boolean isRevokedOrUnavailable(Connection connection) {
+        try {
+            return isSessionRevoked(connection.userId, connection.sessionId);
+        } catch (RuntimeException exception) {
+            log.warn("SSE 세션 폐기 상태를 확인할 수 없어 연결을 닫습니다: failureType={}",
+                    exception.getClass().getSimpleName());
+            return true;
+        }
+    }
+
+    /** 새 연결은 세션 ID 또는 레거시 사용자 표식으로 폐기 여부를 확인한다. */
+    private boolean isSessionRevoked(Long userId, String sessionId) {
+        return sessionId == null
+                ? sessionRevocationStore.areLegacyUserTokensRevoked(userId)
+                : sessionRevocationStore.isSessionRevoked(sessionId);
     }
 
     private boolean sendFrame(Connection connection, SseEmitter.SseEventBuilder event, boolean checkDeadline) {
@@ -234,6 +265,7 @@ public class NotificationSseConnectionManager {
     private static final class Connection {
         private final UUID id;
         private final Long userId;
+        private final String sessionId;
         private final Instant tokenExpiresAt;
         private final Instant deadline;
         private final SseEmitter emitter;
@@ -241,9 +273,11 @@ public class NotificationSseConnectionManager {
         private final AtomicBoolean expiring = new AtomicBoolean();
         private volatile ScheduledFuture<?> expirationTask;
 
-        private Connection(UUID id, Long userId, Instant tokenExpiresAt, Instant deadline, SseEmitter emitter) {
+        private Connection(UUID id, Long userId, String sessionId, Instant tokenExpiresAt,
+                Instant deadline, SseEmitter emitter) {
             this.id = id;
             this.userId = userId;
+            this.sessionId = sessionId;
             this.tokenExpiresAt = tokenExpiresAt;
             this.deadline = deadline;
             this.emitter = emitter;
