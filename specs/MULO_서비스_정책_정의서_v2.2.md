@@ -89,7 +89,7 @@
 | `AUTH-006` | **현재 설계** | 로그인 응답 | 로그인 성공 시 Access Token은 응답 Body로 반환하고 Refresh Token은 HttpOnly Cookie로 발급한다. | API 명세 상세2차 R4,R9 |
 | `AUTH-007` | **현재 설계** | 로그인 실패 통합 | 존재하지 않는 이메일, 비밀번호 불일치, 탈퇴 사용자는 동일한 401 `INVALID_CREDENTIALS`로 처리한다. | API 명세 상세2차 R7 |
 | `AUTH-008` | **확정** | 로그아웃 멱등성 및 클라이언트 Access Token 폐기 | 로그아웃은 멱등적으로 처리한다. 로그아웃 시 클라이언트는 보유한 Access Token을 즉시 폐기하고 로그아웃 상태로 전환한다. 서버 로그아웃 처리가 실패하더라도 클라이언트의 로컬 로그아웃은 수행한다. | 사용자 확정 / API 명세 상세2차 |
-| `AUTH-009` | **확정** | 로그아웃 서버 처리 | 서버는 로그아웃 시 Refresh Token을 revoke하고 Refresh Token Cookie를 만료한다. 별도 Access Token blacklist 정책은 두지 않고, 클라이언트가 Access Token을 즉시 폐기하는 방식으로 처리한다. | 사용자 확정 / API 명세 상세2차 |
+| `AUTH-009` | **확정** | 로그아웃 서버 처리 | 서버는 로그아웃 시 Refresh Token을 revoke하고 Refresh Token Cookie를 만료한다. 또한 Redis에 해당 로그인 세션의 폐기 상태를 기록해, 그 세션에서 발급된 Access Token은 만료 전이라도 이후 인증에서 거부한다. 클라이언트의 Access Token 즉시 폐기는 AUTH-008을 따른다. | 사용자 확정 / API 명세 상세2차 / BE #185 |
 | `AUTH-010` | **현재 설계** | Refresh 인증 실패 통합 | Refresh Token 없음·만료·서명 오류·DB 불일치·revoke 등은 401 `INVALID_REFRESH_TOKEN`으로 통합한다. | API 명세 상세2차 R20,R22 |
 | `AUTH-011` | **현재 설계** | 비밀번호 저장 | 비밀번호 원문은 저장하지 않고 bcrypt 해시값을 저장한다. | 테이블 정의서 6차 §1 |
 | `AUTH-012` | **현재 설계** | 회원가입 중복 기준 | 활성 사용자 기준 이메일과 닉네임 중복을 허용하지 않으며 탈퇴 회원의 값은 재사용할 수 있다. | API 명세 상세2차 R13,R15 / users generated columns |
