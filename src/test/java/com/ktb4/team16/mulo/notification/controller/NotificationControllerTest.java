@@ -71,8 +71,8 @@ class NotificationControllerTest {
     void streamUsesAuthenticatedUserAndValidatedTokenExpiry() throws Exception {
         Instant expiresAt = Instant.now().plusSeconds(3600);
         when(jwtTokenProvider.extractAccessTokenDetails("valid-token"))
-                .thenReturn(new JwtTokenProvider.AccessTokenDetails(35L, expiresAt));
-        when(sseConnections.connect(35L, expiresAt)).thenReturn(new SseEmitter(1000L));
+                .thenReturn(new JwtTokenProvider.AccessTokenDetails(35L, expiresAt, "session-35"));
+        when(sseConnections.connect(35L, expiresAt, "session-35")).thenReturn(new SseEmitter(1000L));
 
         mvc.perform(get("/api/notifications/stream")
                         .header("Authorization", "Bearer valid-token")
@@ -82,6 +82,6 @@ class NotificationControllerTest {
                 .andExpect(header().string("X-Accel-Buffering", "no"))
                 .andExpect(request().asyncStarted());
 
-        verify(sseConnections).connect(35L, expiresAt);
+        verify(sseConnections).connect(35L, expiresAt, "session-35");
     }
 }

@@ -6,6 +6,7 @@ import com.ktb4.team16.mulo.auth.service.AuthService;
 import com.ktb4.team16.mulo.auth.service.ChatAuthVerificationService;
 import com.ktb4.team16.mulo.global.config.JwtProperties;
 import com.ktb4.team16.mulo.global.security.jwt.JwtTokenProvider;
+import com.ktb4.team16.mulo.global.security.session.SessionRevocationStore;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import com.ktb4.team16.mulo.notification.controller.NotificationController;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
@@ -35,6 +36,7 @@ import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
 import org.springframework.test.context.junit.jupiter.SpringJUnitConfig;
 import org.springframework.test.context.web.WebAppConfiguration;
+import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.mock.web.MockMultipartFile;
 import org.springframework.test.web.servlet.MockMvc;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -51,6 +53,7 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyLong;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.springframework.security.test.web.servlet.setup.SecurityMockMvcConfigurers.springSecurity;
 import static org.springframework.security.test.web.servlet.request.SecurityMockMvcRequestPostProcessors.user;
@@ -82,6 +85,7 @@ class SecurityIntegrationTests {
     @Autowired UserRepository userRepository;
     @Autowired JwtTokenProvider jwtTokenProvider;
     @Autowired NotificationSseConnectionManager sseConnections;
+    @MockitoBean SessionRevocationStore sessionRevocationStore;
     MockMvc mvc;
 
     /** 테스트 컨텍스트에 하드코딩하지 않은 JWT 서명 키를 제공한다. */
@@ -92,7 +96,9 @@ class SecurityIntegrationTests {
 
     @BeforeEach
     void setUp() {
-        reset(userRepository, sseConnections);
+        reset(userRepository, sseConnections, sessionRevocationStore);
+        when(sessionRevocationStore.isSessionRevoked(org.mockito.ArgumentMatchers.anyString())).thenReturn(false);
+        when(sessionRevocationStore.areLegacyUserTokensRevoked(anyLong())).thenReturn(false);
         mvc = webAppContextSetup(context).apply(springSecurity()).build();
     }
 
@@ -286,7 +292,8 @@ class SecurityIntegrationTests {
     void notificationStreamWithValidAccessTokenStartsAsyncResponse() throws Exception {
         when(userRepository.existsByUserIdAndDeletedAtIsNull(17L)).thenReturn(true);
         var emitter = new org.springframework.web.servlet.mvc.method.annotation.SseEmitter(1000L);
-        when(sseConnections.connect(eq(17L), any(Instant.class))).thenReturn(emitter);
+        when(sseConnections.connect(eq(17L), any(Instant.class), org.mockito.ArgumentMatchers.isNull()))
+                .thenReturn(emitter);
 
         mvc.perform(get("/api/notifications/stream")
                         .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(17L)))

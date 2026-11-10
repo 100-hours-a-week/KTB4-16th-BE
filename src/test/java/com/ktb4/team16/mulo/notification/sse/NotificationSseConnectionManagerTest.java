@@ -1,13 +1,19 @@
 package com.ktb4.team16.mulo.notification.sse;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.anyLong;
+import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.mockStatic;
+import static org.mockito.Mockito.when;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.asyncDispatch;
 import static org.springframework.test.web.servlet.request.MockMvcRequestBuilders.get;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.request;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
 import com.ktb4.team16.mulo.global.exception.GlobalExceptionHandler;
+import com.ktb4.team16.mulo.global.security.session.SessionRevocationStore;
+import io.lettuce.core.RedisCommandTimeoutException;
 import io.sentry.Sentry;
 import java.io.IOException;
 import java.net.SocketException;
@@ -22,6 +28,7 @@ import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.AfterEach;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.MockedStatic;
 import org.springframework.http.MediaType;
@@ -37,6 +44,15 @@ import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
 
 class NotificationSseConnectionManagerTest {
     private NotificationSseConnectionManager connections;
+    private SessionRevocationStore sessionRevocationStore;
+
+    /** 기존 SSE 동작 테스트의 세션 조회 결과를 활성 상태로 초기화한다. */
+    @BeforeEach
+    void setUp() {
+        sessionRevocationStore = mock(SessionRevocationStore.class);
+        when(sessionRevocationStore.isSessionRevoked(anyString())).thenReturn(false);
+        when(sessionRevocationStore.areLegacyUserTokensRevoked(anyLong())).thenReturn(false);
+    }
 
     @AfterEach
     void closeConnections() {
@@ -45,9 +61,22 @@ class NotificationSseConnectionManagerTest {
         }
     }
 
+    /** 지정된 Redis 대역을 주입해 SSE 연결 관리자를 만든다. */
+    private NotificationSseConnectionManager newManager(Clock clock, Duration heartbeatInterval,
+            Duration maximumConnectionDuration) {
+        return newManager(clock, heartbeatInterval, maximumConnectionDuration, sessionRevocationStore);
+    }
+
+    /** 연결별 폐기 동작을 직접 지정할 수 있도록 SSE 관리자를 만든다. */
+    private NotificationSseConnectionManager newManager(Clock clock, Duration heartbeatInterval,
+            Duration maximumConnectionDuration, SessionRevocationStore revocationStore) {
+        return new NotificationSseConnectionManager(clock, heartbeatInterval, maximumConnectionDuration,
+                revocationStore);
+    }
+
     @Test
     void connectedAndCreatedEventsReachEveryTabButNotAnotherUser() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMinutes(1));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         MvcResult first = connect(mvc, 1L, 30);
@@ -68,7 +97,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void heartbeatUsesCommentFrame() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofMillis(30), Duration.ofSeconds(2));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         MvcResult result = connect(mvc, 1L, 30);
@@ -80,7 +109,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void tokenExpirySendsControlEventAndRemovesConnection() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofSeconds(5));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         MvcResult result = connect(mvc, 1L, 1);
@@ -92,7 +121,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void maximumConnectionDurationRemovesConnectionWithoutAuthExpiryEvent() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMillis(80));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         MvcResult result = connect(mvc, 1L, 30);
@@ -108,7 +137,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void completedConnectionIsRemoved() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMinutes(1));
         TestStreamController controller = new TestStreamController(connections);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller).build();
@@ -121,7 +150,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void rejectedSubmissionClosesOnlyAffectedUsersConnections() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMinutes(1));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         connect(mvc, 1L, 30);
@@ -159,7 +188,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void closingForResynchronizationRacesSafelyWithSending() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMinutes(1));
         MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
         connect(mvc, 1L, 30);
@@ -180,7 +209,7 @@ class NotificationSseConnectionManagerTest {
     void failedConnectionDoesNotPreventAnotherTabFromReceivingSignal() throws Exception {
         AtomicInteger created = new AtomicInteger();
         connections = new NotificationSseConnectionManager(Clock.systemUTC(),
-                Duration.ofSeconds(2), Duration.ofMinutes(1)) {
+                Duration.ofSeconds(2), Duration.ofMinutes(1), sessionRevocationStore) {
             @Override
             protected SseEmitter createEmitter(long timeoutMillis) {
                 return created.getAndIncrement() == 0
@@ -200,7 +229,7 @@ class NotificationSseConnectionManagerTest {
     @Test
     void heartbeatFailureRemovesConnection() throws Exception {
         connections = new NotificationSseConnectionManager(Clock.systemUTC(),
-                Duration.ofMillis(30), Duration.ofMinutes(1)) {
+                Duration.ofMillis(30), Duration.ofMinutes(1), sessionRevocationStore) {
             @Override
             protected SseEmitter createEmitter(long timeoutMillis) {
                 return new FailingEmitter(timeoutMillis);
@@ -217,9 +246,60 @@ class NotificationSseConnectionManagerTest {
         assertThat(connections.connectionCount(1L)).isZero();
     }
 
+    /** 로그아웃된 세션의 이미 열린 스트림을 다음 알림 전송 때 닫고 알림을 보내지 않는다. */
+    @Test
+    void revokedSessionClosesOpenStreamBeforeSendingNextNotification() throws Exception {
+        SessionRevocationStore revocationStore = mock(SessionRevocationStore.class);
+        when(revocationStore.isSessionRevoked("session-1")).thenReturn(false, false, true);
+        connections = newManager(Clock.systemUTC(),
+                Duration.ofSeconds(2), Duration.ofMinutes(1), revocationStore);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
+        MvcResult result = connect(mvc, 1L, 30, "session-1");
+
+        connections.sendNotificationCreated(1L);
+
+        assertThat(result.getResponse().getContentAsString()).contains("event:connected")
+                .doesNotContain("event:notification-created");
+        assertThat(connections.connectionCount(1L)).isZero();
+    }
+
+    /** 세션 ID 없는 레거시 스트림도 사용자의 레거시 폐기 표식이 생기면 닫는다. */
+    @Test
+    void revokedLegacySessionClosesOpenStreamBeforeSendingNextNotification() throws Exception {
+        when(sessionRevocationStore.areLegacyUserTokensRevoked(1L)).thenReturn(false, false, true);
+        connections = newManager(Clock.systemUTC(), Duration.ofSeconds(2), Duration.ofMinutes(1));
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
+        MvcResult result = connect(mvc, 1L, 30);
+
+        connections.sendNotificationCreated(1L);
+
+        assertThat(result.getResponse().getContentAsString()).contains("event:connected")
+                .doesNotContain("event:notification-created");
+        assertThat(connections.connectionCount(1L)).isZero();
+    }
+
+    /** Redis 상태를 확인할 수 없는 기존 스트림은 fail-closed로 닫는다. */
+    @Test
+    void redisFailureClosesOpenStreamBeforeSendingNextNotification() throws Exception {
+        SessionRevocationStore revocationStore = mock(SessionRevocationStore.class);
+        when(revocationStore.isSessionRevoked("session-1"))
+                .thenReturn(false, false)
+                .thenThrow(new RedisCommandTimeoutException("offline"));
+        connections = newManager(Clock.systemUTC(), Duration.ofSeconds(2),
+                Duration.ofMinutes(1), revocationStore);
+        MockMvc mvc = MockMvcBuilders.standaloneSetup(new TestStreamController(connections)).build();
+        MvcResult result = connect(mvc, 1L, 30, "session-1");
+
+        connections.sendNotificationCreated(1L);
+
+        assertThat(result.getResponse().getContentAsString()).contains("event:connected")
+                .doesNotContain("event:notification-created");
+        assertThat(connections.connectionCount(1L)).isZero();
+    }
+
     @Test
     void onErrorRemovesConnectionWithoutCompletingEmitter() {
-        TrackingConnectionManager manager = new TrackingConnectionManager(false);
+        TrackingConnectionManager manager = new TrackingConnectionManager(false, sessionRevocationStore);
         connections = manager;
         TrackingEmitter emitter = manager.connectTracked(1L);
 
@@ -232,7 +312,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void onCompletionRemovesConnectionWithoutCompletingEmitterAgain() {
-        TrackingConnectionManager manager = new TrackingConnectionManager(false);
+        TrackingConnectionManager manager = new TrackingConnectionManager(false, sessionRevocationStore);
         connections = manager;
         TrackingEmitter emitter = manager.connectTracked(1L);
 
@@ -312,7 +392,7 @@ class NotificationSseConnectionManagerTest {
     void clientDisconnectIsNotCapturedTwiceAcrossSseAndMvcHandling() {
         var failure = new AsyncRequestNotUsableException("쓰기 실패",
                 new SocketException("Broken pipe"));
-        TrackingConnectionManager manager = new TrackingConnectionManager(false, failure);
+        TrackingConnectionManager manager = new TrackingConnectionManager(false, failure, sessionRevocationStore);
         connections = manager;
         manager.connectTracked(1L);
 
@@ -352,7 +432,7 @@ class NotificationSseConnectionManagerTest {
 
     @Test
     void unusableSseResponseDoesNotAttemptJsonErrorBody() throws Exception {
-        connections = new NotificationSseConnectionManager(Clock.systemUTC(),
+        connections = newManager(Clock.systemUTC(),
                 Duration.ofSeconds(2), Duration.ofMinutes(1));
         TestStreamController controller = new TestStreamController(connections);
         MockMvc mvc = MockMvcBuilders.standaloneSetup(controller)
@@ -369,8 +449,18 @@ class NotificationSseConnectionManagerTest {
     }
 
     private MvcResult connect(MockMvc mvc, long userId, int tokenLifetimeSeconds) throws Exception {
-        return mvc.perform(get("/test/stream").param("userId", Long.toString(userId))
-                        .param("expiresAt", Instant.now().plusSeconds(tokenLifetimeSeconds).toString()))
+        return connect(mvc, userId, tokenLifetimeSeconds, null);
+    }
+
+    /** 테스트 스트림 연결에 필요하면 명시된 JWT 세션 ID를 전달한다. */
+    private MvcResult connect(MockMvc mvc, long userId, int tokenLifetimeSeconds, String sessionId)
+            throws Exception {
+        var request = get("/test/stream").param("userId", Long.toString(userId))
+                .param("expiresAt", Instant.now().plusSeconds(tokenLifetimeSeconds).toString());
+        if (sessionId != null) {
+            request.param("sessionId", sessionId);
+        }
+        return mvc.perform(request)
                 .andExpect(status().isOk())
                 .andExpect(request().asyncStarted())
                 .andReturn();
@@ -394,8 +484,9 @@ class NotificationSseConnectionManagerTest {
         }
 
         @GetMapping(value = "/test/stream", produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-        SseEmitter stream(@RequestParam Long userId, @RequestParam Instant expiresAt) {
-            lastEmitter = connections.connect(userId, expiresAt);
+        SseEmitter stream(@RequestParam Long userId, @RequestParam Instant expiresAt,
+                @RequestParam(required = false) String sessionId) {
+            lastEmitter = connections.connect(userId, expiresAt, sessionId);
             return lastEmitter;
         }
     }
@@ -421,11 +512,20 @@ class NotificationSseConnectionManagerTest {
         private TrackingEmitter lastEmitter;
 
         private TrackingConnectionManager(boolean failOnEventSend) {
-            this(failOnEventSend, null);
+            this(failOnEventSend, null, mock(SessionRevocationStore.class));
+        }
+
+        private TrackingConnectionManager(boolean failOnEventSend, SessionRevocationStore revocationStore) {
+            this(failOnEventSend, null, revocationStore);
         }
 
         private TrackingConnectionManager(boolean failOnEventSend, IOException sendFailure) {
-            super(Clock.systemUTC(), Duration.ofHours(1), Duration.ofHours(2));
+            this(failOnEventSend, sendFailure, mock(SessionRevocationStore.class));
+        }
+
+        private TrackingConnectionManager(boolean failOnEventSend, IOException sendFailure,
+                SessionRevocationStore revocationStore) {
+            super(Clock.systemUTC(), Duration.ofHours(1), Duration.ofHours(2), revocationStore);
             this.failOnEventSend = failOnEventSend;
             this.sendFailure = sendFailure;
         }
@@ -439,7 +539,7 @@ class NotificationSseConnectionManagerTest {
         }
 
         private TrackingEmitter connectTracked(Long userId) {
-            connect(userId, Instant.now().plusSeconds(3600));
+            connect(userId, Instant.now().plusSeconds(3600), null);
             return lastEmitter;
         }
     }
