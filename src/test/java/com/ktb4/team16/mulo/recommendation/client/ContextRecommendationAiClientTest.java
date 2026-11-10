@@ -174,6 +174,50 @@ class ContextRecommendationAiClientTest {
         server.verify();
     }
 
+    @Test
+    void sendsOneTrackRequestWithoutChangingFiveTrackPath() {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
+        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
+                .andExpect(method(HttpMethod.POST))
+                .andExpect(header("X-Internal-Token", "test-token"))
+                .andExpect(jsonPath("$.limit").value(1))
+                .andRespond(withSuccess("{\"recommendReason\":\"좋은 하루를 위한 노래\",\"tracks\":["
+                        + validTrackJson(1) + "],\"degraded\":false}", MediaType.APPLICATION_JSON));
+
+        var result = client.recommendOne(context());
+
+        assertThat(result.tracks()).hasSize(1);
+        assertThat(result.recommendReason()).isEqualTo("좋은 하루를 위한 노래");
+        server.verify();
+    }
+
+    @Test
+    void rejectsEmptyDailySongResponse() {
+        assertDailySongResponseFailure("{\"tracks\":[],\"degraded\":false}",
+                DailySongAiResponseException.Failure.EMPTY_RESULT);
+    }
+
+    @Test
+    void rejectsDegradedDailySongResponse() {
+        assertDailySongResponseFailure("{\"tracks\":[" + validTrackJson(1) + "],\"degraded\":true}",
+                DailySongAiResponseException.Failure.DEGRADED);
+    }
+
+    private void assertDailySongResponseFailure(String body, DailySongAiResponseException.Failure failure) {
+        RestClient.Builder builder = RestClient.builder();
+        MockRestServiceServer server = MockRestServiceServer.bindTo(builder).build();
+        ContextRecommendationAiClient client = new ContextRecommendationAiClient(builder, properties());
+        server.expect(requestTo("https://mulostudio.com/ai/api/context-recommend"))
+                .andRespond(withSuccess(body, MediaType.APPLICATION_JSON));
+
+        assertThatThrownBy(() -> client.recommendOne(context()))
+                .isInstanceOfSatisfying(DailySongAiResponseException.class,
+                        exception -> assertThat(exception.failure()).isEqualTo(failure));
+        server.verify();
+    }
+
     // AI 응답의 곡 개수가 정확히 5개가 아니면 추천 예외로 변환한다.
     private void assertInvalidTrackCountResponse(int count) {
         RestClient.Builder builder = RestClient.builder();
