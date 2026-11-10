@@ -2,15 +2,11 @@ package com.ktb4.team16.mulo.match.service;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
-import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.ArgumentMatchers.anyLong;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.google.cloud.storage.Storage;
 import com.ktb4.team16.mulo.integrationtest.IntegrationTestDatabaseGuard;
 import com.ktb4.team16.mulo.match.domain.MatchRequestStatus;
-import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.repository.VoteQuestionRepository;
 import java.sql.PreparedStatement;
 import java.sql.Statement;
@@ -54,8 +50,6 @@ class MatchRequestExpirationMysqlIntegrationTest {
     @Autowired
     private JdbcTemplate jdbcTemplate;
     @Autowired
-    private MatchService matchService;
-    @Autowired
     private MatchRequestExpirationService expirationService;
     @Autowired
     private VoteQuestionRepository voteQuestionRepository;
@@ -66,8 +60,6 @@ class MatchRequestExpirationMysqlIntegrationTest {
     private Storage storage;
     @MockitoBean
     private Clock clock;
-    @MockitoBean
-    private ChatRoomCreationOrchestrator chatRoomCreationOrchestrator;
 
     private final List<Long> voteQuestionIds = new ArrayList<>();
     private final List<Long> userIds = new ArrayList<>();
@@ -135,7 +127,7 @@ class MatchRequestExpirationMysqlIntegrationTest {
     }
 
     @RepeatedTest(10)
-    void expirationWaitsForInFlightMatchAndDoesNotExpireMatchingRequests() throws Exception {
+    void expirationWaitsForInFlightStatusUpdateAndDoesNotExpireMatchingRequests() throws Exception {
         String suffix = UUID.randomUUID().toString().replace("-", "").substring(0, 10);
         long questionId = insertQuestion(LocalDate.now(KST), "race-" + suffix);
         long waitingUserId = insertUser("race-a-" + suffix);
@@ -164,11 +156,14 @@ class MatchRequestExpirationMysqlIntegrationTest {
             TransactionTemplate transactionTemplate = new TransactionTemplate(transactionManager);
             Future<?> matchingFuture = executor.submit(() -> transactionTemplate.execute(status -> {
                 voteQuestionRepository.findByVoteQuestionIdForUpdate(questionId).orElseThrow();
-                var response = matchService.createMatchRequest(
-                        requesterUserId, new MatchRequestCreateRequest(requesterAnswerId));
+                // 신규 1:1 매칭 없이 기존 MATCHING 상태 변경과 만료 처리의 잠금 경합을 재현한다.
+                long matchId = insertMatch(questionId);
+                jdbcTemplate.update("UPDATE match_requests SET status = 'MATCHING', match_id = ? "
+                        + "WHERE match_request_id = ?", matchId, waitingRequestId);
+                insertRequest(requesterUserId, requesterAnswerId, "MATCHING", matchId);
                 matchPrepared.countDown();
                 await(allowMatchCommit);
-                return response;
+                return null;
             }));
 
             assertThat(matchPrepared.await(10, TimeUnit.SECONDS)).isTrue();
@@ -200,7 +195,6 @@ class MatchRequestExpirationMysqlIntegrationTest {
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM match_requests WHERE vote_answer_id = ? AND status = 'MATCHING'",
                 Integer.class, waitingAnswerId)).isEqualTo(1);
-        verify(chatRoomCreationOrchestrator).createAfterMatch(anyLong(), any());
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM match_requests WHERE vote_answer_id = ? AND status = 'EXPIRED'",
                 Integer.class, waitingAnswerId)).isZero();
