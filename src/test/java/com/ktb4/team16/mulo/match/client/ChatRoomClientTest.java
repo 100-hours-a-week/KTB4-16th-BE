@@ -65,6 +65,27 @@ class ChatRoomClientTest {
         fixture.server().verify();
     }
 
+    /** 닉네임 경로에서 내부 인증 설정 오류와 만료·일반 충돌의 공통 분류 계약을 검증한다. */
+    @ParameterizedTest
+    @MethodSource("configurationAndConflictHttpFailures")
+    void classifiesNicknameEndpointConfigurationAndConflictFailures(
+            int status, String responseBody, FailureType expectedType, boolean retryable) {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.valueOf(status))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(responseBody));
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(expectedType);
+                    assertThat(exception.httpStatus()).isEqualTo(status);
+                    assertThat(exception.failureType().isRetryable()).isEqualTo(retryable);
+                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
+                });
+        fixture.server().verify();
+    }
+
     @Test
     void classifiesNicknameEndpointTransportFailureAsCommunicationError() {
         Fixture fixture = fixture("test-api-key");
@@ -137,6 +158,28 @@ class ChatRoomClientTest {
         fixture.server().verify();
     }
 
+    /** 그룹 경로에서도 내부 인증 설정 오류와 만료·일반 충돌이 구별되는지 검증한다. */
+    @ParameterizedTest
+    @MethodSource("configurationAndConflictHttpFailures")
+    void classifiesGroupEndpointConfigurationAndConflictFailures(
+            int status, String responseBody, FailureType expectedType, boolean retryable) {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(GROUP_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.valueOf(status))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(responseBody));
+
+        assertThatThrownBy(() -> fixture.client().joinOrCreateGroup(
+                new ChatGroupJoinOrCreateRequest(LocalDate.of(2026, 10, 21), 41L, 17L, "jettie", "A")))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(expectedType);
+                    assertThat(exception.httpStatus()).isEqualTo(status);
+                    assertThat(exception.failureType().isRetryable()).isEqualTo(retryable);
+                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
+                });
+        fixture.server().verify();
+    }
+
     @Test
     void mapsExplicitlyLeftParticipantToNonRetryableReentryFailure() {
         Fixture fixture = fixture("test-api-key");
@@ -171,6 +214,25 @@ class ChatRoomClientTest {
                 .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
                         assertThat(exception.failureType()).isEqualTo(FailureType.INVALID_RESPONSE));
         fixture.server().verify();
+    }
+
+    /** 오류 코드 우선 분기와 일반 HTTP 상태 분기를 구별할 공통 회귀 입력을 제공한다. */
+    private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+            configurationAndConflictHttpFailures() {
+        return java.util.stream.Stream.of(
+                org.junit.jupiter.params.provider.Arguments.of(503,
+                        "{\"code\":\"INTERNAL_AUTH_UNAVAILABLE\",\"message\":\"sensitive response body\"}",
+                        FailureType.CONFIGURATION_ERROR, false),
+                org.junit.jupiter.params.provider.Arguments.of(503,
+                        "{\"message\":\"sensitive response body\"}", FailureType.SERVER_ERROR, true),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "{\"code\":\"CHAT_ROOM_EXPIRED\",\"message\":\"sensitive response body\"}",
+                        FailureType.EXPIRED_REQUEST, false),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "{\"code\":\"OTHER_CONFLICT\",\"message\":\"sensitive response body\"}",
+                        FailureType.REQUEST_CONFLICT, false),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "sensitive response body", FailureType.REQUEST_CONFLICT, false));
     }
 
     private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> nicknameHttpFailures() {
