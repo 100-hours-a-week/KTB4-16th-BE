@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.notification.entity;
 
+import com.ktb4.team16.mulo.dailysong.entity.DailySongJob;
 import com.ktb4.team16.mulo.friend.entity.FriendRequest;
 import com.ktb4.team16.mulo.friend.entity.Friendship;
 import com.ktb4.team16.mulo.report.entity.MonthlyReport;
@@ -58,6 +59,11 @@ public class Notification {
     @Column(name = "source_event_id", length = 36)
     private String sourceEventId;
 
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "source_event_id", referencedColumnName = "notification_event_id",
+            insertable = false, updatable = false)
+    private DailySongJob dailySongJob;
+
     @Column(nullable = false, length = 100)
     private String title;
 
@@ -77,6 +83,7 @@ public class Notification {
             case MATCH_COMPLETED -> chatRoomId;
             case FRIEND_REQUEST -> friendRequest == null ? null : friendRequest.getFriendRequestId();
             case FRIEND_ACCEPTED -> friendship == null ? null : friendship.getFriendshipId();
+            case DAILY_SONG_READY -> dailySongJob == null ? null : dailySongJob.getJobId();
         };
     }
 
@@ -87,6 +94,7 @@ public class Notification {
             case MATCH_COMPLETED -> "CHAT_ROOM";
             case FRIEND_REQUEST -> "FRIEND_REQUEST";
             case FRIEND_ACCEPTED -> "FRIENDSHIP";
+            case DAILY_SONG_READY -> "DAILY_SONG";
         };
     }
 }
