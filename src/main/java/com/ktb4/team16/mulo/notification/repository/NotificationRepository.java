@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.notification.entity.Notification;
 import java.time.LocalDateTime;
 import java.util.List;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
@@ -26,6 +27,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
             WHERE notification.user.userId = :userId
             ORDER BY notification.createdAt DESC, notification.notificationId DESC
             """)
+    @EntityGraph(attributePaths = "dailySongJob")
     List<Notification> findFirstPage(@Param("userId") Long userId, Pageable pageable);
 
     /** 두 필드가 같은 시각의 알림을 중복 없이 이어 받도록 keyset 경계 뒤를 조회한다. */
@@ -37,6 +39,7 @@ public interface NotificationRepository extends JpaRepository<Notification, Long
                         AND notification.notificationId < :afterNotificationId))
             ORDER BY notification.createdAt DESC, notification.notificationId DESC
             """)
+    @EntityGraph(attributePaths = "dailySongJob")
     List<Notification> findAfterCursor(
             @Param("userId") Long userId,
             @Param("afterCreatedAt") LocalDateTime afterCreatedAt,
