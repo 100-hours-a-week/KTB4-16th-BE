@@ -2,10 +2,8 @@ package com.ktb4.team16.mulo.match.client;
 
 import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
-import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.ChatParticipantNicknameUpdateRequest;
-import com.ktb4.team16.mulo.match.dto.response.ChatRoomCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.ChatGroupJoinOrCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.ChatParticipantNicknameUpdateResponse;
 import java.net.http.HttpClient;
@@ -22,7 +20,6 @@ import org.springframework.web.client.RestClientResponseException;
 
 @Component
 public class ChatRoomClient {
-    private static final String CREATE_ENDPOINT = "/internal/chat-rooms";
     private static final String GROUP_JOIN_ENDPOINT = "/internal/chat-rooms/group/join-or-create";
     private static final String USER_NICKNAME_ENDPOINT = "/internal/users/{userId}/nickname";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
@@ -44,41 +41,6 @@ public class ChatRoomClient {
         this.restClient = builder.baseUrl(properties.baseUrl().toString()).build();
         this.properties = properties;
         this.objectMapper = objectMapper;
-    }
-
-    public ChatRoomCreateResponse createChatRoom(ChatRoomCreateRequest request) {
-        if (request == null) {
-            throw new IllegalArgumentException("채팅방 생성 요청이 필요합니다.");
-        }
-        if (!properties.hasInternalApiKey()) {
-            throw new ChatServerClientException(FailureType.CONFIGURATION_ERROR, null);
-        }
-
-        try {
-            var response = restClient.post()
-                    .uri(CREATE_ENDPOINT)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .header(INTERNAL_API_KEY_HEADER, properties.internalApiKey())
-                    .body(request)
-                    .retrieve()
-                    .toEntity(ChatRoomCreateResponse.class);
-
-            int status = response.getStatusCode().value();
-            ChatRoomCreateResponse body = response.getBody();
-            if ((status != 200 && status != 201)
-                    || body == null || body.chatRoomId() == null || body.chatRoomId() <= 0) {
-                throw new ChatServerClientException(FailureType.INVALID_RESPONSE, status);
-            }
-            return body;
-        } catch (ChatServerClientException exception) {
-            throw exception;
-        } catch (RestClientResponseException exception) {
-            throw classifyHttpFailure(exception);
-        } catch (ResourceAccessException exception) {
-            throw new ChatServerClientException(FailureType.COMMUNICATION_ERROR, null);
-        } catch (RestClientException exception) {
-            throw new ChatServerClientException(FailureType.INVALID_RESPONSE, null);
-        }
     }
 
     /** 동일 사용자·일자·질문의 재호출은 Chat Server의 멱등 배정 결과를 회수한다. */
