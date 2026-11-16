@@ -259,16 +259,45 @@ jobs:
             --max-surge="$MAX_SURGE" \
             --max-unavailable="$MAX_UNAVAILABLE"
 
-      # 모든 VM이 새 템플릿으로 교체되고 헬스체크를 통과할 때까지 기다린다.
-      - name: Wait until all instances are updated
+      # 새 템플릿의 VM이 목표 대수만큼 RUNNING + HEALTHY가 되면 배포를 끝낸다.
+      # 이 시점에 서비스는 이미 새 버전만 받는다. 옛 VM은 connection draining(최대 300초)을 거쳐 MIG가 알아서 지우므로
+      # (--version-target-reached, --stable은 이 삭제까지 기다려서 배포가 6~7분 길어진다) 삭제는 기다리지 않는다.
+      # 시간 안에 못 되면 실패하고, 아래 롤백 단계가 이전 템플릿으로 되돌린다.
+      - name: Wait until new instances are healthy
+        env:
+          WAIT_TIMEOUT_SEC: "1200"
         run: |
-          gcloud compute instance-groups managed wait-until "$MIG_NAME" $MIG_FLAG \
-            --version-target-reached --timeout=1800
+          python3 - <<'PY'
+          import json, os, subprocess, sys, time
 
-      - name: Wait until the group is stable
-        run: |
-          gcloud compute instance-groups managed wait-until "$MIG_NAME" $MIG_FLAG \
-            --stable --timeout=600
+          mig, flag, tpl = os.environ["MIG_NAME"], os.environ["MIG_FLAG"], os.environ["NEW_TEMPLATE"]
+          deadline = time.time() + int(os.environ["WAIT_TIMEOUT_SEC"])
+
+          def gcloud(*args):
+              return subprocess.check_output(["gcloud", *args], text=True).strip()
+
+          while True:
+              target = int(gcloud("compute", "instance-groups", "managed", "describe", mig, flag, "--format=value(targetSize)"))
+              items = json.loads(gcloud("compute", "instance-groups", "managed", "list-instances", mig, flag, "--format=json"))
+              ready, new_total, old_total = 0, 0, 0
+              for i in items:
+                  if i.get("version", {}).get("instanceTemplate", "").rsplit("/", 1)[-1] == tpl:
+                      new_total += 1
+                      healthy = any(h.get("detailedHealthState") == "HEALTHY" for h in i.get("instanceHealth", []))
+                      if i.get("instanceStatus") == "RUNNING" and i.get("currentAction") == "NONE" and healthy:
+                          ready += 1
+                  else:
+                      old_total += 1
+              print(f"새 템플릿 VM: 정상 {ready}/{target} (새 템플릿 VM 전체 {new_total}), 옛 템플릿 VM {old_total}대 남음")
+              if ready >= target:
+                  print("새 VM이 목표 대수만큼 정상입니다. 남은 옛 VM은 connection draining 뒤 MIG가 삭제합니다.")
+                  break
+              if time.time() > deadline:
+                  for i in items:
+                      print(i.get("name"), i.get("currentAction"), i.get("instanceStatus"), i.get("lastAttempt", {}).get("errors", ""))
+                  sys.exit("제한 시간 안에 새 VM이 정상이 되지 않았습니다.")
+              time.sleep(15)
+          PY
 
       # 교체 도중 실패하면 이전 템플릿으로 되돌린다. (교체를 시작한 경우에만)
       - name: Rollback to previous template
