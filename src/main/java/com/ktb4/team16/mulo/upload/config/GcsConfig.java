@@ -8,11 +8,13 @@ import java.io.IOException;
 import java.util.List;
 import java.util.function.Supplier;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(prefix = "storage", name = "provider", havingValue = "gcs", matchIfMissing = true)
 @EnableConfigurationProperties(GcsProperties.class)
 public class GcsConfig {
     private static final List<String> SCOPES = List.of("https://www.googleapis.com/auth/cloud-platform");
@@ -20,9 +22,11 @@ public class GcsConfig {
 
     /**
      * {@code gcs.impersonate-service-account}가 비어 있으면 기본 자격 증명(GCP VM의 서비스 계정 등)을 그대로 쓴다.
-     * 값이 있으면 기본 자격 증명으로 그 서비스 계정을 가장한다. GCP 밖(예: AWS)에서 Workload Identity Federation의
-     * 외부 계정 자격 증명을 쓸 때 필요하다. 외부 계정 자격 증명 자체는 서명을 할 수 없어서
-     * {@code Storage.signUrl}이 실패하지만, 가장한 자격 증명은 IAM {@code signBlob}으로 서명한다.
+     * 값이 있으면 기본 자격 증명으로 그 서비스 계정의 권한을 빌려 쓴다(impersonation). GCP 밖(예: AWS)에서
+     * Workload Identity Federation의 외부 계정 자격 증명을 쓸 때 필요하다. 외부 계정 자격 증명 자체는 서명을 할 수 없어서
+     * {@code Storage.signUrl}이 실패하지만, 서비스 계정을 빌려 쓰는 자격 증명은 IAM {@code signBlob}으로 서명한다.
+     *
+     * <p>이 설정은 {@code storage.provider=gcs}일 때만 적용된다. S3를 쓰면 이 빈 자체가 만들어지지 않는다.
      */
     @Bean
     Storage storage(

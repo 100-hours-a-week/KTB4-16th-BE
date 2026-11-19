@@ -590,7 +590,7 @@ paths:
       operationId: deleteApiUsersMe
       description: |-
         현재 비밀번호 확인 후 users.deleted_at과 소유한 활성 records.deleted_at을 같은 시각으로 설정하고
-        기존 Refresh Token을 폐기한다. 이미 삭제된 기록의 삭제 시각, 사진 메타데이터와 GCS 이미지는 유지한다.
+        기존 Refresh Token을 폐기한다. 이미 삭제된 기록의 삭제 시각, 사진 메타데이터와 사진 저장소 이미지는 유지한다.
         기존에 발급된 사진 Signed URL은 원래 만료 시각까지 유효할 수 있다.
         탈퇴와 동시에 진행 중인 기록 생성(CT-05)의 완료 순서는 별도 이슈에서 다룬다.
       responses:
@@ -1399,7 +1399,7 @@ paths:
       summary: 사진 임시 업로드
       operationId: postApiUploads
       description: |-
-        사진을 Google Cloud Storage에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다. HEIC은 JPEG quality 90으로 변환하고 촬영 metadata를 제거하되 ICC color profile은 유지하며, 원본 HEIC은 저장하지 않는다.
+        사진을 선택된 저장소(개발 GCS, 운영 S3)에 임시 저장하고 uploadId를 발급한다. 백엔드는 MySQL의 uploads 테이블에 업로드 소유 사용자와 이미지 위치/메타데이터를 저장한다. 임시 업로드는 생성 시점부터 1시간 동안 유효하며, AI 사진 추천과 최종 자물쇠 생성에서 같은 uploadId를 재사용한다. 자물쇠에 연결되지 않은 임시 이미지는 유효시간 만료 후 cleanup 대상으로 관리한다. HEIC은 JPEG quality 90으로 변환하고 촬영 metadata를 제거하되 ICC color profile은 유지하며, 원본 HEIC은 저장하지 않는다.
 
         허용 형식: JPG, JPEG, PNG, HEIC, WebP
         최대 입력 및 변환 결과 용량: 10MiB
@@ -1537,7 +1537,7 @@ paths:
       operationId: getApiUploadsSignedUrl
       security:
       - bearerAuth: []
-      description: 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 임시 업로드에 대해 private GCS 객체의 읽기용 Signed URL을 발급한다. Signed URL은 발급 시점부터 10분 동안 유효하다. HEIC 업로드는 서버에서 변환된 JPEG 객체의 Signed URL을 반환한다.
+      description: 현재 사용자가 소유하고 생성 후 1시간이 지나지 않은 임시 업로드에 대해 private 사진 저장소 객체의 읽기용 Signed URL을 발급한다. Signed URL은 발급 시점부터 10분 동안 유효하다. HEIC 업로드는 서버에서 변환된 JPEG 객체의 Signed URL을 반환한다.
       parameters:
       - name: uploadId
         in: path
@@ -1564,7 +1564,7 @@ paths:
               example:
                 message: 사진 조회 URL 발급 성공
                 data:
-                  signedUrl: https://storage.googleapis.com/example-bucket/uploads/35/example.jpg?X-Goog-Algorithm=GOOG4-RSA-SHA256&...
+                  signedUrl: https://signed.example/uploads/35/example.jpg?signature=...
         '401':
           description: 유효한 Access Token이 없거나 인증에 실패한 경우 401.
           content:
@@ -2262,7 +2262,7 @@ paths:
                       photoUrl:
                         type: string
                         format: uri
-                        description: private GCS 객체에 대한 read Signed URL이며, 발급 후 10분간 유효하다.
+                        description: private 사진 저장소 객체에 대한 read Signed URL이며, 발급 후 10분간 유효하다.
                       createdAt:
                         type: string
                         format: date-time
@@ -6672,7 +6672,7 @@ paths:
         만료된 임시저장은 204로 응답한다. 조회만으로 updatedAt은 갱신되지 않는다.
         사진이 있으면 새 Signed URL을 발급하며 유효기간은 10분이다.
         일반 임시 Upload의 1시간 사용 제한은 유지하되, 보관 중인 Draft 사진은
-        Draft의 14일 유효기간 동안 다시 조회할 수 있다. GCS 객체 물리 삭제는 V2 범위에서 제외한다.
+        Draft의 14일 유효기간 동안 다시 조회할 수 있다. 사진 저장소 객체 물리 삭제는 V2 범위에서 제외한다.
       security:
       - bearerAuth: []
       responses:
@@ -6774,7 +6774,7 @@ paths:
         요청에서 생략하거나 null로 전달한 선택 필드는 제거되며, moodScore 생략/null은 0이다.
         마지막 저장 시각부터 14일 동안 유효하다. 새 uploadId는 본인 소유이며 생성 후 1시간 이내여야 한다.
         활성 Draft가 이미 참조하는 동일 uploadId는 Draft 유효기간 내 다시 저장할 수 있다.
-        Draft 사진의 GCS 객체 물리 삭제는 V2 범위에서 제외한다.
+        Draft 사진의 사진 저장소 객체 물리 삭제는 V2 범위에서 제외한다.
       security:
       - bearerAuth: []
       requestBody:
@@ -6892,7 +6892,7 @@ paths:
       - RECORD / 자물쇠
       summary: 내 자물쇠 임시저장 삭제
       operationId: deleteApiUsersMeRecordDraft
-      description: 임시저장 DB 행을 삭제한다. 행이 없어도 204이며 Upload 메타데이터와 GCS 객체는 삭제하지 않는다.
+      description: 임시저장 DB 행을 삭제한다. 행이 없어도 204이며 Upload 메타데이터와 사진 저장소 객체는 삭제하지 않는다.
       security:
       - bearerAuth: []
       responses:

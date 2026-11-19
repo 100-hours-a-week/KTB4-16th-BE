@@ -11,6 +11,7 @@ import com.google.cloud.storage.Storage;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.jupiter.api.Test;
+import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 
 class GcsConfigTest {
 
@@ -52,5 +53,17 @@ class GcsConfigTest {
 
         assertThat(storage.getOptions().getCredentials()).isNotInstanceOf(ImpersonatedCredentials.class);
         assertThat(NoCredentials.class).isNotNull();
+    }
+
+    @Test
+    void 저장소_제공자가_s3이면_GCS_빈을_만들지_않는다() {
+        new ApplicationContextRunner()
+                .withUserConfiguration(GcsConfig.class)
+                .withPropertyValues(
+                        "storage.provider=s3",
+                        "gcs.project-id=project",
+                        "gcs.bucket-name=bucket",
+                        "gcs.impersonate-service-account=" + TARGET)
+                .run(context -> assertThat(context).doesNotHaveBean(Storage.class));
     }
 }

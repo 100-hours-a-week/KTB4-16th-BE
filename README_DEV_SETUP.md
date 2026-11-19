@@ -106,6 +106,17 @@ FLUSH PRIVILEGES;
 
 ## 4. 애플리케이션 실행
 
+사진 저장소는 `STORAGE_PROVIDER`로 선택한다. 기본값 `gcs`는 개발 환경의 기존
+`GCP_PROJECT_ID`, `GCS_BUCKET_NAME`을 사용한다. 운영에서 S3를 선택할 때는
+`STORAGE_PROVIDER=s3`, `AWS_REGION`, `AWS_S3_BUCKET`을 설정한다. S3 자격증명은
+AWS SDK의 기본 자격증명 체인으로 가져오므로 애플리케이션에 Access Key를
+하드코딩하지 않는다. 운영 환경에서는 백엔드 프로세스가 S3에 접근할 수 있는
+IAM 자격증명을 제공해야 한다.
+
+기존 사진의 객체 키는 DB에 저장되어 있다. 운영을 S3로 전환하기 전, 기존 GCS
+사진을 같은 키로 S3에 복사하고 조회를 검증해야 한다. 최종 자물쇠 사진도
+`uploads/` 키를 유지하므로 이 경로 전체에 임시 파일 삭제 규칙을 적용하지 않는다.
+
 macOS/Linux에서 직접 작성한 신뢰할 수 있는 `.env`를 환경변수로 로드한 후 실행한다:
 
 ```bash

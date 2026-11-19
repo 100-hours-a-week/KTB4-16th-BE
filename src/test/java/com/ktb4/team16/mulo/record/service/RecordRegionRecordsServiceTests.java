@@ -17,7 +17,7 @@ import com.ktb4.team16.mulo.record.exception.InvalidCursorException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -33,7 +33,7 @@ class RecordRegionRecordsServiceTests {
     private final UploadService uploadService = mock(UploadService.class);
     private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
-    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final PhotoStorageService photoStorageService = mock(PhotoStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository,
             cursorCodec,
@@ -42,7 +42,7 @@ class RecordRegionRecordsServiceTests {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            gcsStorageService,
+            photoStorageService,
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
             java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul")));
 

@@ -35,7 +35,7 @@ public class UserWithdrawalService {
         }
 
         LocalDateTime deletedAt = LocalDateTime.now(SERVICE_ZONE_ID);
-        // 기존에 삭제된 기록과 사진 메타데이터, GCS 객체는 수정하지 않는다.
+        // 기존에 삭제된 기록과 사진 메타데이터, 사진 저장소 객체는 수정하지 않는다.
         recordRepository.softDeleteActiveByUserId(userId, deletedAt);
         refreshTokenRepository.findByUserUserId(userId)
                 .ifPresent(token -> token.revoke(deletedAt));
