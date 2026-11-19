@@ -2,11 +2,13 @@ package com.ktb4.team16.mulo.upload.config;
 
 import com.google.cloud.storage.Storage;
 import com.google.cloud.storage.StorageOptions;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.boot.context.properties.EnableConfigurationProperties;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration(proxyBeanMethods = false)
+@ConditionalOnProperty(prefix = "storage", name = "provider", havingValue = "gcs", matchIfMissing = true)
 @EnableConfigurationProperties(GcsProperties.class)
 public class GcsConfig {
     @Bean

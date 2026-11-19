@@ -12,7 +12,7 @@ import com.ktb4.team16.mulo.record.dto.response.MyPlaceRecordsResponseDto;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.place.repository.PlaceRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.LocalDateTime;
 import java.util.List;
@@ -30,11 +30,11 @@ class MyPlaceRecordsServiceTests {
     private final com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository
             recordPhotoRepository = mock(
                     com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository.class);
-    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final PhotoStorageService photoStorageService = mock(PhotoStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository, cursorCodec, userRepository, placeRepository,
             uploadService, musicTrackService, recordPhotoRepository,
-            gcsStorageService,
+            photoStorageService,
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
             java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul")));
 

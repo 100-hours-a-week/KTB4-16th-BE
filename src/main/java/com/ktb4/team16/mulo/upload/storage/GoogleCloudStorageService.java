@@ -8,11 +8,13 @@ import java.net.URL;
 import java.time.Duration;
 import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
+import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.stereotype.Service;
 
 @Service
+@ConditionalOnProperty(prefix = "storage", name = "provider", havingValue = "gcs", matchIfMissing = true)
 @RequiredArgsConstructor
-public class GoogleCloudStorageService implements GcsStorageService {
+public class GoogleCloudStorageService implements PhotoStorageService {
     private static final long SIGNED_URL_MINUTES = 10L;
 
     private final Storage storage;

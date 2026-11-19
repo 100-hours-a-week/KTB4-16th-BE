@@ -14,7 +14,7 @@ import com.ktb4.team16.mulo.upload.conversion.HeicImageConverter.ConvertedImage;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.Clock;
@@ -33,12 +33,12 @@ import org.springframework.mock.web.MockMultipartFile;
 class UploadServiceTest {
     private final UploadRepository uploadRepository = mock(UploadRepository.class);
     private final UserRepository userRepository = mock(UserRepository.class);
-    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final PhotoStorageService photoStorageService = mock(PhotoStorageService.class);
     private final HeicImageConverter heicImageConverter = mock(HeicImageConverter.class);
     private final Clock clock = Clock.fixed(
             Instant.parse("2026-09-24T00:00:00Z"), ZoneId.of("Asia/Seoul"));
     private final UploadService uploadService = new UploadService(
-            uploadRepository, userRepository, gcsStorageService, clock, heicImageConverter);
+            uploadRepository, userRepository, photoStorageService, clock, heicImageConverter);
     private User user;
 
     @BeforeEach
@@ -48,7 +48,7 @@ class UploadServiceTest {
     }
 
     @Test
-    void uploadsToGcsBeforeSavingMetadataAndReturnsUploadId() {
+    void uploadsToStorageBeforeSavingMetadataAndReturnsUploadId() {
         Upload savedUpload = mock(Upload.class);
         when(savedUpload.getUploadId()).thenReturn(123L);
         when(uploadRepository.saveAndFlush(any(Upload.class))).thenReturn(savedUpload);
@@ -56,11 +56,11 @@ class UploadServiceTest {
         UploadResponse response = uploadService.upload(35L, jpeg());
 
         assertThat(response.data().uploadId()).isEqualTo(123L);
-        verify(gcsStorageService).upload(
+        verify(photoStorageService).upload(
                 org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.jpg"),
                 any(byte[].class), org.mockito.ArgumentMatchers.eq("image/jpeg"));
         verify(uploadRepository).saveAndFlush(any(Upload.class));
-        verify(gcsStorageService, never()).delete(any());
+        verify(photoStorageService, never()).delete(any());
         verify(heicImageConverter, never()).convert(any());
     }
 
@@ -73,11 +73,11 @@ class UploadServiceTest {
         uploadService.upload(35L, png());
         uploadService.upload(35L, webp());
 
-        verify(gcsStorageService).upload(
+        verify(photoStorageService).upload(
                 org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.png"),
                 org.mockito.ArgumentMatchers.eq(png().getBytes()),
                 org.mockito.ArgumentMatchers.eq("image/png"));
-        verify(gcsStorageService).upload(
+        verify(photoStorageService).upload(
                 org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.webp"),
                 org.mockito.ArgumentMatchers.eq(webp().getBytes()),
                 org.mockito.ArgumentMatchers.eq("image/webp"));
@@ -98,7 +98,7 @@ class UploadServiceTest {
                 "photo", "photo.heic", "image/heic", heic));
 
         verify(heicImageConverter).convert(heic);
-        verify(gcsStorageService).upload(
+        verify(photoStorageService).upload(
                 org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.jpg"),
                 org.mockito.ArgumentMatchers.same(jpeg),
                 org.mockito.ArgumentMatchers.eq("image/jpeg"));
@@ -110,26 +110,26 @@ class UploadServiceTest {
     }
 
     @Test
-    void deletesGcsObjectWhenMetadataSaveFails() {
+    void deletesStoredObjectWhenMetadataSaveFails() {
         when(uploadRepository.saveAndFlush(any(Upload.class)))
                 .thenThrow(new IllegalStateException("db failure"));
 
         assertThatThrownBy(() -> uploadService.upload(35L, jpeg()))
                 .isInstanceOf(IllegalStateException.class);
 
-        verify(gcsStorageService).delete(org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.jpg"));
+        verify(photoStorageService).delete(org.mockito.ArgumentMatchers.matches("uploads/35/.+\\.jpg"));
     }
 
     @Test
-    void doesNotDeleteWhenGcsUploadFails() {
-        org.mockito.Mockito.doThrow(new IllegalStateException("gcs failure"))
-                .when(gcsStorageService).upload(any(), any(), any());
+    void doesNotDeleteWhenStorageUploadFails() {
+        org.mockito.Mockito.doThrow(new IllegalStateException("storage failure"))
+                .when(photoStorageService).upload(any(), any(), any());
 
         assertThatThrownBy(() -> uploadService.upload(35L, jpeg()))
                 .isInstanceOf(IllegalStateException.class);
 
         verify(uploadRepository, never()).saveAndFlush(any(Upload.class));
-        verify(gcsStorageService, never()).delete(any());
+        verify(photoStorageService, never()).delete(any());
     }
 
     @Test
@@ -137,11 +137,11 @@ class UploadServiceTest {
         IllegalStateException databaseFailure = new IllegalStateException("db failure");
         when(uploadRepository.saveAndFlush(any(Upload.class))).thenThrow(databaseFailure);
         org.mockito.Mockito.doThrow(new IllegalStateException("delete failure"))
-                .when(gcsStorageService).delete(any());
+                .when(photoStorageService).delete(any());
 
         assertThatThrownBy(() -> uploadService.upload(35L, jpeg()))
                 .isSameAs(databaseFailure);
-        verify(gcsStorageService).delete(any());
+        verify(photoStorageService).delete(any());
     }
 
     @Test
@@ -152,12 +152,12 @@ class UploadServiceTest {
                 org.mockito.ArgumentMatchers.eq(123L),
                 org.mockito.ArgumentMatchers.eq(35L),
                 any())).thenReturn(Optional.of(upload));
-        when(gcsStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
+        when(photoStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
                 .thenReturn("https://signed.example/photo");
 
         assertThat(uploadService.createReadSignedUrl(35L, 123L))
                 .isEqualTo("https://signed.example/photo");
-        verify(gcsStorageService).createReadSignedUrl("uploads/35/photo.jpg");
+        verify(photoStorageService).createReadSignedUrl("uploads/35/photo.jpg");
         verify(uploadRepository, never()).save(any(Upload.class));
         verify(uploadRepository, never()).findById(any());
 
@@ -174,7 +174,7 @@ class UploadServiceTest {
         when(upload.getImageUrl()).thenReturn("uploads/35/old-photo.jpg");
         when(uploadRepository.findByUploadIdAndUser_UserId(123L, 35L))
                 .thenReturn(Optional.of(upload));
-        when(gcsStorageService.createReadSignedUrl("uploads/35/old-photo.jpg"))
+        when(photoStorageService.createReadSignedUrl("uploads/35/old-photo.jpg"))
                 .thenReturn("https://signed.example/draft-photo");
 
         assertThat(uploadService.createDraftReadSignedUrl(35L, 123L))
@@ -185,7 +185,7 @@ class UploadServiceTest {
                 org.mockito.ArgumentMatchers.eq(123L),
                 org.mockito.ArgumentMatchers.eq(35L),
                 any());
-        verify(gcsStorageService).createReadSignedUrl("uploads/35/old-photo.jpg");
+        verify(photoStorageService).createReadSignedUrl("uploads/35/old-photo.jpg");
     }
 
     @Test
@@ -197,7 +197,7 @@ class UploadServiceTest {
 
         assertThatThrownBy(() -> uploadService.createReadSignedUrl(99L, 123L))
                 .isInstanceOf(UploadNotFoundException.class);
-        verify(gcsStorageService, never()).createReadSignedUrl(any());
+        verify(photoStorageService, never()).createReadSignedUrl(any());
     }
 
     @Test
@@ -210,7 +210,7 @@ class UploadServiceTest {
 
         assertThatThrownBy(() -> uploadService.createReadSignedUrl(35L, 999L))
                 .isInstanceOf(UploadNotFoundException.class);
-        verify(gcsStorageService, never()).createReadSignedUrl(any());
+        verify(photoStorageService, never()).createReadSignedUrl(any());
     }
 
     @Test
@@ -222,7 +222,7 @@ class UploadServiceTest {
 
         assertThatThrownBy(() -> uploadService.createReadSignedUrl(35L, 123L))
                 .isInstanceOf(UploadNotFoundException.class);
-        verify(gcsStorageService, never()).createReadSignedUrl(any());
+        verify(photoStorageService, never()).createReadSignedUrl(any());
     }
 
     @Test
@@ -240,7 +240,7 @@ class UploadServiceTest {
 
         verify(uploadRepository).findById(123L);
         verify(uploadRepository, never()).save(any(Upload.class));
-        verify(gcsStorageService, never()).createReadSignedUrl(any());
+        verify(photoStorageService, never()).createReadSignedUrl(any());
         verify(storedUpload, never()).getImageUrl();
         assertThat(output.getOut())
                 .contains("uploadId=123, userId=35, cutoff=2026-09-24T08:00")

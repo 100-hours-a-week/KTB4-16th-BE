@@ -8,7 +8,7 @@ import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.exception.UploadNotFoundException;
 import com.ktb4.team16.mulo.upload.message.UploadMessage;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.upload.validation.ImageFileValidator;
 import com.ktb4.team16.mulo.upload.validation.ImageFileValidator.ValidatedImage;
 import com.ktb4.team16.mulo.user.entity.User;
@@ -32,7 +32,7 @@ public class UploadService {
 
     private final UploadRepository uploadRepository;
     private final UserRepository userRepository;
-    private final GcsStorageService gcsStorageService;
+    private final PhotoStorageService photoStorageService;
     private final Clock clock;
     private final HeicImageConverter heicImageConverter;
 
@@ -45,7 +45,7 @@ public class UploadService {
         String objectKey = objectKey(userId, uploadImage.extension());
         boolean uploaded = false;
         try {
-            gcsStorageService.upload(objectKey, uploadImage.content(), uploadImage.contentType());
+            photoStorageService.upload(objectKey, uploadImage.content(), uploadImage.contentType());
             uploaded = true;
             Upload upload = uploadRepository.saveAndFlush(
                     Upload.create(user, objectKey, uploadImage.contentType(),
@@ -57,9 +57,9 @@ public class UploadService {
         } catch (RuntimeException exception) {
             if (uploaded) {
                 try {
-                    gcsStorageService.delete(objectKey);
+                    photoStorageService.delete(objectKey);
                 } catch (RuntimeException compensationException) {
-                    log.warn("GCS compensation delete failed for objectKey={}", objectKey,
+                    log.warn("Photo storage compensation delete failed for objectKey={}", objectKey,
                             compensationException);
                 }
             }
@@ -112,16 +112,16 @@ public class UploadService {
 
     @Transactional(readOnly = true)
     public String createReadSignedUrl(Long userId, Long uploadId) {
-        return gcsStorageService.createReadSignedUrl(findValidUpload(userId, uploadId).getImageUrl());
+        return photoStorageService.createReadSignedUrl(findValidUpload(userId, uploadId).getImageUrl());
     }
 
     @Transactional(readOnly = true)
     public String createDraftReadSignedUrl(Long userId, Long uploadId) {
-        return gcsStorageService.createReadSignedUrl(
+        return photoStorageService.createReadSignedUrl(
                 findOwnedUploadForDraft(userId, uploadId).getImageUrl());
     }
 
-    // TODO: 만료 cleanup에서 transaction commit 실패로 남은 GCS object도 회수한다.
+    // TODO: 만료 cleanup에서 transaction commit 실패로 남은 사진 객체도 회수한다.
 
     private String objectKey(Long userId, String extension) {
         return "uploads/" + userId + "/" + UUID.randomUUID() + "." + extension;
