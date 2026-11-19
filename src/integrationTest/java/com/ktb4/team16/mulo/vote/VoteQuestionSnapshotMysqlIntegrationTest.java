@@ -338,6 +338,7 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
                 .isEqualTo("BUILDING");
     }
 
+    /** 당일 공통 질문으로 확정한 뒤 READY 상태에서는 AI 질문을 다시 조회하지 않는다. */
     @Test
     void midnightUsesSameDayCommonFallbackAndDoesNotUseYesterdayGenreQuestion() {
         long jazzUserId = insertUser("재즈");
@@ -352,7 +353,6 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
                 new AiVoteQuestion(TODAY, "공통", "당일 공통 질문", "공통 A", "공통 B")));
 
         prefetchService.prefetchQuestions(TODAY);
-        org.mockito.Mockito.clearInvocations(aiVoteReadRepository);
         createSnapshot(TODAY);
 
         Long commonQuestionId = jdbcTemplate.queryForObject(
@@ -372,6 +372,8 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
                 Long.class, TODAY, jazzUserId)).isEqualTo(commonQuestionId);
         when(aiVoteReadRepository.findQuestions(TODAY, TODAY)).thenReturn(List.of(
                 new AiVoteQuestion(TODAY, "발라드", "늦게 도착한 질문", "늦은 A", "늦은 B")));
+        // READY 이전 스냅샷 생성의 정상 조회와 이후 재조회 검증을 분리한다.
+        org.mockito.Mockito.clearInvocations(aiVoteReadRepository);
         prefetchService.prefetchQuestions(TODAY);
         assertThat(jdbcTemplate.queryForObject(
                 "SELECT COUNT(*) FROM vote_questions WHERE vote_date = ? AND music_genre = '발라드'",
@@ -492,12 +494,15 @@ class VoteQuestionSnapshotMysqlIntegrationTest {
                 .andExpect(jsonPath("$.code").value("VOTE_SNAPSHOT_NOT_READY"));
     }
 
+    /** READY 상태에서 질문 ID가 없는 기존 배정의 HTTP 404 읽기 계약을 검증한다. */
     @Test
-    void apiReturnsNotFoundWhenTodaysGenreAndCommonQuestionsAreMissing() throws Exception {
+    void apiReturnsNotFoundForReadySnapshotWithMissingAssignedQuestion() throws Exception {
         long userId = insertUser("재즈");
-        when(aiVoteReadRepository.isAvailable()).thenReturn(true);
-        when(aiVoteReadRepository.findAllUserGenres()).thenReturn(Map.of(userId, "재즈"));
-        createSnapshot(TODAY);
+        testDates.add(TODAY);
+        jdbcTemplate.update("INSERT INTO vote_daily_snapshots (vote_date, status) VALUES (?, 'READY')", TODAY);
+        jdbcTemplate.update("INSERT INTO vote_user_daily_assignments "
+                        + "(vote_date, user_id, music_genre, vote_question_id) VALUES (?, ?, '재즈', NULL)",
+                TODAY, userId);
 
         mockMvc.perform(get("/api/vote-questions/today")
                         .header("Authorization", "Bearer " + jwtTokenProvider.createAccessToken(userId)))

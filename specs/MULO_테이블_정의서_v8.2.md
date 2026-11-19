@@ -205,7 +205,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- |
 | `records` | `places.place_id` ↔ `records.place_id` | 1:N | 하나의 장소에 여러 자물쇠가 존재할 수 있다. |
 | `monthly_reports` | `places.place_id` ↔ `monthly_reports.top_place_id` | 1:N | 월간 대표 법정동을 선정한 뒤 그 동의 대표 장소 행을 `top_place_id`에 저장한다. |
-| `record_drafts` | `uploads.upload_id` ↔ `record_drafts.upload_id` | N:1 | 사진이 있는 임시저장은 Upload 메타데이터를 참조한다. Draft의 유효기간 동안 새 Signed URL을 발급할 수 있으며 Draft 삭제만으로 Upload/GCS 객체를 삭제하지 않는다. |
+| `record_drafts` | `uploads.upload_id` ↔ `record_drafts.upload_id` | N:1 | 사진이 있는 임시저장은 Upload 메타데이터를 참조한다. Draft의 유효기간 동안 새 Signed URL을 발급할 수 있으며 Draft 삭제만으로 Upload/사진 저장소 객체를 삭제하지 않는다. |
 
 ---
 
@@ -307,7 +307,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-자물쇠에 최종 연결된 사진 정보를 저장하는 테이블이다. 실제 이미지 파일은 Google Cloud Storage에 저장하고, DB에는 자물쇠와 연결된 이미지의 저장 위치와 파일 메타데이터를 저장한다. 자물쇠 상세 조회, 지도·대시보드의 사진 표시 및 AI 사진 분석 등에 사용한다.
+자물쇠에 최종 연결된 사진 정보를 저장하는 테이블이다. 실제 이미지 파일은 개발 환경의 GCS 또는 운영 환경의 S3에 저장하고, DB에는 자물쇠와 연결된 이미지의 저장 위치와 파일 메타데이터를 저장한다. 자물쇠 상세 조회, 지도·대시보드의 사진 표시 및 AI 사진 분석 등에 사용한다.
 
 #### 2. 컬럼 정의
 
@@ -315,7 +315,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `record_photo_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 자물쇠 사진 레코드의 고유 ID | 사진 데이터를 고유하게 식별하고 향후 사진 데이터 증가에 따른 ID 범위 확장성을 고려하여 `BIGINT`를 사용한다. | 개별 자물쇠 사진 정보를 식별한다. |
 | `record_id` | `BIGINT` | - | NOT NULL | - | FK | 사진이 첨부된 자물쇠 ID | `records.record_id`와 동일한 타입을 사용하여 사진과 자물쇠를 연결한다. | 어떤 자물쇠에 첨부된 사진인지 식별한다. |
-| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | 자물쇠 사진을 조회하고 화면에 표시할 때 이미지의 저장 위치를 확인한다. |
+| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | 사진 저장소에 저장된 이미지의 위치 정보 | 실제 이미지 파일은 개발 환경의 GCS 또는 운영 환경의 S3에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | 자물쇠 사진을 조회하고 화면에 표시할 때 이미지의 저장 위치를 확인한다. |
 | `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | `image/jpeg`, `image/png`, `image/heic`, `image/webp` 등 파일 형식을 문자열로 표현하므로 `VARCHAR`를 사용한다. | 업로드된 이미지 형식을 확인하고 파일 검증·처리에 활용한다. |
 | `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 파일 크기는 정수이며 파일 크기가 커질 가능성을 충분히 수용하기 위해 `BIGINT`를 사용할 수 있다. | 이미지 업로드 용량 제한 검증 및 파일 관리에 활용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 사진 정보가 생성된 시각 | 사진 등록 시점을 날짜와 시간으로 기록하기 위해 `DATETIME` 계열을 사용한다. | 사진이 자물쇠에 등록된 시점을 기록한다. |
@@ -333,7 +333,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | 규칙명 | 설명 |
 | --- | --- |
 | `rule_record_photo_required` | 자물쇠 생성 완료 시 사진 한 장이 반드시 연결되어야 한다. 사진 없이 자물쇠 생성을 완료하지 않는다. |
-| `rule_record_photo_storage` | 실제 이미지 파일은 Google Cloud Storage에 저장하고, `record_photos`에는 최종 자물쇠에 연결된 이미지의 위치와 메타데이터를 저장한다. |
+| `rule_record_photo_storage` | 실제 이미지 파일은 개발 환경의 GCS 또는 운영 환경의 S3에 저장하고, `record_photos`에는 최종 자물쇠에 연결된 이미지의 위치와 메타데이터를 저장한다. |
 
 #### 4. 관계
 
@@ -348,7 +348,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 
 #### 1. 테이블 설명
 
-자물쇠 생성 전에 업로드된 임시 이미지의 메타데이터를 저장하는 테이블이다. 실제 이미지 파일은 Google Cloud Storage에 저장하며, 백엔드는 `upload_id`를 통해 업로드 소유 사용자와 이미지 저장 위치를 식별한다. 발급된 `uploadId`는 사진 기반 AI 음악 추천과 최종 자물쇠 생성에서 재사용한다.
+자물쇠 생성 전에 업로드된 임시 이미지의 메타데이터를 저장하는 테이블이다. 실제 이미지 파일은 개발 환경의 GCS 또는 운영 환경의 S3에 저장하며, 백엔드는 `upload_id`를 통해 업로드 소유 사용자와 이미지 저장 위치를 식별한다. 발급된 `uploadId`는 사진 기반 AI 음악 추천과 최종 자물쇠 생성에서 재사용한다.
 
 #### 2. 컬럼 정의
 
@@ -356,7 +356,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | `upload_id` | `BIGINT` | - | NOT NULL | `AUTO_INCREMENT` | PK | 임시 업로드 고유 ID | `/api/uploads`가 `uploadId: Long`을 발급하므로 다른 서비스 내부 식별자와 동일하게 `BIGINT`를 사용한다. | 사진 기반 음악 추천과 최종 자물쇠 생성에서 동일한 임시 이미지를 식별한다. |
 | `user_id` | `BIGINT` | - | NOT NULL | - | FK | 임시 이미지를 업로드한 사용자 ID | 임시 업로드는 인증된 사용자가 소유하는 리소스이며, `users.user_id`와 연결하여 소유권을 확인한다. | 다른 사용자의 `uploadId` 사용을 방지하고 현재 사용자 소유 업로드인지 검증한다. |
-| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | Google Cloud Storage에 저장된 임시 이미지의 위치 정보 | 실제 이미지 파일은 Google Cloud Storage에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | AI 사진 추천 및 최종 자물쇠 생성 시 사용할 이미지의 저장 위치를 확인한다. |
+| `image_url` | `VARCHAR` | 255 | NOT NULL | - | - | 사진 저장소에 저장된 임시 이미지의 위치 정보 | 실제 이미지 파일은 개발 환경의 GCS 또는 운영 환경의 S3에 저장하고 DB에는 해당 이미지를 식별하거나 접근하기 위한 경로 또는 URL을 문자열로 저장한다. | AI 사진 추천 및 최종 자물쇠 생성 시 사용할 이미지의 저장 위치를 확인한다. |
 | `mime_type` | `VARCHAR` | 50 | NOT NULL | - | - | 이미지 파일의 MIME 타입 | 업로드 API에서 JPG, JPEG, PNG, HEIC, WebP 이미지를 허용하며 파일 형식을 서버에서 검증하므로 MIME 타입을 저장한다. | 파일 형식 확인 및 최종 `record_photos` 메타데이터 생성에 사용한다. |
 | `file_size` | `BIGINT` | - | NOT NULL | - | - | 이미지 파일 크기(Byte) | 업로드 API는 최대 10MB 제한을 적용하며 파일 크기는 정수이므로 `BIGINT`를 사용한다. | 업로드 용량 검증 및 최종 사진 메타데이터 생성에 사용한다. |
 | `created_at` | `DATETIME` | - | NOT NULL | `CURRENT_TIMESTAMP` | - | 임시 업로드 생성 시각 | 임시 업로드가 생성된 시점을 기록한다. | 미연결 임시 업로드 cleanup 대상 판단의 기준 시각으로 사용한다. |
@@ -376,7 +376,7 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_upload_reuse` | 동일한 `uploadId`를 유효시간 내 사진 기반 AI 음악 추천과 최종 자물쇠 생성에서 재사용한다. |
 | `rule_upload_required_for_record` | 자물쇠 생성 시 사진이 필수이므로 유효한 `uploadId`를 반드시 전달해야 한다. |
 | `rule_upload_validity` | 임시 업로드는 생성 시점부터 1시간 동안 유효하다. 유효시간이 지난 업로드는 사진 기반 음악 추천 및 자물쇠 생성에 사용할 수 없다. |
-| `rule_upload_cleanup` | 생성 후 1시간이 지나도록 최종 자물쇠에 연결되지 않은 임시 업로드는 `uploads` 레코드와 Google Cloud Storage의 임시 이미지 cleanup 대상이다. |
+| `rule_upload_cleanup` | 생성 후 1시간이 지나도록 최종 자물쇠에 연결되지 않은 임시 업로드는 `uploads` 레코드와 사진 저장소의 임시 이미지 cleanup 대상이다. |
 | `rule_upload_finalize` | 자물쇠 생성 성공 시 임시 업로드의 이미지 위치 및 메타데이터를 `record_photos`에 저장하고 해당 `uploads` 레코드는 삭제한다. |
 | `rule_upload_format` | 허용 이미지 형식은 JPG, JPEG, PNG, HEIC, WebP이며 최대 파일 크기는 10MB이다. |
 
@@ -436,8 +436,8 @@ Access Token 재발급에 사용되는 Refresh Token의 유효 상태를 서버�
 | `rule_record_draft_upsert` | PUT은 전체 스냅샷 Upsert다. 생략/null 선택 필드는 제거하며 moodScore 생략/null은 0으로 저장한다. |
 | `rule_record_draft_expiration` | 마지막 저장 시각 `updated_at`부터 14일이 되는 시점부터 만료한다. GET은 만료 Draft를 반환하지 않고 updated_at을 변경하지 않으며, PUT 재저장은 기존 행을 갱신한다. |
 | `rule_record_draft_upload` | 일반 Upload는 생성 후 1시간 동안 사용 가능하다. 활성 Draft가 이미 참조하는 본인 Upload는 Draft 유효기간 내 조회를 위해 새 10분 Signed URL을 발급할 수 있다. |
-| `rule_record_draft_gcs` | Draft 사진 교체·삭제·만료 시 Upload 메타데이터와 GCS 객체를 삭제하지 않는다. GCS 객체 물리 삭제 및 만료 cleanup은 V2 범위에 포함하지 않는다. |
-| `rule_record_draft_record_create` | 최종 Record 생성 성공 시 해당 사용자의 Draft를 같은 DB 트랜잭션에서 삭제한다. RecordPhoto는 최종 요청의 Upload를 사용하며 해당 Upload 메타데이터만 기존 정책대로 삭제한다. GCS 객체는 유지한다. |
+| `rule_record_draft_storage` | Draft 사진 교체·삭제·만료 시 Upload 메타데이터와 사진 저장소 객체를 삭제하지 않는다. 사진 저장소 객체 물리 삭제 및 만료 cleanup은 V2 범위에 포함하지 않는다. |
+| `rule_record_draft_record_create` | 최종 Record 생성 성공 시 해당 사용자의 Draft를 같은 DB 트랜잭션에서 삭제한다. RecordPhoto는 최종 요청의 Upload를 사용하며 해당 Upload 메타데이터만 기존 정책대로 삭제한다. 사진 저장소 객체는 유지한다. |
 
 #### 4. 관계
 
@@ -993,7 +993,7 @@ V6에서 생성된 Backend 테이블이다. 매칭 질문과 별도 Chat DB가 �
 | 대상 | 원본/목표 설계 | Flyway V1~V15 및 현재 코드 | 문서 처리 |
 | --- | --- | --- | --- |
 | `places` | 법정동 코드·이름 nullable 쌍, 좌표 기반 장소 | V4에서 `external_place_id`, `place_name` 제거, `legal_dong_code`, `legal_dong_name`, 좌표 UNIQUE, 법정동 쌍 CHECK 적용 | V4 실제 구조를 본문에 반영 |
-| `uploads` | 임시 업로드는 1시간 유효하며 GCS 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
+| `uploads` | 임시 업로드는 1시간 유효하며 사진 저장소 객체를 최종 사진으로 전환 | V1은 `image_url`, `mime_type`, `file_size`, `created_at`만 저장하고 별도 `expires_at`, `status`, `object_key`는 없음 | 실제 컬럼은 V1 기준, 유효시간·정리는 설계 규칙으로 유지 |
 | `friend_requests` | 대기 요청만 저장하고 처리 후 삭제 | V1에 별도 `status` 컬럼 없이 사용자 쌍 UNIQUE로 구성 | 현재 구조와 정책이 일치하며 `status` 컬럼을 임의 추가하지 않음 |
 | `recommendation_playlists` | 화면 복원용 저장 제거 | V14에서 items와 함께 삭제 | 평가 이력과 음악 카탈로그만 유지 |
 | `record_drafts` | V1에서는 브라우저 로컬 임시저장을 사용하고 서버 기능에서 제외 | Flyway V1 생성, V5에서 현재 임시저장 스키마로 조정 | V1 제외 이력 유지, V2에서 사용자당 1개·14일 보관의 서버 임시저장 API 구현 |

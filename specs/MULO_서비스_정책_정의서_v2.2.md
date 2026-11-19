@@ -102,7 +102,7 @@
 | `AUTH-019` | **확정** | 회원 탈퇴 방식 | 회원 탈퇴는 현재 비밀번호 확인 후 `users.deleted_at`과 소유한 활성 `records.deleted_at`을 같은 시각으로 설정하는 soft delete다. | 사용자 확정 2026-10-12 / API 명세 상세2차 R44-R49 |
 | `AUTH-020` | **현재 설계** | 탈퇴 시 인증 종료 | 회원 탈퇴 시 Refresh Token을 revoke하고 Cookie를 만료해 현재 세션을 종료한다. | API 명세 상세2차 R44,R49 |
 | `AUTH-021` | **현재 설계** | 외부 사용자 식별자 | 외부 API에서도 내부 `user_id`를 `userId`로 사용한다. | API 명세 상세2차 정책 요약 R5 / 상세 R24 |
-| `AUTH-022` | **확정** | 회원 탈퇴 후 연결 데이터 처리 | 회원 탈퇴 시 사용자와 해당 사용자의 **활성 자물쇠 기록 전체**를 같은 시각으로 soft delete한다. 이미 삭제된 기록의 삭제 시각은 유지한다. 사진 메타데이터와 GCS 원본, 친구·투표·알림·리포트 등 다른 연결 데이터는 보존한다. 기존 알림의 저장된 문구도 유지하고 친구 목록에서는 탈퇴 사용자를 제외한다. 기존 사진 Signed URL은 만료 시각까지 유효할 수 있다. AI 임베딩 삭제 요청은 보내지 않으며 매칭·채팅과 탈퇴 중 기록 생성(CT-05)의 추가 처리는 별도 이슈에서 다룬다. | 사용자 확정 2026-10-12 / `UserWithdrawalService` |
+| `AUTH-022` | **확정** | 회원 탈퇴 후 연결 데이터 처리 | 회원 탈퇴 시 사용자와 해당 사용자의 **활성 자물쇠 기록 전체**를 같은 시각으로 soft delete한다. 이미 삭제된 기록의 삭제 시각은 유지한다. 사진 메타데이터와 사진 저장소 원본, 친구·투표·알림·리포트 등 다른 연결 데이터는 보존한다. 기존 알림의 저장된 문구도 유지하고 친구 목록에서는 탈퇴 사용자를 제외한다. 기존 사진 Signed URL은 만료 시각까지 유효할 수 있다. AI 임베딩 삭제 요청은 보내지 않으며 매칭·채팅과 탈퇴 중 기록 생성(CT-05)의 추가 처리는 별도 이슈에서 다룬다. | 사용자 확정 2026-10-12 / `UserWithdrawalService` |
 | `AUTH-023` | **확정** | 다중 기기 로그인 미지원 | V1은 동시에 여러 Refresh 세션을 유지하는 다중 기기 로그인을 지원하지 않는다. 사용자당 Refresh Token은 최대 1개만 유지하며, 새 로그인 성공 시 기존 `refresh_tokens` 레코드는 새 Refresh Token 상태로 교체한다. | 사용자 확정 / `refresh_tokens.user_id` UNIQUE |
 | `AUTH-024` | **확인 필요** | Refresh Token Cookie 속성 | Refresh Token Cookie는 `HttpOnly=true`를 적용하고 운영 환경에서는 `Secure=true`를 적용한다. Cookie 전송 경로는 `Path=/api/auth`로 제한한다. `SameSite`의 최종 정책은 실제 Frontend/Backend 배포 site 구조에 따라 추후 확정하며, 현재 로그인·로그아웃·CSRF 구현은 `SameSite=Strict`를 유지한다. | 사용자 확정 2026-09-21 / `AuthController` / `SecurityConfig` |
 | `AUTH-025` | **현재 설계** | CORS와 Cookie 정책 분리 | CORS는 cross-origin 요청 허용 정책이고 Cookie의 `SameSite`/`Secure`/`Path`를 대체하지 않는다. Frontend와 Backend가 cross-origin이면 서버는 실제 Frontend Origin만 허용하고 credentials를 허용하며, `*` Origin과 credentials를 함께 사용하지 않는다. Frontend도 credentials 포함 요청을 사용한다. | 최신 AUTH 검토 |
@@ -161,18 +161,18 @@
 
 | 정책 ID | 상태 | 정책명 | 현재 규칙 | 근거 |
 |---|---|---|---|---|
-| `UPLOAD-001` | **확정** | 임시 업로드 저장소 | 실제 임시 이미지는 Google Cloud Storage에 저장하고 `uploads`에는 소유 사용자·위치·MIME·크기 메타데이터를 저장한다. | API 명세 상세2차 정책 요약 R12 |
+| `UPLOAD-001` | **확정** | 임시 업로드 저장소 | 실제 임시 이미지는 개발 환경의 GCS, 운영 환경의 S3에 저장하고 `uploads`에는 소유 사용자·위치·MIME·크기 메타데이터를 저장한다. | API 명세 상세2차 정책 요약 R12 |
 | `UPLOAD-002` | **확정** | 업로드 유효기간 | 임시 업로드는 생성 시점부터 1시간 유효하다. | API 명세 상세2차 정책 요약 R12 |
 | `UPLOAD-003` | **확정** | uploadId 재사용 | 유효시간 내 같은 `uploadId`를 사진 기반 음악 추천과 최종 자물쇠 생성에 재사용한다. | API 명세 상세2차 정책 요약 R12 |
 | `UPLOAD-004` | **확정** | 업로드 성공 후 삭제 | 자물쇠 생성 성공 시 `record_photos`에 최종 사진 정보를 저장한 뒤 해당 `uploads` 레코드를 삭제한다. | API 명세 상세2차 정책 요약 R12 |
-| `UPLOAD-005` | **확정** | 미연결 업로드 정리 | 1시간 내 자물쇠에 연결되지 않은 업로드는 `uploads` 레코드와 GCS 임시 파일 cleanup 대상이다. | 테이블 정의서 6차 §7 / API 명세 상세2차 R96 |
+| `UPLOAD-005` | **확정** | 미연결 업로드 정리 | 1시간 내 자물쇠에 연결되지 않은 업로드는 `uploads` 레코드와 사진 저장소 임시 파일 cleanup 대상이다. | 테이블 정의서 6차 §7 / API 명세 상세2차 R96 |
 | `UPLOAD-006` | **현재 설계** | 업로드 포맷/용량 | JPG, JPEG, PNG, HEIC, WebP를 허용하며 최대 10MB이다. | Issue #123 구현 정책 |
 | `UPLOAD-007` | **현재 설계** | 업로드 소유권 은닉 | 존재하지 않음·다른 사용자 소유·1시간 만료·cleanup 완료 업로드는 모두 404 `UPLOAD_NOT_FOUND`로 처리한다. | API 명세 상세2차 R101,R104,R110 |
-| `UPLOAD-008` | **보류** | Presigned URL | V1은 백엔드가 파일을 받아 GCS에 업로드하는 방식을 유지하며 Presigned URL 전환은 보류한다. | API 명세 상세2차 정책 요약 R13 |
+| `UPLOAD-008` | **보류** | Presigned URL | V1은 백엔드가 파일을 받아 선택된 저장소에 업로드하는 방식을 유지하며 Presigned URL 전환은 보류한다. | API 명세 상세2차 정책 요약 R13 |
 | `PHOTO-001` | **현재 설계** | 최종 사진 수 | 자물쇠 생성 완료 시 사진은 정확히 1장 연결되며 `record_photos.record_id`는 1:1로 관리한다. | 테이블 정의서 6차 §5-6 / API 명세 상세2차 R106 |
-| `PHOTO-002` | **현재 설계** | 최종 사진 저장 | 최종 이미지 파일은 GCS에 저장하고 DB에는 이미지 위치와 파일 메타데이터를 저장한다. | 테이블 정의서 6차 §6 |
+| `PHOTO-002` | **현재 설계** | 최종 사진 저장 | 최종 이미지 파일은 개발 환경의 GCS, 운영 환경의 S3에 저장하고 DB에는 이미지 위치와 파일 메타데이터를 저장한다. | 테이블 정의서 6차 §6 |
 | `PHOTO-003` | **현재 구현** | 사진 기반 음악 추천 | 유효한 본인 `uploadId`의 사진을 AI가 분석하며 현행 API는 정확히 5곡을 반환한다. | OpenAPI v2.8 `/api/recommendations/photo`, `PhotoRecommendationService` |
-| `PHOTO-004` | **확정** | 최종 사진 보존 | 사용자 탈퇴 또는 자물쇠 soft delete 이후에도 이미 최종 자물쇠에 연결된 GCS 사진과 `record_photos` 메타데이터는 보존한다. | 사용자 확정 |
+| `PHOTO-004` | **확정** | 최종 사진 보존 | 사용자 탈퇴 또는 자물쇠 soft delete 이후에도 이미 최종 자물쇠에 연결된 사진 저장소 객체와 `record_photos` 메타데이터는 보존한다. | 사용자 확정 |
 
 ## 자물쇠
 
@@ -196,7 +196,7 @@
 | `RECORD-016` | **구현됨** | 임시저장 수량·Upsert | 사용자는 최대 1개의 임시저장을 가진다. PUT은 전체 스냅샷 Upsert이며 생략/null 선택 필드는 제거하고, moodScore 생략/null은 0으로 저장한다. | `RecordDraftService.upsertRecordDraft` / 테이블 정의서 v8.2 |
 | `RECORD-017` | **구현됨** | 임시저장 만료 | 마지막 성공 저장 시각 `updated_at`부터 14일이 지난 시점(`now >= updated_at + 14일`)부터 만료된다. 만료 Draft는 GET에서 제외하고, PUT 재저장 시 같은 Draft를 갱신한다. GET은 만료 시각을 연장하지 않는다. | `RecordDraftService` / OpenAPI v2.8 |
 | `RECORD-018` | **구현됨** | 임시 사진 보관 | 새 일반 Upload는 생성 후 1시간 동안 사용할 수 있다. 활성 Draft가 이미 참조하는 본인 Upload는 Draft 유효기간 내 재저장·조회할 수 있고, GET은 10분 유효 Signed URL을 새로 발급한다. 만료 Draft의 재저장에는 일반 1시간 제한을 적용한다. | `UploadService` / `RecordDraftService` / OpenAPI v2.8 |
-| `RECORD-019` | **확정** | 임시 사진 물리 삭제 | Draft 사진 교체·삭제·만료 및 최종 자물쇠 생성 시 GCS 객체의 물리 삭제는 V2 범위에 포함하지 않는다. Draft 삭제만으로 Upload 메타데이터도 삭제하지 않는다. 최종 Record 생성에서 실제 사용한 Upload 메타데이터만 기존 정책대로 삭제한다. | 사용자 확정 / `RecordService.createRecord` |
+| `RECORD-019` | **확정** | 임시 사진 물리 삭제 | Draft 사진 교체·삭제·만료 및 최종 자물쇠 생성 시 사진 저장소 객체의 물리 삭제는 V2 범위에 포함하지 않는다. Draft 삭제만으로 Upload 메타데이터도 삭제하지 않는다. 최종 Record 생성에서 실제 사용한 Upload 메타데이터만 기존 정책대로 삭제한다. | 사용자 확정 / `RecordService.createRecord` |
 
 ## 날씨·기상청 캐시
 
@@ -427,7 +427,7 @@
 
 | 항목 | 상태 | V1 처리 |
 |---|---|---|
-| Presigned URL 업로드 | **보류** | V1은 백엔드 수신 후 GCS 업로드 유지 |
+| Presigned URL 업로드 | **보류** | 백엔드 수신 후 선택된 저장소에 업로드 유지 |
 | `record_drafts` | **V1 제외·V2 구현** | V1에서는 기능을 제공하지 않았고 테이블은 Flyway V1에서 생성되었다. V2에서는 사용자당 1개, 전체 스냅샷 Upsert, 14일 유효기간의 서버 임시저장을 제공한다. |
 | AI 기억 검색 | **V1 제외·V2 구현** | V1에서는 제외했다. V2 PR #103·#105의 대화 API·인메모리 문맥·카드 검증에 이어 PR #129에서 실제 AI HTTP 연동을 구현했다. AI V3 문맥 활용과 프론트 전체 흐름 실연동 검증은 미확인이다. |
 | Spotify 계정 저장 | **V1 제외** | 추천 결과를 Spotify 계정에 저장하는 API를 제공하지 않음 |
@@ -465,7 +465,7 @@
 | `SYNC-006` | 매칭·Chat Server | 1:1 매칭, MATCHING/MATCHED 분리, Chat Server 소유권 및 최신 Chat lifecycle을 API·테이블·구현 상태와 동기화한다. |
 | `SYNC-007` | 매칭 동시성 | FIFO(`created_at ASC`, 동률 `match_request_id ASC`)를 유지한다. VoteQuestion 선행 row lock으로 lock 순서를 직렬화하며 V8 적용 후 실제 MySQL 통합 테스트를 재검증한다. |
 | `SYNC-008` | 서비스 시간 | 오늘/23:00/자정/월말 판단 기준을 `Asia/Seoul`로 명시한다. |
-| `SYNC-009` | 회원 탈퇴/사진 | 사용자와 활성 자물쇠 기록의 soft delete, 사진 메타데이터와 최종 GCS 사진 보존 정책을 API/테이블 정의서에 반영한다. |
+| `SYNC-009` | 회원 탈퇴/사진 | 사용자와 활성 자물쇠 기록의 soft delete, 사진 메타데이터와 최종 사진 저장소 객체 보존 정책을 API/테이블 정의서에 반영한다. |
 | `SYNC-010` | 월간 리포트 | 대표 장소/대표 아티스트 동률 시 가장 최근 기록이 존재하는 후보를 선택하도록 명시한다. |
 | `SYNC-011` | `monthly_photo_scene_stats.scene_tag` | AI 반환 문자열을 `VARCHAR`로 저장하고 별도 ENUM/canonical 제한을 두지 않는 정책을 명시한다. |
 | `SYNC-012` | 인증 | 로그아웃 시 클라이언트 Access Token 즉시 폐기, Refresh Token revoke/Cookie 만료, V1 다중 기기 로그인 미지원, Refresh Token SHA-256 저장, 닉네임 확정 형식, Cookie/CORS 역할 분리를 AUTH/API 문서에 명시한다. |

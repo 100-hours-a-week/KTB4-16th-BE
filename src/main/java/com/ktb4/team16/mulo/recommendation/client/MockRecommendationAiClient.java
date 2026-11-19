@@ -31,4 +31,10 @@ public class MockRecommendationAiClient implements RecommendationAiClient {
                 .limit(5).toList();
         return new RecommendationResult("현재 날씨와 분위기에 어울리는 곡들을 추천해요.", tracks, false);
     }
+
+    @Override
+    public RecommendationResult recommendOne(RecommendationContext context) {
+        RecommendationResult result = recommend(context);
+        return new RecommendationResult(result.recommendReason(), result.tracks().stream().limit(1).toList(), false);
+    }
 }

@@ -17,7 +17,7 @@ import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.Clock;
@@ -41,7 +41,7 @@ class RecordCommentUpdateServiceTest {
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            mock(GcsStorageService.class),
+            mock(PhotoStorageService.class),
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
             Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );

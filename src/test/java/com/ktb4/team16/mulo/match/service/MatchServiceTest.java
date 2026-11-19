@@ -13,23 +13,14 @@ import com.ktb4.team16.mulo.match.dto.request.MatchRequestCreateRequest;
 import com.ktb4.team16.mulo.match.entity.Match;
 import com.ktb4.team16.mulo.match.entity.MatchRequest;
 import com.ktb4.team16.mulo.match.exception.MatchDomainException;
-import com.ktb4.team16.mulo.match.repository.MatchRepository;
 import com.ktb4.team16.mulo.match.repository.MatchRequestRepository;
-import com.ktb4.team16.mulo.match.repository.VoteAnswerRepository;
-import com.ktb4.team16.mulo.match.repository.VoteQuestionRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.vote.entity.VoteAnswer;
 import com.ktb4.team16.mulo.vote.entity.VoteQuestion;
-import java.time.Clock;
-import java.time.LocalDate;
-import java.time.LocalTime;
-import java.time.ZoneId;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.extension.ExtendWith;
-import org.junit.jupiter.params.ParameterizedTest;
-import org.junit.jupiter.params.provider.CsvSource;
 import org.mockito.Mock;
 import org.mockito.junit.jupiter.MockitoExtension;
 import org.springframework.test.util.ReflectionTestUtils;
@@ -37,23 +28,15 @@ import org.springframework.test.util.ReflectionTestUtils;
 @ExtendWith(MockitoExtension.class)
 class MatchServiceTest {
 
-    private static final ZoneId KST = ZoneId.of("Asia/Seoul");
-
-    @Mock
-    private MatchRepository matchRepository;
     @Mock
     private MatchRequestRepository matchRequestRepository;
-    @Mock
-    private VoteAnswerRepository voteAnswerRepository;
-    @Mock
-    private VoteQuestionRepository voteQuestionRepository;
 
     private MatchService matchService;
     private User requester;
 
     @BeforeEach
     void setUp() {
-        matchService = serviceAt(LocalDate.of(2026, 10, 22), LocalTime.NOON);
+        matchService = new MatchService(matchRequestRepository);
         requester = user(11L);
     }
 
@@ -146,25 +129,15 @@ class MatchServiceTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
-    @ParameterizedTest
-    @CsvSource({
-            "2026-10-20, 12:00:00",
-            "2026-10-21, 00:00:00",
-            "2026-10-22, 00:00:00",
-            "2026-10-22, 22:59:59",
-            "2026-10-22, 23:00:00"
-    })
-    void rejectsNewOneToOneRequestsRegardlessOfKstDateOrTime(LocalDate date, LocalTime time) {
-        matchService = serviceAt(date, time);
-
+    @Test
+    void rejectsNewOneToOneRequestsWithoutAccessingRepository() {
         assertThatThrownBy(() -> matchService.createMatchRequest(
                 11L, new MatchRequestCreateRequest(101L)))
                 .isInstanceOf(MatchDomainException.class)
                 .extracting(exception -> ((MatchDomainException) exception).errorCode())
                 .isEqualTo(ErrorCode.ONE_TO_ONE_MATCHING_REPLACED);
 
-        verifyNoInteractions(matchRepository, matchRequestRepository,
-                voteAnswerRepository, voteQuestionRepository);
+        verifyNoInteractions(matchRequestRepository);
     }
 
     private User user(Long userId) {
@@ -198,11 +171,5 @@ class MatchServiceTest {
             ReflectionTestUtils.setField(matchRequest, "status", MatchRequestStatus.MATCHED);
         }
         return matchRequest;
-    }
-
-    private MatchService serviceAt(LocalDate date, LocalTime time) {
-        Clock clock = Clock.fixed(date.atTime(time).atZone(KST).toInstant(), KST);
-        return new MatchService(
-                matchRepository, matchRequestRepository, voteAnswerRepository, voteQuestionRepository, clock);
     }
 }

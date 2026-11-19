@@ -39,6 +39,9 @@ dependencies {
     // 사진 임시 업로드를 위해 Google Cloud Storage 연동에 필요한 의존성
     implementation platform('com.google.cloud:libraries-bom:26.86.0')
     implementation 'com.google.cloud:google-cloud-storage'
+    // 운영 사진 저장소는 S3를 사용하고 개발 환경의 GCS 연동은 유지한다.
+    implementation platform('software.amazon.awssdk:bom:2.59.2')
+    implementation 'software.amazon.awssdk:s3'
 
     // Persistence / MySQL
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'

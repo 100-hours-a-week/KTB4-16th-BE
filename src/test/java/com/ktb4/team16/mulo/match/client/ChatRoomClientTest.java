@@ -10,15 +10,12 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 
 import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
-import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest;
-import com.ktb4.team16.mulo.match.dto.request.ChatRoomCreateRequest.Participant;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import java.io.IOException;
 import java.net.URI;
 import java.net.SocketTimeoutException;
 import java.time.Duration;
 import java.time.LocalDate;
-import java.time.OffsetDateTime;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.MethodSource;
@@ -29,35 +26,8 @@ import org.springframework.test.web.client.MockRestServiceServer;
 import org.springframework.web.client.RestClient;
 
 class ChatRoomClientTest {
-    private static final String ENDPOINT = "http://chat.test/internal/chat-rooms";
     private static final String GROUP_ENDPOINT = "http://chat.test/internal/chat-rooms/group/join-or-create";
     private static final String NICKNAME_ENDPOINT = "http://chat.test/internal/users/17/nickname";
-    private static final ChatRoomCreateRequest REQUEST = new ChatRoomCreateRequest(50L,
-            OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
-                    new Participant(17L, "jettie"), new Participant(28L, "lulu")));
-
-    @ParameterizedTest
-    @org.junit.jupiter.params.provider.EnumSource(value = HttpStatus.class, names = {"CREATED", "OK"})
-    void sendsRequestAndAcceptsCreatedOrIdempotentResponse(HttpStatus status) {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andExpect(method(HttpMethod.POST))
-                .andExpect(header("X-Internal-Api-Key", "test-api-key"))
-                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
-                .andExpect(content().json("""
-                        {"matchId":50,"expiresAt":"2026-10-18T00:00:00+09:00","participants":[
-                          {"userId":17,"nickname":"jettie"},
-                          {"userId":28,"nickname":"lulu"}
-                        ]}
-                        """))
-                .andRespond(withStatus(status)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"chatRoomId\":30}"));
-
-        assertThat(fixture.client().createChatRoom(REQUEST).chatRoomId()).isEqualTo(30L);
-
-        fixture.server().verify();
-    }
 
     @Test
     void sendsAuthenticatedNicknameUpdateAndParsesBareResponse() {
@@ -90,6 +60,27 @@ class ChatRoomClientTest {
                     assertThat(exception.failureType()).isEqualTo(expectedType);
                     assertThat(exception.failureType().isRetryable())
                             .isEqualTo(expectedType == FailureType.SERVER_ERROR);
+                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
+                });
+        fixture.server().verify();
+    }
+
+    /** 닉네임 경로에서 내부 인증 설정 오류와 만료·일반 충돌의 공통 분류 계약을 검증한다. */
+    @ParameterizedTest
+    @MethodSource("configurationAndConflictHttpFailures")
+    void classifiesNicknameEndpointConfigurationAndConflictFailures(
+            int status, String responseBody, FailureType expectedType, boolean retryable) {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(NICKNAME_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.valueOf(status))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(responseBody));
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNickname(17L, "새닉네임"))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(expectedType);
+                    assertThat(exception.httpStatus()).isEqualTo(status);
+                    assertThat(exception.failureType().isRetryable()).isEqualTo(retryable);
                     assertThat(exception.getMessage()).doesNotContain("sensitive response body");
                 });
         fixture.server().verify();
@@ -167,6 +158,28 @@ class ChatRoomClientTest {
         fixture.server().verify();
     }
 
+    /** 그룹 경로에서도 내부 인증 설정 오류와 만료·일반 충돌이 구별되는지 검증한다. */
+    @ParameterizedTest
+    @MethodSource("configurationAndConflictHttpFailures")
+    void classifiesGroupEndpointConfigurationAndConflictFailures(
+            int status, String responseBody, FailureType expectedType, boolean retryable) {
+        Fixture fixture = fixture("test-api-key");
+        fixture.server().expect(requestTo(GROUP_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.valueOf(status))
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .body(responseBody));
+
+        assertThatThrownBy(() -> fixture.client().joinOrCreateGroup(
+                new ChatGroupJoinOrCreateRequest(LocalDate.of(2026, 10, 21), 41L, 17L, "jettie", "A")))
+                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
+                    assertThat(exception.failureType()).isEqualTo(expectedType);
+                    assertThat(exception.httpStatus()).isEqualTo(status);
+                    assertThat(exception.failureType().isRetryable()).isEqualTo(retryable);
+                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
+                });
+        fixture.server().verify();
+    }
+
     @Test
     void mapsExplicitlyLeftParticipantToNonRetryableReentryFailure() {
         Fixture fixture = fixture("test-api-key");
@@ -203,116 +216,23 @@ class ChatRoomClientTest {
         fixture.server().verify();
     }
 
-    @ParameterizedTest
-    @MethodSource("httpFailures")
-    void classifiesHttpFailures(int status, FailureType expectedType) {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andRespond(withStatus(HttpStatus.valueOf(status)).body("sensitive response body"));
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
-                    assertThat(exception.failureType()).isEqualTo(expectedType);
-                    assertThat(exception.httpStatus()).isEqualTo(status);
-                    assertThat(exception.getMessage()).doesNotContain("sensitive response body");
-                });
-
-        fixture.server().verify();
-    }
-
-    @Test
-    void classifiesTransportFailureAsCommunicationError() {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andRespond(request -> {
-                    throw new IOException("sensitive transport detail");
-                });
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
-                    assertThat(exception.failureType()).isEqualTo(FailureType.COMMUNICATION_ERROR);
-                    assertThat(exception.httpStatus()).isNull();
-                    assertThat(exception.getMessage()).doesNotContain("sensitive transport detail");
-                });
-
-        fixture.server().verify();
-    }
-
-    @Test
-    void rejectsMalformedSuccessResponse() {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andRespond(withStatus(HttpStatus.CREATED)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{}"));
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception -> {
-                    assertThat(exception.failureType()).isEqualTo(FailureType.INVALID_RESPONSE);
-                    assertThat(exception.httpStatus()).isEqualTo(201);
-                });
-
-        fixture.server().verify();
-    }
-
-    @Test
-    void distinguishesExpiredCreationFromExistingRoomConflict() {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andRespond(withStatus(HttpStatus.CONFLICT)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"code\":\"CHAT_ROOM_EXPIRED\",\"message\":\"expired\"}"));
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
-                        assertThat(exception.failureType()).isEqualTo(FailureType.EXPIRED_REQUEST));
-        fixture.server().verify();
-    }
-
-    @Test
-    void classifiesChatServerInternalApiKeyConfigurationAsNonRetryableConfigurationFailure() {
-        Fixture fixture = fixture("test-api-key");
-        fixture.server().expect(requestTo(ENDPOINT))
-                .andRespond(withStatus(HttpStatus.SERVICE_UNAVAILABLE)
-                        .contentType(MediaType.APPLICATION_JSON)
-                        .body("{\"code\":\"INTERNAL_AUTH_UNAVAILABLE\"}"));
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
-                        assertThat(exception.failureType()).isEqualTo(FailureType.CONFIGURATION_ERROR));
-        fixture.server().verify();
-    }
-
-    @Test
-    void doesNotSendRequestWhenInternalApiKeyIsMissing() {
-        Fixture fixture = fixture("");
-
-        assertThatThrownBy(() -> fixture.client().createChatRoom(REQUEST))
-                .isInstanceOfSatisfying(ChatServerClientException.class, exception ->
-                        assertThat(exception.failureType()).isEqualTo(FailureType.CONFIGURATION_ERROR));
-
-        fixture.server().verify();
-    }
-
-    @Test
-    void requestDtoRejectsInvalidParticipantsBeforeHttpCall() {
-        assertThatThrownBy(() -> new ChatRoomCreateRequest(50L,
-                OffsetDateTime.parse("2026-10-18T00:00:00+09:00"), java.util.List.of(
-                        new Participant(17L, "jettie"))))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Participant(17L, " "))
-                .isInstanceOf(IllegalArgumentException.class);
-        assertThatThrownBy(() -> new Participant(null, "lulu"))
-                .isInstanceOf(IllegalArgumentException.class);
-    }
-
-    private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> httpFailures() {
+    /** 오류 코드 우선 분기와 일반 HTTP 상태 분기를 구별할 공통 회귀 입력을 제공한다. */
+    private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments>
+            configurationAndConflictHttpFailures() {
         return java.util.stream.Stream.of(
-                org.junit.jupiter.params.provider.Arguments.of(400, FailureType.CLIENT_ERROR),
-                org.junit.jupiter.params.provider.Arguments.of(401, FailureType.AUTHENTICATION_ERROR),
-                org.junit.jupiter.params.provider.Arguments.of(409, FailureType.REQUEST_CONFLICT),
-                org.junit.jupiter.params.provider.Arguments.of(500, FailureType.SERVER_ERROR),
-                org.junit.jupiter.params.provider.Arguments.of(503, FailureType.SERVER_ERROR));
+                org.junit.jupiter.params.provider.Arguments.of(503,
+                        "{\"code\":\"INTERNAL_AUTH_UNAVAILABLE\",\"message\":\"sensitive response body\"}",
+                        FailureType.CONFIGURATION_ERROR, false),
+                org.junit.jupiter.params.provider.Arguments.of(503,
+                        "{\"message\":\"sensitive response body\"}", FailureType.SERVER_ERROR, true),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "{\"code\":\"CHAT_ROOM_EXPIRED\",\"message\":\"sensitive response body\"}",
+                        FailureType.EXPIRED_REQUEST, false),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "{\"code\":\"OTHER_CONFLICT\",\"message\":\"sensitive response body\"}",
+                        FailureType.REQUEST_CONFLICT, false),
+                org.junit.jupiter.params.provider.Arguments.of(409,
+                        "sensitive response body", FailureType.REQUEST_CONFLICT, false));
     }
 
     private static java.util.stream.Stream<org.junit.jupiter.params.provider.Arguments> nicknameHttpFailures() {

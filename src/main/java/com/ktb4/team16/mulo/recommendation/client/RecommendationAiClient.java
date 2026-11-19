@@ -9,6 +9,8 @@ public interface RecommendationAiClient {
     // AI Gateway에 추천 문맥을 전달하고 저장 여부를 판단할 수 있는 추천 결과를 반환한다.
     RecommendationResult recommend(RecommendationContext context);
 
+    RecommendationResult recommendOne(RecommendationContext context);
+
     // AI 명세의 필수 문맥과 선택 문맥을 한 요청 단위로 보관한다.
     record RecommendationContext(Long userId, WeatherCondition weatherCondition, BigDecimal temperature,
             OffsetDateTime requestedAt, List<NearbyTrack> nearbyTracks, String placeName, List<String> excludeTrackIds) { }

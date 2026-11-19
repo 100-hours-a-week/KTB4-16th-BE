@@ -106,6 +106,7 @@ public class NotificationOutboxRepository {
                     + "WHERE friend_request_id = ? FOR SHARE";
             case FRIEND_ACCEPTED -> "SELECT friendship_id FROM friendships "
                     + "WHERE friendship_id = ? FOR SHARE";
+            case DAILY_SONG_READY -> null;
             case MATCH_COMPLETED -> null;
         };
         if (sql == null) {

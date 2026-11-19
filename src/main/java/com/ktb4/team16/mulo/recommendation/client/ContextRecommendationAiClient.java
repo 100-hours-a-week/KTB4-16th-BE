@@ -34,6 +34,15 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
     // AI Gateway의 상황 맞춤 추천 API를 호출하고 응답을 내부 추천 결과로 변환한다.
     @Override
     public RecommendationResult recommend(RecommendationContext context) {
+        return request(context, RECOMMENDATION_LIMIT, false);
+    }
+
+    @Override
+    public RecommendationResult recommendOne(RecommendationContext context) {
+        return request(context, 1, true);
+    }
+
+    private RecommendationResult request(RecommendationContext context, int limit, boolean dailySong) {
         try {
             ContextRecommendationAiResponse response = restClient.post()
                     .uri(properties.baseUrl() + "/api/context-recommend")
@@ -41,20 +50,34 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
                     .header("X-Internal-Token", properties.internalToken())
                     .body(new ContextRecommendationAiRequest(context.userId(),
                             new Weather(context.weatherCondition().name(), context.temperature()),
-                            context.requestedAt(), context.nearbyTracks(), RECOMMENDATION_LIMIT,
+                            context.requestedAt(), context.nearbyTracks(), limit,
                             context.placeName() == null ? null : new Place(context.placeName()), context.excludeTrackIds()))
                     .retrieve()
                     .body(ContextRecommendationAiResponse.class);
             if (response == null || response.tracks() == null) {
+                if (dailySong) {
+                    throw new DailySongAiResponseException(DailySongAiResponseException.Failure.INVALID_RESPONSE);
+                }
                 throw new RecommendationAiException();
             }
-            if (response.tracks().size() != RECOMMENDATION_LIMIT) {
+            if (dailySong && response.degraded()) {
+                throw new DailySongAiResponseException(DailySongAiResponseException.Failure.DEGRADED);
+            }
+            if (response.tracks().size() != limit) {
+                if (dailySong) {
+                    throw new DailySongAiResponseException(response.tracks().isEmpty()
+                            ? DailySongAiResponseException.Failure.EMPTY_RESULT
+                            : DailySongAiResponseException.Failure.INVALID_RESPONSE);
+                }
                 throw new RecommendationAiException();
+            }
+            if (dailySong && (response.recommendReason() == null || response.recommendReason().isBlank())) {
+                throw new DailySongAiResponseException(DailySongAiResponseException.Failure.INVALID_RESPONSE);
             }
             return new RecommendationResult(response.recommendReason(),
-                    response.tracks().stream().map(this::toRecommendedTrack).toList(),
+                    response.tracks().stream().map(track -> toRecommendedTrack(track, dailySong)).toList(),
                     response.degraded());
-        } catch (RecommendationAiException exception) {
+        } catch (RecommendationAiException | DailySongAiResponseException exception) {
             throw exception;
         } catch (RestClientException | IllegalArgumentException exception) {
             throw new RecommendationAiException(exception);
@@ -62,9 +85,12 @@ public class ContextRecommendationAiClient implements RecommendationAiClient {
     }
 
     // AI 응답 곡을 DB 저장에 필요한 필수 필드까지 검증하여 내부 모델로 변환한다.
-    private RecommendedTrack toRecommendedTrack(ContextRecommendationAiResponse.Track track) {
+    private RecommendedTrack toRecommendedTrack(ContextRecommendationAiResponse.Track track, boolean dailySong) {
         if (track == null || isBlank(track.externalTrackId()) || isBlank(track.title())
                 || isBlank(track.artistName()) || isBlank(track.albumImageUrl()) || isBlank(track.externalUrl())) {
+            if (dailySong) {
+                throw new DailySongAiResponseException(DailySongAiResponseException.Failure.INVALID_RESPONSE);
+            }
             throw new RecommendationAiException();
         }
         return new RecommendedTrack(track.externalTrackId(), track.title(), track.artistName(),
