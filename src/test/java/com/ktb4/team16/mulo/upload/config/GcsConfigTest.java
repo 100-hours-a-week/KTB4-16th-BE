@@ -6,7 +6,6 @@ import com.google.auth.ServiceAccountSigner;
 import com.google.auth.oauth2.AccessToken;
 import com.google.auth.oauth2.GoogleCredentials;
 import com.google.auth.oauth2.ImpersonatedCredentials;
-import com.google.cloud.NoCredentials;
 import com.google.cloud.storage.Storage;
 import java.util.Date;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -43,7 +42,8 @@ class GcsConfigTest {
         });
 
         assertThat(lookups).hasValue(0);
-        assertThat(storage.getOptions().getCredentials()).isNotInstanceOf(ImpersonatedCredentials.class);
+        // 기본 자격 증명이 없는 환경(CI)에서는 getCredentials()가 null일 수 있어서 instanceof로 확인한다.
+        assertThat(storage.getOptions().getCredentials() instanceof ImpersonatedCredentials).isFalse();
         assertThat(storage.getOptions().getProjectId()).isEqualTo("project");
     }
 
@@ -51,8 +51,7 @@ class GcsConfigTest {
     void 가장할_계정이_null이어도_기본_동작이다() {
         Storage storage = GcsConfig.create(PROPERTIES, null, GcsConfigTest::fakeSource);
 
-        assertThat(storage.getOptions().getCredentials()).isNotInstanceOf(ImpersonatedCredentials.class);
-        assertThat(NoCredentials.class).isNotNull();
+        assertThat(storage.getOptions().getCredentials() instanceof ImpersonatedCredentials).isFalse();
     }
 
     @Test
