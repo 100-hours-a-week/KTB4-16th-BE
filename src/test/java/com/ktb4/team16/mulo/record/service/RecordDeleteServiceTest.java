@@ -16,7 +16,7 @@ import com.ktb4.team16.mulo.record.exception.RecordNotFoundException;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.time.Clock;
 import java.time.Instant;
@@ -33,7 +33,7 @@ class RecordDeleteServiceTest {
     private final UploadService uploadService = mock(UploadService.class);
     private final MusicTrackService musicTrackService = mock(MusicTrackService.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
-    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final PhotoStorageService photoStorageService = mock(PhotoStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository,
             mock(RecordCursorCodec.class),
@@ -42,7 +42,7 @@ class RecordDeleteServiceTest {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            gcsStorageService,
+            photoStorageService,
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
             Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );
@@ -61,7 +61,7 @@ class RecordDeleteServiceTest {
         org.assertj.core.api.Assertions.assertThat(deletedAtCaptor.getValue())
                 .isEqualTo(FIXED_KST_TIME);
         verifyNoInteractions(userRepository, placeRepository, uploadService,
-                musicTrackService, recordPhotoRepository, gcsStorageService);
+                musicTrackService, recordPhotoRepository, photoStorageService);
     }
 
     @Test

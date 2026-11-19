@@ -21,7 +21,7 @@ import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
@@ -32,7 +32,7 @@ import org.junit.jupiter.api.Test;
 class RecordDetailServiceTests {
     private final RecordRepository recordRepository = mock(RecordRepository.class);
     private final RecordPhotoRepository recordPhotoRepository = mock(RecordPhotoRepository.class);
-    private final GcsStorageService gcsStorageService = mock(GcsStorageService.class);
+    private final PhotoStorageService photoStorageService = mock(PhotoStorageService.class);
     private final RecordService recordService = new RecordService(
             recordRepository,
             mock(RecordCursorCodec.class),
@@ -41,7 +41,7 @@ class RecordDetailServiceTests {
             mock(UploadService.class),
             mock(MusicTrackService.class),
             recordPhotoRepository,
-            gcsStorageService,
+            photoStorageService,
             mock(com.ktb4.team16.mulo.recorddraft.repository.RecordDraftRepository.class),
             java.time.Clock.system(java.time.ZoneId.of("Asia/Seoul"))
     );
@@ -74,7 +74,7 @@ class RecordDetailServiceTests {
                 .thenReturn(Optional.of(record));
         when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.of(photo));
         when(photo.getImageUrl()).thenReturn("uploads/35/photo.jpg");
-        when(gcsStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
+        when(photoStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
                 .thenReturn("https://signed.example/photo");
 
         RecordDetailData detail = recordService.getRecordDetail(35L, 10L);
@@ -93,7 +93,7 @@ class RecordDetailServiceTests {
         assertThat(detail.comment()).isEqualTo("comment");
         assertThat(detail.photoUrl()).isEqualTo("https://signed.example/photo");
         assertThat(detail.createdAt()).isEqualTo(LocalDateTime.of(2026, 9, 26, 12, 0));
-        verify(gcsStorageService).createReadSignedUrl("uploads/35/photo.jpg");
+        verify(photoStorageService).createReadSignedUrl("uploads/35/photo.jpg");
     }
 
     @Test
@@ -104,7 +104,7 @@ class RecordDetailServiceTests {
                 .thenReturn(Optional.of(record));
         when(recordPhotoRepository.findByRecord_RecordId(10L)).thenReturn(Optional.of(photo));
         when(photo.getImageUrl()).thenReturn("uploads/35/photo.jpg");
-        when(gcsStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
+        when(photoStorageService.createReadSignedUrl("uploads/35/photo.jpg"))
                 .thenReturn("https://signed.example/photo");
 
         RecordDetailData detail = recordService.getRecordDetail(90L, 10L);
@@ -123,7 +123,7 @@ class RecordDetailServiceTests {
 
         assertThatThrownBy(() -> recordService.getRecordDetail(35L, 10L))
                 .isInstanceOf(IllegalStateException.class);
-        verifyNoInteractions(gcsStorageService);
+        verifyNoInteractions(photoStorageService);
     }
 
     @Test

@@ -79,6 +79,12 @@ sentry:
   send-default-pii: false
   max-request-body-size: none
 
+storage:
+  provider: ${STORAGE_PROVIDER:gcs}
+  s3:
+    region: ${AWS_REGION:}
+    bucket-name: ${AWS_S3_BUCKET:}
+
 gcs:
   project-id: ${GCP_PROJECT_ID}
   bucket-name: ${GCS_BUCKET_NAME}

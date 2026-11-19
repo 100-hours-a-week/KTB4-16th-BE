@@ -21,7 +21,7 @@ import com.ktb4.team16.mulo.recordphoto.entity.RecordPhoto;
 import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
@@ -54,7 +54,7 @@ class RecordCreateServiceTest {
             uploadService,
             musicTrackService,
             recordPhotoRepository,
-            mock(GcsStorageService.class),
+            mock(PhotoStorageService.class),
             recordDraftRepository,
             Clock.fixed(Instant.parse("2026-10-15T15:04:05Z"), ZoneId.of("Asia/Seoul"))
     );

@@ -22,7 +22,7 @@ import com.ktb4.team16.mulo.recordphoto.repository.RecordPhotoRepository;
 import com.ktb4.team16.mulo.upload.entity.Upload;
 import com.ktb4.team16.mulo.upload.repository.UploadRepository;
 import com.ktb4.team16.mulo.upload.service.UploadService;
-import com.ktb4.team16.mulo.upload.storage.GcsStorageService;
+import com.ktb4.team16.mulo.upload.storage.PhotoStorageService;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.repository.UserRepository;
 import java.math.BigDecimal;
@@ -59,7 +59,7 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
     @Autowired private RecordPhotoRepository recordPhotoRepository;
     @MockitoBean private Clock clock;
     @MockitoBean private UploadService uploadService;
-    @MockitoBean private GcsStorageService gcsStorageService;
+    @MockitoBean private PhotoStorageService photoStorageService;
 
     private User user;
     private Upload upload;
@@ -173,7 +173,7 @@ class RecordDraftRecordCreationMysqlIntegrationTest {
         assertThat(photo.getImageUrl()).isEqualTo(recordUpload.getImageUrl());
         verify(uploadService).deleteMetadata(recordUpload);
         verify(uploadService, never()).deleteMetadata(upload);
-        verify(gcsStorageService, never()).delete(ArgumentMatchers.anyString());
+        verify(photoStorageService, never()).delete(ArgumentMatchers.anyString());
     }
 
     private RecordCreateRequest request() {
