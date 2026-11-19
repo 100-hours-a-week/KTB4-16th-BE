@@ -88,6 +88,8 @@ storage:
 gcs:
   project-id: ${GCP_PROJECT_ID}
   bucket-name: ${GCS_BUCKET_NAME}
+  # 비워 두면 기본 자격 증명을 그대로 쓴다. GCP 밖에서 외부 계정(WIF)으로 쓸 때 권한을 빌릴(impersonation) 서비스 계정 이메일을 넣는다.
+  impersonate-service-account: ${GCS_IMPERSONATE_SERVICE_ACCOUNT:}
 
 upload:
   heic:
