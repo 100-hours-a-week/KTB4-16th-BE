@@ -3,6 +3,7 @@ package com.ktb4.team16.mulo.user.service;
 import com.ktb4.team16.mulo.auth.repository.RefreshTokenRepository;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
+import com.ktb4.team16.mulo.notification.repository.NotificationRepository;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
@@ -23,6 +24,7 @@ public class UserWithdrawalService {
     private final RecordRepository recordRepository;
     private final RefreshTokenRepository refreshTokenRepository;
     private final PasswordEncoder passwordEncoder;
+    private final NotificationRepository notifications;
 
     /** 사용자·기록 삭제와 Refresh Token 폐기를 하나의 DB 트랜잭션으로 처리한다. */
     @Transactional
@@ -39,6 +41,7 @@ public class UserWithdrawalService {
         recordRepository.softDeleteActiveByUserId(userId, deletedAt);
         refreshTokenRepository.findByUserUserId(userId)
                 .ifPresent(token -> token.revoke(deletedAt));
+        notifications.clearWithdrawnTarget(userId);
         user.softDelete(deletedAt);
     }
 }
