@@ -7,8 +7,9 @@ import org.springframework.scheduling.annotation.Scheduled;
 class NicknameOutboxDispatcher {
     private final ChatNicknameOutboxRepository repository;
     private final NicknamePublisher publisher;
+    private final boolean friendsEnabled;
 
-    /** 한 건씩 선점하고 두 큐 모두 수신한 경우에만 발행 완료로 전환한다. */
+    /** 한 건씩 선점하고 활성 목적지 모두 발행을 확인한 경우에만 발행 완료로 전환한다. */
     @Scheduled(fixedDelay = 1000, scheduler = "nicknameDispatchScheduler")
     void dispatch() {
         for (int index = 0; index < 50 && !Thread.currentThread().isInterrupted(); index++) {
@@ -18,10 +19,10 @@ class NicknameOutboxDispatcher {
             }
             var claim = next.get();
             var chat = publisher.send(claim, NicknameMqConfiguration.CHAT);
-            var friend = publisher.send(claim, NicknameMqConfiguration.FRIEND);
+            var friend = friendsEnabled ? publisher.send(claim, NicknameMqConfiguration.FRIEND) : null;
             if (chat != NicknamePublisher.Outcome.CONFIRMED) {
                 repository.retry(claim, "CHAT_" + chat.name());
-            } else if (friend != NicknamePublisher.Outcome.CONFIRMED) {
+            } else if (friendsEnabled && friend != NicknamePublisher.Outcome.CONFIRMED) {
                 repository.retry(claim, "FRIEND_" + friend.name());
             } else {
                 repository.published(claim);

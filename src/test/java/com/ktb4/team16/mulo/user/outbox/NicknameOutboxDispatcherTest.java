@@ -20,10 +20,23 @@ class NicknameOutboxDispatcherTest {
         when(store.claimNext()).thenReturn(Optional.of(claim), Optional.empty());
         when(publisher.send(claim, NicknameMqConfiguration.CHAT)).thenReturn(NicknamePublisher.Outcome.UNROUTABLE);
         when(publisher.send(claim, NicknameMqConfiguration.FRIEND)).thenReturn(NicknamePublisher.Outcome.CONFIRMED);
-        new NicknameOutboxDispatcher(store, publisher).dispatch();
+        new NicknameOutboxDispatcher(store, publisher, true).dispatch();
         verify(publisher).send(claim, NicknameMqConfiguration.FRIEND);
         verify(store).retry(claim, "CHAT_UNROUTABLE");
         verify(store, never()).published(claim);
+    }
+
+    /** 친구 기능이 꺼지면 Chat 확인만으로 완료하고 친구 큐에는 전송하지 않는다. */
+    @Test
+    void publishesOnlyToChatWhenFriendsDisabled() {
+        var store = mock(ChatNicknameOutboxRepository.class);
+        var publisher = mock(NicknamePublisher.class);
+        var claim = new ChatNicknameOutboxRepository.Claim("event", "{}", "token", 1);
+        when(store.claimNext()).thenReturn(Optional.of(claim), Optional.empty());
+        when(publisher.send(claim, NicknameMqConfiguration.CHAT)).thenReturn(NicknamePublisher.Outcome.CONFIRMED);
+        new NicknameOutboxDispatcher(store, publisher, false).dispatch();
+        verify(publisher, never()).send(claim, NicknameMqConfiguration.FRIEND);
+        verify(store).published(claim);
     }
 
     /** 양쪽 발행이 확인된 이벤트만 완료 처리한다. */
@@ -34,7 +47,7 @@ class NicknameOutboxDispatcherTest {
         var claim = new ChatNicknameOutboxRepository.Claim("event", "{}", "token", 1);
         when(store.claimNext()).thenReturn(Optional.of(claim), Optional.empty());
         when(publisher.send(eq(claim), anyString())).thenReturn(NicknamePublisher.Outcome.CONFIRMED);
-        new NicknameOutboxDispatcher(store, publisher).dispatch();
+        new NicknameOutboxDispatcher(store, publisher, true).dispatch();
         verify(store).published(claim);
     }
 }

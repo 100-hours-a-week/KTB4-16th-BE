@@ -118,7 +118,7 @@ class NotificationMigrationMysqlIntegrationTest {
     @Test
     void addsFriendNicknameTypeAndEventDeduplicationLedger() {
         migrateLatest();
-        long userId = insertUser("nickname");
+        long userId = insertUser("nick");
         db.update("INSERT INTO notifications (user_id, type, title, content) "
                 + "VALUES (?, 'FRIEND_NICKNAME_CHANGED', '친구 닉네임 변경', '새닉네임님이 닉네임을 변경했어요.')",
                 userId);

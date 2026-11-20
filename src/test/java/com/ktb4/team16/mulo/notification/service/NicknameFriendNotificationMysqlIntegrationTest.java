@@ -6,6 +6,8 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import com.ktb4.team16.mulo.notification.entity.NotificationType;
 import com.ktb4.team16.mulo.notification.service.NotificationService;
 import com.ktb4.team16.mulo.user.outbox.ChatNicknameChangedMessage;
+import com.ktb4.team16.mulo.user.service.UserWithdrawalService;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import java.time.OffsetDateTime;
 import java.util.ArrayList;
 import java.util.List;
@@ -25,6 +27,8 @@ import org.springframework.jdbc.core.JdbcTemplate;
         "mulo.nickname.friend-notifications.enabled-at=2026-11-20T00:00:00Z"
 })
 class NicknameFriendNotificationMysqlIntegrationTest {
+    @Autowired private UserWithdrawalService withdrawal;
+    @Autowired private PasswordEncoder passwords;
     @Autowired private JdbcTemplate jdbc;
     @Autowired private NicknameFriendNotificationService service;
     @Autowired private NotificationService notificationService;
@@ -102,9 +106,9 @@ class NicknameFriendNotificationMysqlIntegrationTest {
                 String.class, friend.id())).containsExactly("‘version-8’님이 닉네임을 변경했어요.");
     }
 
-    /** 변경한 사용자가 물리 삭제돼도 알림 행은 남고 대상 FK만 null이 된다. */
+    /** 변경한 사용자가 회원 탈퇴해도 알림 행은 남고 대상 FK만 null이 된다. */
     @Test
-    void keepsNotificationWhenChangedUserIsDeleted() {
+    void keepsNotificationWhenChangedUserWithdraws() {
         TestUser actor = createUser("deletedActor");
         TestUser friend = createUser("recipient");
         createFriendship(actor.id(), friend.id());
@@ -112,8 +116,8 @@ class NicknameFriendNotificationMysqlIntegrationTest {
         ChatNicknameChangedMessage event = event(actor.id(), "new-name", 1L);
 
         assertThat(service.process(event)).containsExactly(friend.id());
-        jdbc.update("DELETE FROM friendships WHERE user_low_id = ? OR user_high_id = ?", actor.id(), actor.id());
-        jdbc.update("DELETE FROM users WHERE user_id = ?", actor.id());
+        jdbc.update("UPDATE users SET password_hash = ? WHERE user_id = ?", passwords.encode("withdraw"), actor.id());
+        withdrawal.withdraw(actor.id(), "withdraw");
 
         assertThat(jdbc.queryForObject("SELECT COUNT(*) FROM notifications WHERE source_event_id = ?",
                 Integer.class, event.eventId().toString())).isEqualTo(1);

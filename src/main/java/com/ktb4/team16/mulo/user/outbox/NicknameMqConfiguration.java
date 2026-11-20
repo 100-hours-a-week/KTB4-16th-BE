@@ -62,7 +62,8 @@ class NicknameMqConfiguration {
 
     /** 두 목적지 발행을 담당하는 작업을 기능 활성화 시 등록한다. */
     @Bean
-    NicknameOutboxDispatcher nicknameDispatcher(ChatNicknameOutboxRepository repository, NicknamePublisher publisher) {
-        return new NicknameOutboxDispatcher(repository, publisher);
+    NicknameOutboxDispatcher nicknameDispatcher(ChatNicknameOutboxRepository repository, NicknamePublisher publisher,
+            NicknameFriendNotificationProperties friends) {
+        return new NicknameOutboxDispatcher(repository, publisher, friends.enabled());
     }
 }
