@@ -114,6 +114,36 @@ class NotificationMigrationMysqlIntegrationTest {
                 .containsExactly("status", "next_retry_at", "created_at");
     }
 
+    /** 새 알림 유형과 처리 이력이 중복 이벤트를 DB에서 막는지 검증한다. */
+    @Test
+    void addsFriendNicknameTypeAndEventDeduplicationLedger() {
+        migrateLatest();
+        long userId = insertUser("nick");
+        db.update("INSERT INTO notifications (user_id, type, title, content) "
+                + "VALUES (?, 'FRIEND_NICKNAME_CHANGED', '친구 닉네임 변경', '새닉네임님이 닉네임을 변경했어요.')",
+                userId);
+        UUID eventId = UUID.randomUUID();
+
+        db.update("INSERT INTO nickname_notification_events (event_id) VALUES (?)", eventId.toString());
+
+        assertThat(columnExists("notifications", "target_user_id")).isTrue();
+        assertThat(columnIsNullable("notifications", "target_user_id")).isTrue();
+        assertThat(foreignKeyDeleteRule("fk_notifications_target_user")).isEqualTo("SET NULL");
+        assertThat(db.queryForObject("SELECT COUNT(*) FROM notifications "
+                + "WHERE user_id = ? AND type = 'FRIEND_NICKNAME_CHANGED'", Integer.class, userId)).isEqualTo(1);
+        assertThatThrownBy(() -> db.update("INSERT INTO nickname_notification_events (event_id) VALUES (?)",
+                eventId.toString())).isInstanceOf(Exception.class);
+
+        long changedUserId = insertUser("changed");
+        db.update("UPDATE notifications SET target_user_id = ? WHERE user_id = ? "
+                + "AND type = 'FRIEND_NICKNAME_CHANGED'", changedUserId, userId);
+        assertThat(db.queryForObject("SELECT target_user_id FROM notifications WHERE user_id = ? "
+                + "AND type = 'FRIEND_NICKNAME_CHANGED'", Long.class, userId)).isEqualTo(changedUserId);
+        db.update("DELETE FROM users WHERE user_id = ?", changedUserId);
+        assertThat(db.queryForObject("SELECT target_user_id FROM notifications WHERE user_id = ? "
+                + "AND type = 'FRIEND_NICKNAME_CHANGED'", Long.class, userId)).isNull();
+    }
+
     /** 기존 V1~V6을 재현한다. */
     private void migrateThroughV6() {
         Flyway.configure().dataSource(baseUrl + schema, username, password)
@@ -169,6 +199,13 @@ class NotificationMigrationMysqlIntegrationTest {
                 Integer.class, schema, tableName, columnName) > 0;
     }
 
+    /** 새 target_user_id가 기존 알림처럼 값 없이 저장될 수 있는지 확인한다. */
+    private boolean columnIsNullable(String tableName, String columnName) {
+        return "YES".equals(db.queryForObject("SELECT is_nullable FROM information_schema.columns "
+                + "WHERE table_schema = ? AND table_name = ? AND column_name = ?",
+                String.class, schema, tableName, columnName));
+    }
+
     /** 인덱스의 컬럼 순서를 확인한다. */
     private List<String> indexColumns(String indexName) {
         return db.query("SELECT column_name FROM information_schema.statistics "
@@ -182,6 +219,13 @@ class NotificationMigrationMysqlIntegrationTest {
                 + "WHERE table_schema = ? AND table_name = 'notifications' "
                 + "AND constraint_type = 'FOREIGN KEY' AND constraint_name = ?",
                 Integer.class, schema, constraintName) > 0;
+    }
+
+    /** 대상 사용자가 삭제될 때 target_user_id 연결만 지우는지 확인한다. */
+    private String foreignKeyDeleteRule(String constraintName) {
+        return db.queryForObject("SELECT delete_rule FROM information_schema.referential_constraints "
+                + "WHERE constraint_schema = ? AND constraint_name = ?",
+                String.class, schema, constraintName);
     }
 
     /** 인덱스가 없으면 null, 있으면 UNIQUE 여부를 돌려준다. */

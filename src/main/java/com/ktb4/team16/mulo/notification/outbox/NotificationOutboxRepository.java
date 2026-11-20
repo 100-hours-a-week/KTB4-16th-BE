@@ -106,6 +106,8 @@ public class NotificationOutboxRepository {
                     + "WHERE friend_request_id = ? FOR SHARE";
             case FRIEND_ACCEPTED -> "SELECT friendship_id FROM friendships "
                     + "WHERE friendship_id = ? FOR SHARE";
+            // 닉네임 이벤트는 전용 MQ 서비스에서 대상 사용자 잠금과 함께 처리한다.
+            case FRIEND_NICKNAME_CHANGED -> null;
             case DAILY_SONG_READY -> null;
             case MATCH_COMPLETED -> null;
         };
