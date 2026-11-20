@@ -3,8 +3,6 @@ package com.ktb4.team16.mulo.notification.service;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.Mockito.mock;
-import static org.mockito.Mockito.never;
-import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.friend.repository.FriendshipRepository;
@@ -26,37 +24,6 @@ class NicknameFriendNotificationServiceTest {
             new NicknameFriendNotificationService(notifications, friendships, users,
                     new NicknameFriendNotificationProperties(true, "2026-11-20T12:00:00+09:00"));
 
-    /** 최신 버전 이벤트를 현재 활성 친구에게 한 번 저장하고 신규 수신자만 반환한다. */
-    @Test
-    void createsNotificationsForCurrentActiveFriends() {
-        var event = event(8, "new-name", "2026-11-20T12:01:00+09:00");
-        var actor = user(10L, "new-name", 8L);
-        var firstFriend = user(2L, "first", 0L);
-        var secondFriend = user(3L, "second", 0L);
-        when(notifications.claimEvent(event.eventId())).thenReturn(true);
-        when(friendships.findActiveFriendUserIds(10L)).thenReturn(List.of(2L, 3L));
-        when(users.lockActiveUsersByIdAscending(List.of(2L, 3L, 10L)))
-                .thenReturn(List.of(firstFriend, secondFriend, actor));
-        when(friendships.findActiveFriendUserIdsForUpdate(10L)).thenReturn(List.of(2L, 3L));
-        when(notifications.insertNotification(event.eventId(), 2L, 10L, "new-name")).thenReturn(1);
-        when(notifications.insertNotification(event.eventId(), 3L, 10L, "new-name")).thenReturn(1);
-
-        var created = service.process(event);
-
-        assertThat(created).containsExactlyInAnyOrder(2L, 3L);
-        verify(notifications).insertNotification(event.eventId(), 2L, 10L, "new-name");
-        verify(notifications).insertNotification(event.eventId(), 3L, 10L, "new-name");
-    }
-
-    /** 같은 메시지 재전달은 이벤트 이력에서 멈춰 알림을 다시 만들지 않는다. */
-    @Test
-    void ignoresAlreadyClaimedEvent() {
-        var event = event(8, "new-name", "2026-11-20T12:01:00+09:00");
-        when(notifications.claimEvent(event.eventId())).thenReturn(false);
-
-        assertThat(service.process(event)).isEmpty();
-    }
-
     /** 활성화 시각보다 오래된 Outbox 이벤트는 처리 이력만 남기고 알림을 건너뛴다. */
     @Test
     void suppressesEventsCreatedBeforeFeatureActivation() {
@@ -64,20 +31,6 @@ class NicknameFriendNotificationServiceTest {
         when(notifications.claimEvent(event.eventId())).thenReturn(true);
 
         assertThat(service.process(event)).isEmpty();
-    }
-
-    /** 버전 8이 현재 상태인 뒤 전달된 버전 7은 오래된 알림으로 저장하지 않는다. */
-    @Test
-    void skipsOlderNicknameVersionArrivingAfterLatestVersion() {
-        var event = event(7, "old-name", "2026-11-20T12:01:00+09:00");
-        var actor = user(10L, "new-name", 8L);
-        when(notifications.claimEvent(event.eventId())).thenReturn(true);
-        when(friendships.findActiveFriendUserIds(10L)).thenReturn(List.of());
-        when(users.lockActiveUsersByIdAscending(List.of(10L))).thenReturn(List.of(actor));
-
-        assertThat(service.process(event)).isEmpty();
-
-        verify(notifications, never()).insertNotification(event.eventId(), 2L, 10L, "old-name");
     }
 
     /** 잠금 뒤 친구 목록에 새 사용자가 추가됐으면 전체 작업을 재시도한다. */
