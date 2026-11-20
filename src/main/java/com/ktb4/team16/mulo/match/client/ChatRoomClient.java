@@ -4,8 +4,10 @@ import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
 import com.ktb4.team16.mulo.match.dto.request.ChatParticipantNicknameUpdateRequest;
+import com.ktb4.team16.mulo.match.dto.request.ChatNicknameVersionUpdateRequest;
 import com.ktb4.team16.mulo.match.dto.response.ChatGroupJoinOrCreateResponse;
 import com.ktb4.team16.mulo.match.dto.response.ChatParticipantNicknameUpdateResponse;
+import com.ktb4.team16.mulo.match.dto.response.ChatNicknameVersionUpdateResponse;
 import java.net.http.HttpClient;
 import tools.jackson.databind.JsonNode;
 import tools.jackson.databind.ObjectMapper;
@@ -22,6 +24,7 @@ import org.springframework.web.client.RestClientResponseException;
 public class ChatRoomClient {
     private static final String GROUP_JOIN_ENDPOINT = "/internal/chat-rooms/group/join-or-create";
     private static final String USER_NICKNAME_ENDPOINT = "/internal/users/{userId}/nickname";
+    private static final String VERSIONED_USER_NICKNAME_ENDPOINT = "/internal/users/{userId}/nickname/versioned";
     private static final String INTERNAL_API_KEY_HEADER = "X-Internal-Api-Key";
 
     private final RestClient restClient;
@@ -100,6 +103,44 @@ public class ChatRoomClient {
             if (status != 200 || body == null || !userId.equals(body.userId())
                     || body.updatedParticipantCount() < 0) {
                 throw new ChatServerClientException(FailureType.INVALID_RESPONSE, status);
+            }
+            return body;
+        } catch (ChatServerClientException exception) {
+            throw exception;
+        } catch (RestClientResponseException exception) {
+            throw classifyHttpFailure(exception);
+        } catch (ResourceAccessException exception) {
+            throw new ChatServerClientException(FailureType.COMMUNICATION_ERROR, null);
+        } catch (RestClientException exception) {
+            throw new ChatServerClientException(FailureType.INVALID_RESPONSE, null);
+        }
+    }
+
+    /** 버전·이벤트 ID와 함께 닉네임을 전송해 Chat의 중복·역순 방어를 사용한다. */
+    public ChatNicknameVersionUpdateResponse updateParticipantNicknameVersioned(
+            Long userId, String nickname, long nicknameVersion, java.util.UUID eventId) {
+        if (userId == null || userId <= 0 || nickname == null || nickname.isBlank()
+                || nicknameVersion <= 0 || eventId == null) {
+            throw new IllegalArgumentException("사용자 ID, 닉네임 버전과 이벤트 ID가 필요합니다.");
+        }
+        if (!properties.hasInternalApiKey()) {
+            throw new ChatServerClientException(FailureType.CONFIGURATION_ERROR, null);
+        }
+
+        try {
+            var response = restClient.patch()
+                    .uri(VERSIONED_USER_NICKNAME_ENDPOINT, userId)
+                    .contentType(MediaType.APPLICATION_JSON)
+                    .header(INTERNAL_API_KEY_HEADER, properties.internalApiKey())
+                    .body(new ChatNicknameVersionUpdateRequest(nickname, nicknameVersion, eventId))
+                    .retrieve()
+                    .toEntity(ChatNicknameVersionUpdateResponse.class);
+            var body = response.getBody();
+            if (response.getStatusCode().value() != 200 || body == null
+                    || body.status() == null || body.updatedParticipantCount() < 0
+                    || !java.util.Set.of("APPLIED", "DUPLICATE", "STALE").contains(body.status())) {
+                throw new ChatServerClientException(FailureType.INVALID_RESPONSE,
+                        response.getStatusCode().value());
             }
             return body;
         } catch (ChatServerClientException exception) {
