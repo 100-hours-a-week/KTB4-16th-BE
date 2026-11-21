@@ -27,6 +27,7 @@ import java.util.concurrent.Executors;
 import java.util.concurrent.ThreadPoolExecutor;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicReference;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -446,6 +447,85 @@ class NotificationSseConnectionManagerTest {
                 .andExpect(status().is2xxSuccessful())
                 .andReturn();
         assertThat(dispatched.getResponse().getContentAsString()).doesNotContain("INTERNAL_SERVER_ERROR");
+    }
+
+    @Test
+    void deliveryLossClosesEveryUsersStreamsAndRecoveryAllowsNewConnections() {
+        TrackingConnectionManager manager = new TrackingConnectionManager(false, sessionRevocationStore);
+        connections = manager;
+        TrackingEmitter first = manager.connectTracked(1L);
+        TrackingEmitter second = manager.connectTracked(2L);
+
+        manager.setDeliveryAvailable(false);
+
+        assertThat(first.completeCalls).isEqualTo(1);
+        assertThat(second.completeCalls).isEqualTo(1);
+        assertThat(manager.connectionCount(1L)).isZero();
+        assertThat(manager.connectionCount(2L)).isZero();
+        TrackingEmitter unavailable = manager.connectTracked(1L);
+        assertThat(unavailable.completeCalls).isEqualTo(1);
+        assertThat(unavailable.sendCalls).isZero();
+        assertThat(manager.connectionCount(1L)).isZero();
+
+        manager.setDeliveryAvailable(true);
+        TrackingEmitter recovered = manager.connectTracked(1L);
+        assertThat(recovered.sendCalls).isEqualTo(1);
+        assertThat(recovered.completeCalls).isZero();
+        assertThat(manager.connectionCount(1L)).isEqualTo(1);
+    }
+
+    @Test
+    void repeatedHealthyStatusDoesNotCloseExistingConnections() {
+        TrackingConnectionManager manager = new TrackingConnectionManager(false, sessionRevocationStore);
+        connections = manager;
+        TrackingEmitter emitter = manager.connectTracked(1L);
+
+        manager.setDeliveryAvailable(true);
+        manager.setDeliveryAvailable(true);
+
+        assertThat(emitter.completeCalls).isZero();
+        assertThat(manager.connectionCount(1L)).isEqualTo(1);
+    }
+
+    @Test
+    void connectionStartedBeforeDeliveryLossCannotRemainOpenAfterRecovery() throws Exception {
+        CountDownLatch creating = new CountDownLatch(1);
+        CountDownLatch release = new CountDownLatch(1);
+        AtomicReference<TrackingEmitter> emitter = new AtomicReference<>();
+        connections = new NotificationSseConnectionManager(Clock.systemUTC(), Duration.ofHours(1),
+                Duration.ofHours(2), sessionRevocationStore) {
+            @Override
+            protected SseEmitter createEmitter(long timeoutMillis) {
+                creating.countDown();
+                try {
+                    if (!release.await(2, TimeUnit.SECONDS)) {
+                        throw new IllegalStateException("test connection creation timeout");
+                    }
+                } catch (InterruptedException exception) {
+                    Thread.currentThread().interrupt();
+                    throw new IllegalStateException(exception);
+                }
+                TrackingEmitter created = new TrackingEmitter(timeoutMillis, false, null);
+                emitter.set(created);
+                return created;
+            }
+        };
+        var worker = Executors.newSingleThreadExecutor();
+        try {
+            var pending = worker.submit(() -> connections.connect(1L, Instant.now().plusSeconds(3600), null));
+            assertThat(creating.await(2, TimeUnit.SECONDS)).isTrue();
+            connections.setDeliveryAvailable(false);
+            connections.setDeliveryAvailable(true);
+            release.countDown();
+
+            pending.get(2, TimeUnit.SECONDS);
+
+            assertThat(connections.connectionCount(1L)).isZero();
+            assertThat(emitter.get().completeCalls).isEqualTo(1);
+        } finally {
+            release.countDown();
+            worker.shutdownNow();
+        }
     }
 
     private MvcResult connect(MockMvc mvc, long userId, int tokenLifetimeSeconds) throws Exception {

@@ -4,6 +4,7 @@ import com.ktb4.team16.mulo.global.redis.RedisConnectionProperties;
 import com.ktb4.team16.mulo.notification.sse.LocalNotificationCreatedNotifier;
 import com.ktb4.team16.mulo.notification.sse.NotificationSseConnectionManager;
 import io.lettuce.core.RedisClient;
+import java.time.Duration;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
@@ -46,8 +47,9 @@ public class NotificationSseRedisConfiguration {
     @Bean(initMethod = "start", destroyMethod = "close")
     @ConditionalOnProperty(prefix = "mulo.notification.sse", name = "mode", havingValue = "redis")
     NotificationSseRedisSubscriber notificationSseRedisSubscriber(NotificationSseRedisTransport transport,
-            LocalNotificationCreatedNotifier localNotifier) {
-        return new NotificationSseRedisSubscriber(transport, localNotifier);
+            LocalNotificationCreatedNotifier localNotifier, NotificationSseConnectionManager connections,
+            @Value("${mulo.notification.sse.recovery-check-interval:PT1S}") Duration recoveryCheckInterval) {
+        return new NotificationSseRedisSubscriber(transport, localNotifier, connections, recoveryCheckInterval);
     }
 
     @Bean

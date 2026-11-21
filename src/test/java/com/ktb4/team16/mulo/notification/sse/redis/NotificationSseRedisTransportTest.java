@@ -12,6 +12,7 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import io.lettuce.core.RedisClient;
+import io.lettuce.core.RedisConnectionStateListener;
 import io.lettuce.core.api.StatefulRedisConnection;
 import io.lettuce.core.api.sync.RedisCommands;
 import io.lettuce.core.pubsub.RedisPubSubListener;
@@ -175,6 +176,82 @@ class NotificationSseRedisTransportTest {
                 .isInstanceOf(IllegalStateException.class);
     }
 
+    @Test
+    void subscriptionHealthRequiresOpenConnectionAndPingAcknowledgment() {
+        StatefulRedisPubSubConnection<String, String> subscriber = subscriber();
+        RedisPubSubCommands<String, String> commands = subscriberCommands(subscriber);
+        when(commands.ping()).thenReturn("PONG");
+        NotificationSseRedisTransport transport = transport();
+        assertThat(transport.isSubscriptionHealthy()).isFalse();
+
+        transport.subscribe(signal -> { });
+
+        assertThat(transport.isSubscriptionHealthy()).isTrue();
+        transport.close();
+    }
+
+    @Test
+    void disconnectRemainsUnhealthyAfterAutomaticReconnectUntilResubscribed() {
+        StatefulRedisPubSubConnection<String, String> first = subscriber();
+        when(subscriberCommands(first).ping()).thenReturn("PONG");
+        NotificationSseRedisTransport transport = transport();
+        List<NotificationSseSignal> received = new ArrayList<>();
+        transport.subscribe(received::add);
+        RedisConnectionStateListener state = capturedStateListener(first);
+
+        state.onRedisDisconnected(null);
+        state.onRedisConnected(null);
+        capturedListener(first).message(CHANNEL, codec.encode(NotificationSseSignal.forRecipient(42L)));
+
+        assertThat(transport.isSubscriptionHealthy()).isFalse();
+        assertThat(received).isEmpty();
+        transport.unsubscribe();
+        verify(first).removeListener(state);
+        verify(first).close();
+
+        StatefulRedisPubSubConnection<String, String> second = subscriber();
+        when(subscriberCommands(second).ping()).thenReturn("PONG");
+        transport.subscribe(received::add);
+        assertThat(transport.isSubscriptionHealthy()).isTrue();
+        transport.close();
+    }
+
+    @Test
+    void pingFailureInvalidatesSubscriptionAndStopsDelivery() {
+        StatefulRedisPubSubConnection<String, String> subscriber = subscriber();
+        RedisPubSubCommands<String, String> commands = subscriberCommands(subscriber);
+        when(commands.ping()).thenThrow(new IllegalStateException("test ping timeout"));
+        NotificationSseRedisTransport transport = transport();
+        List<NotificationSseSignal> received = new ArrayList<>();
+        transport.subscribe(received::add);
+
+        assertThat(transport.isSubscriptionHealthy()).isFalse();
+        capturedListener(subscriber).message(CHANNEL, codec.encode(NotificationSseSignal.forRecipient(42L)));
+
+        assertThat(received).isEmpty();
+        transport.close();
+        verify(subscriber).close();
+    }
+
+    @Test
+    void unexpectedUnsubscribeInvalidatesSubscription() {
+        StatefulRedisPubSubConnection<String, String> subscriber = subscriber();
+        subscriberCommands(subscriber);
+        NotificationSseRedisTransport transport = transport();
+        transport.subscribe(signal -> { });
+
+        capturedListener(subscriber).unsubscribed(CHANNEL, 0);
+
+        assertThat(transport.isSubscriptionHealthy()).isFalse();
+        transport.close();
+    }
+
+    private RedisConnectionStateListener capturedStateListener(StatefulRedisPubSubConnection<String, String> connection) {
+        ArgumentCaptor<RedisConnectionStateListener> captor = ArgumentCaptor.forClass(RedisConnectionStateListener.class);
+        verify(connection).addListener(captor.capture());
+        return captor.getValue();
+    }
+
     private NotificationSseRedisTransport transport() {
         return new NotificationSseRedisTransport(redisClient, codec, CHANNEL, Duration.ofMillis(100));
     }
@@ -197,6 +274,7 @@ class NotificationSseRedisTransportTest {
     private StatefulRedisPubSubConnection<String, String> subscriber() {
         StatefulRedisPubSubConnection<String, String> connection = mock(StatefulRedisPubSubConnection.class);
         when(redisClient.connectPubSub()).thenReturn(connection);
+        when(connection.isOpen()).thenReturn(true);
         return connection;
     }
 

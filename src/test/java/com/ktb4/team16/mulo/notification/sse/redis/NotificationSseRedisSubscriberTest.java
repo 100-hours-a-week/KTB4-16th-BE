@@ -9,12 +9,14 @@ import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.notification.sse.LocalNotificationCreatedNotifier;
+import com.ktb4.team16.mulo.notification.sse.NotificationSseConnectionManager;
 import io.lettuce.core.RedisClient;
 import io.lettuce.core.pubsub.RedisPubSubListener;
 import io.lettuce.core.pubsub.StatefulRedisPubSubConnection;
 import io.lettuce.core.pubsub.api.sync.RedisPubSubCommands;
 import java.time.Duration;
 import java.util.Set;
+import java.util.concurrent.ScheduledExecutorService;
 import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import tools.jackson.databind.ObjectMapper;
@@ -25,13 +27,15 @@ class NotificationSseRedisSubscriberTest {
 
     private final RedisClient redisClient = mock(RedisClient.class);
     private final LocalNotificationCreatedNotifier localNotifier = mock(LocalNotificationCreatedNotifier.class);
+    private final NotificationSseConnectionManager connections = mock(NotificationSseConnectionManager.class);
+    private final ScheduledExecutorService monitor = mock(ScheduledExecutorService.class);
     private final NotificationSseSignalCodec codec = new NotificationSseSignalCodec(new ObjectMapper());
 
     @Test
     void validSignalUsesLocalDeliveryWithoutRepublishing() {
         StatefulRedisPubSubConnection<String, String> connection = connection();
         NotificationSseRedisTransport transport = transport();
-        NotificationSseRedisSubscriber subscriber = new NotificationSseRedisSubscriber(transport, localNotifier);
+        NotificationSseRedisSubscriber subscriber = subscriber(transport);
 
         subscriber.start();
         listener(connection).message(CHANNEL, codec.encode(NotificationSseSignal.forRecipient(42L)));
@@ -46,7 +50,7 @@ class NotificationSseRedisSubscriberTest {
     void invalidSignalIsIgnoredWithoutLocalDelivery() {
         StatefulRedisPubSubConnection<String, String> connection = connection();
         NotificationSseRedisTransport transport = transport();
-        NotificationSseRedisSubscriber subscriber = new NotificationSseRedisSubscriber(transport, localNotifier);
+        NotificationSseRedisSubscriber subscriber = subscriber(transport);
 
         subscriber.start();
         listener(connection).message(CHANNEL, "{\"version\":2,\"userId\":42}");
@@ -61,7 +65,7 @@ class NotificationSseRedisSubscriberTest {
         StatefulRedisPubSubConnection<String, String> connection = connection();
         RedisPubSubCommands<String, String> commands = connection.sync();
         NotificationSseRedisTransport transport = transport();
-        NotificationSseRedisSubscriber subscriber = new NotificationSseRedisSubscriber(transport, localNotifier);
+        NotificationSseRedisSubscriber subscriber = subscriber(transport);
 
         subscriber.start();
         subscriber.start();
@@ -75,15 +79,16 @@ class NotificationSseRedisSubscriberTest {
     }
 
     @Test
-    void failedStartReleasesConnection() {
+    void failedStartReleasesConnectionAndLeavesDeliveryUnavailable() {
         StatefulRedisPubSubConnection<String, String> connection = connection();
         RedisPubSubCommands<String, String> commands = connection.sync();
         doThrow(new IllegalStateException("Redis 구독 실패")).when(commands).subscribe(CHANNEL);
         NotificationSseRedisTransport transport = transport();
-        NotificationSseRedisSubscriber subscriber = new NotificationSseRedisSubscriber(transport, localNotifier);
+        NotificationSseRedisSubscriber subscriber = subscriber(transport);
 
-        assertThatThrownBy(subscriber::start).isInstanceOf(IllegalStateException.class);
+        subscriber.start();
 
+        verify(connections, never()).setDeliveryAvailable(true);
         verify(connection).close();
         subscriber.close();
     }
@@ -94,6 +99,8 @@ class NotificationSseRedisSubscriberTest {
         RedisPubSubCommands<String, String> commands = mock(RedisPubSubCommands.class);
         when(redisClient.connectPubSub()).thenReturn(connection);
         when(connection.sync()).thenReturn(commands);
+        when(connection.isOpen()).thenReturn(true);
+        when(commands.ping()).thenReturn("PONG");
         return connection;
     }
 
@@ -102,6 +109,11 @@ class NotificationSseRedisSubscriberTest {
         ArgumentCaptor<RedisPubSubListener> captor = ArgumentCaptor.forClass(RedisPubSubListener.class);
         verify(connection).addListener(captor.capture());
         return captor.getValue();
+    }
+
+    private NotificationSseRedisSubscriber subscriber(NotificationSseRedisTransport transport) {
+        return new NotificationSseRedisSubscriber(transport, localNotifier, connections,
+                Duration.ofSeconds(1), monitor);
     }
 
     private NotificationSseRedisTransport transport() {
