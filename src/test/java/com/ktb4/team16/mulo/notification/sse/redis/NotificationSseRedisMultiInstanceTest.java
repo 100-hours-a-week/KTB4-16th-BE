@@ -205,6 +205,7 @@ class NotificationSseRedisMultiInstanceTest {
                 "--mulo.daily-song.scheduler.enabled=false",
                 "--mulo.rabbitmq.enabled=false",
                 "--mulo.notification.sse.mode=redis",
+                "--mulo.notification.sse.channel=mulo:test:notification:sse:multi-instance:v1",
                 "--mulo.notification.sse.heartbeat-interval=PT1H",
                 "--mulo.notification.sse.recovery-check-interval=PT0.1S",
                 "--mulo.redis.host=127.0.0.1",

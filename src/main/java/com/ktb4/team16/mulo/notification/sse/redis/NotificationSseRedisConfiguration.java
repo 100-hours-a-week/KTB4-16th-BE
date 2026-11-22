@@ -18,8 +18,6 @@ import tools.jackson.databind.ObjectMapper;
 @Configuration(proxyBeanMethods = false)
 public class NotificationSseRedisConfiguration {
 
-    private static final String CHANNEL = "mulo:notification:sse:created:v1";
-
     public NotificationSseRedisConfiguration(@Value("${mulo.notification.sse.mode:local}") String mode) {
         if (!"local".equals(mode) && !"redis".equals(mode)) {
             throw new IllegalArgumentException("SSE 알림 전달 모드는 local 또는 redis여야 합니다.");
@@ -34,8 +32,9 @@ public class NotificationSseRedisConfiguration {
     @Bean(destroyMethod = "close")
     @Lazy
     NotificationSseRedisTransport notificationSseRedisTransport(RedisClient redisClient,
-            NotificationSseSignalCodec codec, RedisConnectionProperties properties) {
-        return new NotificationSseRedisTransport(redisClient, codec, CHANNEL, properties.commandTimeout());
+            NotificationSseSignalCodec codec, RedisConnectionProperties properties,
+            @Value("${mulo.notification.sse.channel:mulo:notification:sse:created:v1}") String channel) {
+        return new NotificationSseRedisTransport(redisClient, codec, channel, properties.commandTimeout());
     }
 
     @Bean

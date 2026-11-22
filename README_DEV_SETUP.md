@@ -291,3 +291,9 @@ README_DEV_SETUP.md
 `record_drafts`는 테이블 정의서에 포함되어 있어 V1 DDL에도 포함했지만, 현재 V1 서비스 정책에서는 브라우저 로컬 저장소를 사용하여 서버 기능에서는 사용하지 않는 예약 테이블이다.
 
 운영용 DB 계정, 비밀번호, 접근 권한은 로컬 개발 설정과 분리한다.
+
+## 11. SSE Redis 운영 및 검증
+
+SSE 전달 모드, 환경별 채널, 운영 환경변수, 배포·복구·롤백과 격리 테스트 실행은
+[SSE Redis 운영 설정 및 배포](docs/NOTIFICATION_SSE_REDIS_OPERATIONS.md)를 따른다.
+기본 전달 모드는 local이며 Redis 활성화는 배포 환경에서 명시적으로 선택한다.
