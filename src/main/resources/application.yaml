@@ -106,6 +106,9 @@ logging:
 
 # 안전한 기본값은 운영 same-origin/HTTPS. HTTP 개발은 local 프로필을 명시한다.
 mulo:
+  notification:
+    sse:
+      mode: ${MULO_NOTIFICATION_SSE_MODE:local}
   # @Scheduled 작업 전체의 실행 여부. 기본은 켜짐이다. 같은 DB를 보는 Backend를 두 환경에 동시에 띄울 때 한쪽을 false로 둔다.
   scheduling:
     enabled: ${MULO_SCHEDULING_ENABLED:true}
