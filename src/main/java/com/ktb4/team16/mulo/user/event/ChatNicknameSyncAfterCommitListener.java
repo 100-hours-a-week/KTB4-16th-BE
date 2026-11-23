@@ -7,12 +7,14 @@ import java.util.concurrent.TimeUnit;
 import lombok.RequiredArgsConstructor;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.context.annotation.Conditional;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.event.TransactionPhase;
 import org.springframework.transaction.event.TransactionalEventListener;
 
 @Component
 @RequiredArgsConstructor
+@Conditional(ChatNicknameHttpSyncCondition.class)
 public class ChatNicknameSyncAfterCommitListener {
     private static final Logger log = LoggerFactory.getLogger(ChatNicknameSyncAfterCommitListener.class);
     private static final int MAX_ATTEMPTS = 3;
