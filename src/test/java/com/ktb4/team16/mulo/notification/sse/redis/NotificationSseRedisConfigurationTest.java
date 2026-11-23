@@ -110,6 +110,54 @@ class NotificationSseRedisConfigurationTest {
         verify(publisher).close();
     }
 
+    @SuppressWarnings({"rawtypes", "unchecked"})
+    @Test
+    void configuredChannelIsUsedForPublicationAndSubscription() {
+        String channel = "mulo:notification:sse:develop:created:v1";
+        StatefulRedisPubSubConnection<String, String> subscriber = mock(StatefulRedisPubSubConnection.class);
+        RedisPubSubCommands<String, String> subscriptionCommands = mock(RedisPubSubCommands.class);
+        StatefulRedisConnection<String, String> publisher = mock(StatefulRedisConnection.class);
+        RedisCommands<String, String> publishCommands = mock(RedisCommands.class);
+        when(redisClient.connectPubSub()).thenReturn(subscriber);
+        when(subscriber.sync()).thenReturn(subscriptionCommands);
+        when(subscriber.isOpen()).thenReturn(true);
+        when(subscriptionCommands.ping()).thenReturn("PONG");
+        when(redisClient.connect()).thenReturn(publisher);
+        when(publisher.sync()).thenReturn(publishCommands);
+
+        runner.withPropertyValues("mulo.notification.sse.mode=redis",
+                "mulo.notification.sse.channel=" + channel).run(context -> {
+                    assertThat(context).hasNotFailed();
+                    verify(subscriptionCommands).subscribe(channel);
+                    context.getBean(NotificationCreatedNotifier.class).notificationCreated(Set.of(42L));
+                    String signal = context.getBean(NotificationSseSignalCodec.class)
+                            .encode(NotificationSseSignal.forRecipient(42L));
+                    verify(publishCommands, timeout(1000)).publish(channel, signal);
+
+                    ArgumentCaptor<RedisPubSubListener> listener = ArgumentCaptor.forClass(RedisPubSubListener.class);
+                    verify(subscriber).addListener(listener.capture());
+                    listener.getValue().message(CHANNEL, signal);
+                    verify(connections, never()).sendNotificationCreated(42L);
+
+                    listener.getValue().message(channel, signal);
+                    verify(connections, timeout(1000)).sendNotificationCreated(42L);
+                });
+
+        verify(subscriptionCommands).unsubscribe(channel);
+        verify(subscriber).close();
+        verify(publisher).close();
+    }
+
+    @ParameterizedTest
+    @ValueSource(strings = {"", " "})
+    void blankChannelFailsRedisModeStartup(String channel) {
+        runner.withPropertyValues("mulo.notification.sse.mode=redis",
+                "mulo.notification.sse.channel=" + channel).run(context ->
+                        assertThat(context.getStartupFailure()).hasRootCauseInstanceOf(IllegalArgumentException.class));
+        verify(redisClient, never()).connect();
+        verify(redisClient, never()).connectPubSub();
+    }
+
     @ParameterizedTest
     @ValueSource(strings = {"", "redsi", "true"})
     void invalidModeFailsStartup(String mode) {
