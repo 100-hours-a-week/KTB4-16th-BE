@@ -117,6 +117,11 @@ class NotificationSseConnectionManagerTest {
 
         awaitText(result, "event:auth-expired", 2500);
 
+        long deadline = System.nanoTime() + Duration.ofSeconds(2).toNanos();
+        while (connections.connectionCount(1L) != 0 && System.nanoTime() < deadline) {
+            Thread.sleep(10);
+        }
+
         assertThat(connections.connectionCount(1L)).isZero();
     }
 
