@@ -5,7 +5,6 @@ import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.timeout;
 import static org.mockito.Mockito.verify;
-import static org.mockito.Mockito.verifyNoInteractions;
 import static org.mockito.Mockito.when;
 
 import com.ktb4.team16.mulo.global.redis.RedisConnectionProperties;
@@ -25,6 +24,7 @@ import org.junit.jupiter.api.Test;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 import org.mockito.ArgumentCaptor;
+import org.springframework.boot.convert.ApplicationConversionService;
 import org.springframework.boot.test.context.runner.ApplicationContextRunner;
 import tools.jackson.databind.ObjectMapper;
 
@@ -35,6 +35,9 @@ class NotificationSseRedisConfigurationTest {
     private final RedisClient redisClient = mock(RedisClient.class);
     private final NotificationSseConnectionManager connections = mock(NotificationSseConnectionManager.class);
     private final ApplicationContextRunner runner = new ApplicationContextRunner()
+            .withInitializer(context -> context.getBeanFactory().setConversionService(
+                    ApplicationConversionService.getSharedInstance()))
+            .withPropertyValues("mulo.notification.sse.recovery-check-interval=PT1H")
             .withUserConfiguration(NotificationSseRedisConfiguration.class,
                     NotificationSseDeliveryConfiguration.class, LocalNotificationCreatedNotifier.class)
             .withBean(RedisClient.class, () -> redisClient)
@@ -77,6 +80,8 @@ class NotificationSseRedisConfigurationTest {
         RedisCommands<String, String> publishCommands = mock(RedisCommands.class);
         when(redisClient.connectPubSub()).thenReturn(subscriber);
         when(subscriber.sync()).thenReturn(subscriptionCommands);
+        when(subscriber.isOpen()).thenReturn(true);
+        when(subscriptionCommands.ping()).thenReturn("PONG");
         when(redisClient.connect()).thenReturn(publisher);
         when(publisher.sync()).thenReturn(publishCommands);
 
@@ -90,7 +95,7 @@ class NotificationSseRedisConfigurationTest {
             String signal = context.getBean(NotificationSseSignalCodec.class)
                     .encode(NotificationSseSignal.forRecipient(42L));
             verify(publishCommands, timeout(1000)).publish(CHANNEL, signal);
-            verifyNoInteractions(connections);
+            verify(connections, never()).sendNotificationCreated(42L);
 
             ArgumentCaptor<RedisPubSubListener> listener = ArgumentCaptor.forClass(RedisPubSubListener.class);
             verify(subscriber).addListener(listener.capture());
@@ -115,10 +120,12 @@ class NotificationSseRedisConfigurationTest {
     }
 
     @Test
-    void failedRedisSubscriptionFailsStartup() {
+    void failedRedisSubscriptionKeepsApplicationRunningWithDeliveryUnavailable() {
         when(redisClient.connectPubSub()).thenThrow(new IllegalStateException("test subscription failure"));
-        runner.withPropertyValues("mulo.notification.sse.mode=redis").run(context ->
-                assertThat(context.getStartupFailure()).hasRootCauseMessage("test subscription failure"));
+        runner.withPropertyValues("mulo.notification.sse.mode=redis").run(context -> {
+            assertThat(context).hasNotFailed();
+            verify(connections, never()).setDeliveryAvailable(true);
+        });
         verify(redisClient, never()).connect();
     }
 }
