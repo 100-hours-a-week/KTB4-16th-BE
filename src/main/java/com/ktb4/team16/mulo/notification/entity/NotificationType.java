@@ -6,5 +6,6 @@ public enum NotificationType {
     MATCH_COMPLETED,
     FRIEND_REQUEST,
     FRIEND_ACCEPTED,
+    FRIEND_NICKNAME_CHANGED,
     DAILY_SONG_READY
 }
