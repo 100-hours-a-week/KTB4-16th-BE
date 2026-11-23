@@ -21,6 +21,8 @@ import tools.jackson.databind.ObjectMapper;
 class NicknameChatConsumer {
     private static final Logger log = LoggerFactory.getLogger(NicknameChatConsumer.class);
     private static final int MAX_ATTEMPTS = 3;
+    private static final long RETRY_DELAY_MILLIS = 100;
+    private static final int MAX_NICKNAME_LENGTH = 10;
 
     private final ObjectMapper objectMapper;
     private final ChatRoomClient chatRoomClient;
@@ -69,16 +71,16 @@ class NicknameChatConsumer {
 
     /** 이벤트 계약의 필수 값과 스키마 버전을 확인한다. */
     private boolean isValid(ChatNicknameChangedMessage event) {
-        return event != null && event.schemaVersion() == 1 && "USER_NICKNAME_CHANGED".equals(event.eventType())
+        return event != null && event.schemaVersion() == ChatNicknameChangedMessage.SCHEMA_VERSION && ChatNicknameChangedMessage.EVENT_TYPE.equals(event.eventType())
                 && event.eventId() != null && event.userId() != null && event.userId() > 0
-                && event.nickname() != null && !event.nickname().isBlank() && event.nickname().length() <= 10
+                && event.nickname() != null && !event.nickname().isBlank() && event.nickname().length() <= MAX_NICKNAME_LENGTH
                 && event.nicknameVersion() > 0;
     }
 
     /** 일시적 네트워크 오류 뒤 짧은 간격을 두고 재시도한다. */
     private boolean waitBeforeRetry() {
         try {
-            Thread.sleep(100);
+            Thread.sleep(RETRY_DELAY_MILLIS);
             return true;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
