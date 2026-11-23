@@ -18,6 +18,7 @@ import java.util.concurrent.ScheduledFuture;
 import java.util.concurrent.TimeUnit;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicInteger;
+import java.util.concurrent.atomic.AtomicLong;
 import io.sentry.Sentry;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -31,6 +32,8 @@ public class NotificationSseConnectionManager {
     private static final Logger log = LoggerFactory.getLogger(NotificationSseConnectionManager.class);
 
     private final ConcurrentMap<Long, ConcurrentMap<UUID, Connection>> connections = new ConcurrentHashMap<>();
+    private final AtomicBoolean deliveryAvailable = new AtomicBoolean(true);
+    private final AtomicLong deliveryGeneration = new AtomicLong();
     private final ScheduledExecutorService timer;
     private final Clock clock;
     private final Duration heartbeatInterval;
@@ -69,12 +72,17 @@ public class NotificationSseConnectionManager {
         if (isSessionRevoked(userId, sessionId)) {
             throw new UnauthenticatedUserException();
         }
+        long generation = deliveryGeneration.get();
         Instant deadline = now.plus(maximumConnectionDuration);
         if (tokenExpiresAt.isBefore(deadline)) {
             deadline = tokenExpiresAt;
         }
         long timeoutMillis = Math.max(1, Duration.between(now, deadline).toMillis() + 1);
         SseEmitter emitter = createEmitter(timeoutMillis);
+        if (!deliveryAvailable.get()) {
+            emitter.complete();
+            return emitter;
+        }
         Connection connection = new Connection(UUID.randomUUID(), userId, sessionId,
                 tokenExpiresAt, deadline, emitter);
         emitter.onCompletion(() -> cleanup(connection));
@@ -89,10 +97,23 @@ public class NotificationSseConnectionManager {
         });
         if (connection.closed.get()) {
             remove(connection);
+            if (deliveryChanged(generation)) {
+                return emitter;
+            }
             throw new IllegalStateException("SSE 연결을 시작하지 못했습니다.");
         }
+        if (deliveryChanged(generation)) {
+            close(connection);
+            return emitter;
+        }
         if (!send(connection, SseEmitter.event().name("connected").data(Map.of()))) {
+            if (deliveryChanged(generation)) {
+                return emitter;
+            }
             throw new IllegalStateException("SSE 연결을 시작하지 못했습니다.");
+        }
+        if (deliveryChanged(generation)) {
+            close(connection);
         }
         return emitter;
     }
@@ -114,6 +135,25 @@ public class NotificationSseConnectionManager {
         }
         for (Connection connection : userConnections.values()) {
             close(connection);
+        }
+    }
+
+    public void setDeliveryAvailable(boolean available) {
+        if (deliveryAvailable.getAndSet(available) != available) {
+            deliveryGeneration.incrementAndGet();
+            closeAllConnections();
+        }
+    }
+
+    private boolean deliveryChanged(long generation) {
+        return !deliveryAvailable.get() || deliveryGeneration.get() != generation;
+    }
+
+    private void closeAllConnections() {
+        for (ConcurrentMap<UUID, Connection> userConnections : connections.values()) {
+            for (Connection connection : userConnections.values()) {
+                close(connection);
+            }
         }
     }
 
@@ -249,11 +289,9 @@ public class NotificationSseConnectionManager {
 
     @PreDestroy
     public void shutdown() {
-        for (ConcurrentMap<UUID, Connection> userConnections : connections.values()) {
-            for (Connection connection : userConnections.values()) {
-                close(connection);
-            }
-        }
+        deliveryAvailable.set(false);
+        deliveryGeneration.incrementAndGet();
+        closeAllConnections();
         timer.shutdownNow();
     }
 

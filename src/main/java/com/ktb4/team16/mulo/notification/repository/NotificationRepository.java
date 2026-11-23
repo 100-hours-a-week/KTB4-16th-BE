@@ -13,6 +13,11 @@ import org.springframework.data.repository.query.Param;
 /** 사용자의 알림 소유권과 최신순 keyset 조회를 데이터베이스에서 적용한다. */
 public interface NotificationRepository extends JpaRepository<Notification, Long> {
 
+    /** 탈퇴한 사용자에 대한 알림을 보존하고 대상 연결만 해제한다. */
+    @Modifying
+    @Query("update Notification n set n.targetUserId = null where n.targetUserId = :userId")
+    int clearWithdrawnTarget(@Param("userId") Long userId);
+
     @Query(value = """
             SELECT EXISTS (
                 SELECT 1 FROM notifications

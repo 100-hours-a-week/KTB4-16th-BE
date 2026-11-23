@@ -106,6 +106,13 @@ logging:
 
 # 안전한 기본값은 운영 same-origin/HTTPS. HTTP 개발은 local 프로필을 명시한다.
 mulo:
+  notification:
+    sse:
+      mode: ${MULO_NOTIFICATION_SSE_MODE:local}
+      channel: ${MULO_NOTIFICATION_SSE_CHANNEL:mulo:notification:sse:created:v1}
+      heartbeat-interval: ${MULO_NOTIFICATION_SSE_HEARTBEAT_INTERVAL:25s}
+      maximum-connection-duration: ${MULO_NOTIFICATION_SSE_MAXIMUM_CONNECTION_DURATION:1h}
+      recovery-check-interval: ${MULO_NOTIFICATION_SSE_RECOVERY_CHECK_INTERVAL:1s}
   # @Scheduled 작업 전체의 실행 여부. 기본은 켜짐이다. 같은 DB를 보는 Backend를 두 환경에 동시에 띄울 때 한쪽을 false로 둔다.
   scheduling:
     enabled: ${MULO_SCHEDULING_ENABLED:true}
@@ -114,14 +121,20 @@ mulo:
       enabled: ${MULO_DAILY_SONG_SCHEDULER_ENABLED:false}
   rabbitmq:
     enabled: ${MULO_RABBITMQ_ENABLED:false}
+  nickname:
+    dispatch:
+      enabled: ${MULO_NICKNAME_MQ_ENABLED:false}
+    friend-notifications:
+      enabled: ${MULO_NICKNAME_FRIEND_NOTIFICATIONS_ENABLED:false}
+      enabled-at: ${MULO_NICKNAME_FRIEND_NOTIFICATIONS_ENABLED_AT:}
   # Redis를 사용하는 기능들이 공유하는 접속 정보다. 연결은 최초 사용 시에만 연다.
   redis:
     host: ${REDIS_HOST:127.0.0.1}
     port: ${REDIS_PORT:16382}
-    connect-timeout: 300ms
+    connect-timeout: ${REDIS_CONNECT_TIMEOUT:300ms}
     # TCP 연결·일반 명령과 분리한 HELLO 등 최초 연결 준비의 유한 기한이다.
     initialization-timeout: ${REDIS_INITIALIZATION_TIMEOUT:5s}
-    command-timeout: 100ms
+    command-timeout: ${REDIS_COMMAND_TIMEOUT:100ms}
   # 별도 프로필 없이 활성화 값으로 인기곡 캐시를 선택한다. 기본 실행은 off다.
   popular-cache:
     enabled: ${MULO_POPULAR_CACHE_ENABLED:false}

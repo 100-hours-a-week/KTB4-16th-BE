@@ -37,6 +37,33 @@ public interface FriendshipRepository extends JpaRepository<Friendship, Long> {
     @Query("SELECT friendship FROM Friendship friendship WHERE friendship.friendshipId = :friendshipId")
     Optional<Friendship> findByIdForUpdate(@Param("friendshipId") Long friendshipId);
 
+    /** 비활성 사용자를 제외한 현재 친구 ID를 반환한다. */
+    @Query(value = """
+            SELECT CASE WHEN friendship.user_low_id = :userId
+                THEN friendship.user_high_id ELSE friendship.user_low_id END AS friendUserId
+            FROM friendships friendship
+            JOIN users friend ON friend.user_id = CASE WHEN friendship.user_low_id = :userId
+                THEN friendship.user_high_id ELSE friendship.user_low_id END
+            WHERE (friendship.user_low_id = :userId OR friendship.user_high_id = :userId)
+                AND friend.deleted_at IS NULL
+            ORDER BY friendUserId
+            """, nativeQuery = true)
+    List<Long> findActiveFriendUserIds(@Param("userId") Long userId);
+
+    /** 사용자 잠금 뒤 최신 친구 관계를 공유 잠금으로 읽는다. */
+    @Query(value = """
+            SELECT CASE WHEN friendship.user_low_id = :userId
+                THEN friendship.user_high_id ELSE friendship.user_low_id END AS friendUserId
+            FROM friendships friendship
+            JOIN users friend ON friend.user_id = CASE WHEN friendship.user_low_id = :userId
+                THEN friendship.user_high_id ELSE friendship.user_low_id END
+            WHERE (friendship.user_low_id = :userId OR friendship.user_high_id = :userId)
+                AND friend.deleted_at IS NULL
+            ORDER BY friendUserId
+            FOR SHARE
+            """, nativeQuery = true)
+    List<Long> findActiveFriendUserIdsForUpdate(@Param("userId") Long userId);
+
     /** 닉네임·사용자 ID 순서의 친구 첫 페이지와 다음 항목을 가져온다. */
     @Query(value = """
             SELECT friendship.friendship_id AS friendshipId,
