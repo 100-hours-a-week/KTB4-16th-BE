@@ -12,6 +12,7 @@ import com.ktb4.team16.mulo.auth.entity.RefreshToken;
 import com.ktb4.team16.mulo.auth.repository.RefreshTokenRepository;
 import com.ktb4.team16.mulo.global.error.ErrorCode;
 import com.ktb4.team16.mulo.global.exception.UnauthenticatedUserException;
+import com.ktb4.team16.mulo.notification.repository.NotificationRepository;
 import com.ktb4.team16.mulo.record.repository.RecordRepository;
 import com.ktb4.team16.mulo.user.entity.User;
 import com.ktb4.team16.mulo.user.exception.UserWithdrawalException;
@@ -31,6 +32,7 @@ class UserWithdrawalServiceTest {
     @Mock UserRepository userRepository;
     @Mock RecordRepository recordRepository;
     @Mock RefreshTokenRepository refreshTokenRepository;
+    @Mock NotificationRepository notifications;
     @Mock PasswordEncoder passwordEncoder;
     UserWithdrawalService service;
 
@@ -38,7 +40,7 @@ class UserWithdrawalServiceTest {
     @BeforeEach
     void setUp() {
         service = new UserWithdrawalService(userRepository, recordRepository,
-                refreshTokenRepository, passwordEncoder);
+                refreshTokenRepository, passwordEncoder, notifications);
     }
 
     /** 사용자·기록·토큰에 동일한 탈퇴 시각을 적용한다. */
