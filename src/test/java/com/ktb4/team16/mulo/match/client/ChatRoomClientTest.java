@@ -11,6 +11,7 @@ import static org.springframework.test.web.client.response.MockRestResponseCreat
 import com.ktb4.team16.mulo.match.client.ChatServerClientException.FailureType;
 import com.ktb4.team16.mulo.match.config.ChatServerProperties;
 import com.ktb4.team16.mulo.match.dto.request.ChatGroupJoinOrCreateRequest;
+import java.util.UUID;
 import java.io.IOException;
 import java.net.URI;
 import java.net.SocketTimeoutException;
@@ -28,6 +29,43 @@ import org.springframework.web.client.RestClient;
 class ChatRoomClientTest {
     private static final String GROUP_ENDPOINT = "http://chat.test/internal/chat-rooms/group/join-or-create";
     private static final String NICKNAME_ENDPOINT = "http://chat.test/internal/users/17/nickname";
+    private static final String VERSIONED_NICKNAME_ENDPOINT = "http://chat.test/internal/users/17/nickname/versioned";
+
+    /** 이벤트 ID와 버전을 포함한 내부 요청을 보내고 Chat 처리 상태를 읽는다. */
+    @Test
+    void sendsVersionedNicknameUpdate() {
+        Fixture fixture = fixture("test-api-key");
+        UUID eventId = UUID.fromString("b58fc3d8-2d56-4204-9be6-5412d6a9c7c1");
+        fixture.server().expect(requestTo(VERSIONED_NICKNAME_ENDPOINT))
+                .andExpect(method(HttpMethod.PATCH))
+                .andExpect(header("X-Internal-Api-Key", "test-api-key"))
+                .andExpect(content().contentType(MediaType.APPLICATION_JSON))
+                .andExpect(content().json("{\"nickname\":\"새닉네임\",\"nicknameVersion\":8,"
+                        + "\"eventId\":\"b58fc3d8-2d56-4204-9be6-5412d6a9c7c1\"}"))
+                .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"status\":\"APPLIED\",\"updatedParticipantCount\":2}"));
+
+        var response = fixture.client().updateParticipantNicknameVersioned(17L, "새닉네임", 8, eventId);
+
+        assertThat(response.status()).isEqualTo("APPLIED");
+        assertThat(response.updatedParticipantCount()).isEqualTo(2);
+        fixture.server().verify();
+    }
+
+    /** 누락된 Chat 처리 상태는 예외 대신 잘못된 응답으로 분류한다. */
+    @Test
+    void rejectsVersionedNicknameResponseWithNullStatus() {
+        Fixture fixture = fixture("test-api-key");
+        UUID eventId = UUID.fromString("b58fc3d8-2d56-4204-9be6-5412d6a9c7c1");
+        fixture.server().expect(requestTo(VERSIONED_NICKNAME_ENDPOINT))
+                .andRespond(withStatus(HttpStatus.OK).contentType(MediaType.APPLICATION_JSON)
+                        .body("{\"status\":null,\"updatedParticipantCount\":1}"));
+
+        assertThatThrownBy(() -> fixture.client().updateParticipantNicknameVersioned(
+                17L, "새닉네임", 8, eventId))
+                .isInstanceOf(ChatServerClientException.class)
+                .extracting("failureType").isEqualTo(FailureType.INVALID_RESPONSE);
+    }
 
     @Test
     void sendsAuthenticatedNicknameUpdateAndParsesBareResponse() {

@@ -37,6 +37,10 @@ public class Notification {
     @JoinColumn(name = "user_id", nullable = false)
     private User user;
 
+    /** 새 닉네임 알림의 대상 사용자 ID이며, 다른 유형과 삭제된 사용자는 null이다. */
+    @Column(name = "target_user_id")
+    private Long targetUserId;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private NotificationType type;
@@ -83,6 +87,7 @@ public class Notification {
             case MATCH_COMPLETED -> chatRoomId;
             case FRIEND_REQUEST -> friendRequest == null ? null : friendRequest.getFriendRequestId();
             case FRIEND_ACCEPTED -> friendship == null ? null : friendship.getFriendshipId();
+            case FRIEND_NICKNAME_CHANGED -> targetUserId;
             case DAILY_SONG_READY -> dailySongJob == null ? null : dailySongJob.getJobId();
         };
     }
@@ -94,6 +99,7 @@ public class Notification {
             case MATCH_COMPLETED -> "CHAT_ROOM";
             case FRIEND_REQUEST -> "FRIEND_REQUEST";
             case FRIEND_ACCEPTED -> "FRIENDSHIP";
+            case FRIEND_NICKNAME_CHANGED -> "USER";
             case DAILY_SONG_READY -> "DAILY_SONG";
         };
     }
