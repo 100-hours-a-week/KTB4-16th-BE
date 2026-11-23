@@ -5,14 +5,17 @@ import org.springframework.scheduling.annotation.Scheduled;
 
 @RequiredArgsConstructor
 class NicknameOutboxDispatcher {
+    private static final long DISPATCH_INTERVAL_MILLIS = 1000;
+    private static final int MAX_EVENTS_PER_DISPATCH = 50;
+
     private final ChatNicknameOutboxRepository repository;
     private final NicknamePublisher publisher;
     private final boolean friendsEnabled;
 
     /** 한 건씩 선점하고 활성 목적지 모두 발행을 확인한 경우에만 발행 완료로 전환한다. */
-    @Scheduled(fixedDelay = 1000, scheduler = "nicknameDispatchScheduler")
+    @Scheduled(fixedDelay = DISPATCH_INTERVAL_MILLIS, scheduler = "nicknameDispatchScheduler")
     void dispatch() {
-        for (int index = 0; index < 50 && !Thread.currentThread().isInterrupted(); index++) {
+        for (int index = 0; index < MAX_EVENTS_PER_DISPATCH && !Thread.currentThread().isInterrupted(); index++) {
             var next = repository.claimNext();
             if (next.isEmpty()) {
                 return;

@@ -14,6 +14,8 @@ import org.springframework.amqp.rabbit.core.RabbitTemplate;
 
 @RequiredArgsConstructor
 class NicknamePublisher {
+    private static final long CONFIRM_TIMEOUT_SECONDS = 10;
+
     private final RabbitTemplate template;
 
     enum Outcome { CONFIRMED, UNROUTABLE, NACKED, TIMEOUT, INTERRUPTED, SEND_FAILED }
@@ -25,8 +27,9 @@ class NicknamePublisher {
                 .setDeliveryMode(MessageDeliveryMode.PERSISTENT).setMessageId(claim.eventId()).build();
         var correlation = new CorrelationData();
         try {
+            // 빈 exchange 이름은 큐 이름으로 라우팅하는 RabbitMQ 기본 exchange다.
             template.send("", queue, message, correlation);
-            var confirm = correlation.getFuture().get(10, TimeUnit.SECONDS);
+            var confirm = correlation.getFuture().get(CONFIRM_TIMEOUT_SECONDS, TimeUnit.SECONDS);
             if (correlation.getReturned() != null) {
                 return Outcome.UNROUTABLE;
             }

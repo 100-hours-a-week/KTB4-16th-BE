@@ -27,6 +27,8 @@ import tools.jackson.databind.ObjectMapper;
 class NicknameFriendNotificationConsumer {
     private static final Logger log = LoggerFactory.getLogger(NicknameFriendNotificationConsumer.class);
     private static final int MAX_ATTEMPTS = 3;
+    private static final long RETRY_DELAY_MILLIS = 100;
+    private static final int MAX_NICKNAME_LENGTH = 10;
 
     private final ObjectMapper objectMapper;
     private final NicknameFriendNotificationService service;
@@ -90,9 +92,9 @@ class NicknameFriendNotificationConsumer {
 
     /** 메시지 종류, 버전, 수신자 식별자와 발생 시각을 확인한다. */
     private boolean isValid(ChatNicknameChangedMessage event) {
-        if (event == null || event.schemaVersion() != 1 || !"USER_NICKNAME_CHANGED".equals(event.eventType())
+        if (event == null || event.schemaVersion() != ChatNicknameChangedMessage.SCHEMA_VERSION || !ChatNicknameChangedMessage.EVENT_TYPE.equals(event.eventType())
                 || event.eventId() == null || event.userId() == null || event.userId() <= 0
-                || event.nickname() == null || event.nickname().isBlank() || event.nickname().length() > 10
+                || event.nickname() == null || event.nickname().isBlank() || event.nickname().length() > MAX_NICKNAME_LENGTH
                 || event.nicknameVersion() <= 0 || event.occurredAt() == null) {
             return false;
         }
@@ -107,7 +109,7 @@ class NicknameFriendNotificationConsumer {
     /** 짧은 선형 지연 뒤 DB 처리를 재시도하고 종료 시 인터럽트 상태를 보존한다. */
     private boolean waitBeforeRetry(int attempt) {
         try {
-            Thread.sleep(100L * attempt);
+            Thread.sleep(RETRY_DELAY_MILLIS * attempt);
             return true;
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();

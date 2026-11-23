@@ -60,7 +60,7 @@ class NicknameMqConfiguration {
         return scheduler;
     }
 
-    /** 두 목적지 발행을 담당하는 작업을 기능 활성화 시 등록한다. */
+    /** Chat과 활성화된 친구 알림 목적지에 발행하는 작업을 등록한다. */
     @Bean
     NicknameOutboxDispatcher nicknameDispatcher(ChatNicknameOutboxRepository repository, NicknamePublisher publisher,
             NicknameFriendNotificationProperties friends) {
