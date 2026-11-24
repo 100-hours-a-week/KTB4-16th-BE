@@ -43,15 +43,18 @@ public class DailySongRabbitMqConsumer {
             containerFactory = "dailySongListenerContainerFactory")
     public void receive(Message message, Channel channel) throws IOException {
         long tag = message.getMessageProperties().getDeliveryTag();
+        String messageId = message.getMessageProperties().getMessageId();
         DailySongJobMessage payload;
         try {
             payload = objectMapper.readValue(message.getBody(), DailySongJobMessage.class);
             if (payload == null || payload.jobId() <= 0) {
+                logDlqReject(messageId, payload == null ? null : payload.jobId(), "INVALID_PAYLOAD",
+                        payload == null ? null : new IllegalArgumentException("jobId가 올바르지 않습니다."), null, null);
                 channel.basicReject(tag, false);
                 return;
             }
         } catch (JacksonException | IllegalArgumentException exception) {
-            log.warn("오늘의 노래 작업 메시지가 올바르지 않아 DLQ로 이동합니다.");
+            logDlqReject(messageId, null, "INVALID_PAYLOAD", exception, null, null);
             channel.basicReject(tag, false);
             return;
         }
@@ -64,7 +67,7 @@ public class DailySongRabbitMqConsumer {
             if (claimed.isPresent()) {
                 outcome = processing.process(claimed.get());
             }
-            settleDelivery(channel, tag, payload.jobId(), outcome);
+            settleDelivery(channel, tag, messageId, payload.jobId(), outcome);
         } catch (RuntimeException exception) {
             log.error("오늘의 노래 작업 처리 상태가 불확실하여 메시지를 재전달합니다: jobId={}",
                     payload.jobId(), exception);
@@ -72,14 +75,15 @@ public class DailySongRabbitMqConsumer {
         }
     }
 
-    private void settleDelivery(Channel channel, long tag, long jobId, ProcessingOutcome outcome) throws IOException {
+    private void settleDelivery(Channel channel, long tag, String messageId, long jobId, ProcessingOutcome outcome)
+            throws IOException {
         LocalDateTime now = LocalDateTime.now(clock);
         if (outcome == ProcessingOutcome.NOT_APPLIED) {
             claims.recoverExpired(jobId, now);
         }
         Optional<JobState> state = claims.findState(jobId);
         if (state.isEmpty()) {
-            log.warn("존재하지 않는 오늘의 노래 작업 메시지를 DLQ로 이동합니다: jobId={}", jobId);
+            logDlqReject(messageId, jobId, "JOB_NOT_FOUND", null, null, outcome);
             channel.basicReject(tag, false);
             return;
         }
@@ -93,8 +97,30 @@ public class DailySongRabbitMqConsumer {
                 && state.get().leaseUntil().isAfter(now) && outcome == ProcessingOutcome.NOT_APPLIED) {
             channel.basicAck(tag, false);
         } else {
-            log.error("오늘의 노래 작업의 Lease 회수 가능 여부를 확인하지 못해 DLQ로 이동합니다: jobId={}", jobId);
+            logDlqReject(messageId, jobId, "JOB_STATE_UNCERTAIN", null, state.get(), outcome);
             channel.basicReject(tag, false);
+        }
+    }
+
+    private void logDlqReject(String messageId, Long jobId, String failureType, Throwable exception,
+            JobState state, ProcessingOutcome outcome) {
+        Throwable rootCause = exception;
+        while (rootCause != null && rootCause.getCause() != null) {
+            rootCause = rootCause.getCause();
+        }
+        String exceptionType = exception == null ? null : exception.getClass().getSimpleName();
+        String rootCauseType = rootCause == null ? null : rootCause.getClass().getSimpleName();
+        DailySongJobStatus status = state == null ? null : state.status();
+        LocalDateTime leaseUntil = state == null ? null : state.leaseUntil();
+        String occurredAt = clock.instant().toString();
+        String format = "오늘의 노래 메시지 DLQ 이동 요청: messageId={}, jobId={}, failureType={}, "
+                + "occurredAt={}, exceptionType={}, rootCauseType={}, status={}, outcome={}, leaseUntil={}";
+        if ("JOB_STATE_UNCERTAIN".equals(failureType)) {
+            log.error(format, messageId, jobId, failureType, occurredAt, exceptionType, rootCauseType,
+                    status, outcome, leaseUntil);
+        } else {
+            log.warn(format, messageId, jobId, failureType, occurredAt, exceptionType, rootCauseType,
+                    status, outcome, leaseUntil);
         }
     }
 }
