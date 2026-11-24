@@ -1,5 +1,6 @@
 package com.ktb4.team16.mulo.dailysong.consumer;
 
+import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.Mockito.inOrder;
 import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
@@ -23,11 +24,15 @@ import java.time.ZoneOffset;
 import java.util.Optional;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.junit.jupiter.api.extension.ExtendWith;
 import org.springframework.amqp.core.Message;
 import org.springframework.amqp.core.MessageProperties;
+import org.springframework.boot.test.system.CapturedOutput;
+import org.springframework.boot.test.system.OutputCaptureExtension;
 import org.springframework.dao.DataAccessResourceFailureException;
 import tools.jackson.databind.json.JsonMapper;
 
+@ExtendWith(OutputCaptureExtension.class)
 class DailySongRabbitMqConsumerTest {
     private final DailySongJobClaimRepository claims = mock(DailySongJobClaimRepository.class);
     private final DailySongJobProcessingService processing = mock(DailySongJobProcessingService.class);
@@ -109,29 +114,57 @@ class DailySongRabbitMqConsumerTest {
     }
 
     @Test
-    void rejectsMalformedMessageToDeadLetterQueue() throws Exception {
+    void rejectsMalformedMessageToDeadLetterQueue(CapturedOutput output) throws Exception {
         consumer.receive(message("{invalid-json}"), channel);
 
         verify(channel).basicReject(7, false);
         verifyNoInteractions(processing);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=null, "
+                + "failureType=INVALID_PAYLOAD, occurredAt=2026-11-10T00:00:00Z, "
+                + "exceptionType=StreamReadException, rootCauseType=StreamReadException")
+                .doesNotContain("{invalid-json}");
     }
 
     @Test
-    void rejectsNonPositiveJobIdToDeadLetterQueue() throws Exception {
+    void rejectsNonPositiveJobIdToDeadLetterQueue(CapturedOutput output) throws Exception {
         consumer.receive(message("{\"jobId\":0}"), channel);
 
         verify(channel).basicReject(7, false);
         verifyNoInteractions(processing);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=null, "
+                + "failureType=INVALID_PAYLOAD, occurredAt=2026-11-10T00:00:00Z, "
+                + "exceptionType=ValueInstantiationException, rootCauseType=IllegalArgumentException");
     }
 
     @Test
-    void rejectsUnknownJobToDeadLetterQueue() throws Exception {
+    void rejectsUnknownJobToDeadLetterQueue(CapturedOutput output) throws Exception {
         when(claims.findState(123)).thenReturn(Optional.empty());
 
         consumer.receive(message("{\"jobId\":123}"), channel);
 
         verify(channel).basicReject(7, false);
         verifyNoInteractions(processing);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=123, "
+                + "failureType=JOB_NOT_FOUND, occurredAt=2026-11-10T00:00:00Z, exceptionType=null, "
+                + "rootCauseType=null, status=null, outcome=NOT_APPLIED, leaseUntil=null");
+    }
+
+    @Test
+    void rejectsMalformedMessageWithoutMessageId(CapturedOutput output) throws Exception {
+        consumer.receive(message("{invalid-json}", null), channel);
+
+        verify(channel).basicReject(7, false);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=null, jobId=null, "
+                + "failureType=INVALID_PAYLOAD, occurredAt=2026-11-10T00:00:00Z");
+    }
+
+    @Test
+    void rejectsNullPayloadWithMessageId(CapturedOutput output) throws Exception {
+        consumer.receive(message("null"), channel);
+
+        verify(channel).basicReject(7, false);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=null, "
+                + "failureType=INVALID_PAYLOAD, occurredAt=2026-11-10T00:00:00Z, exceptionType=null");
     }
 
     @Test
@@ -169,7 +202,7 @@ class DailySongRabbitMqConsumerTest {
     }
 
     @Test
-    void lateResponseWithMissingLeaseMovesToDeadLetterQueue() throws Exception {
+    void lateResponseWithMissingLeaseMovesToDeadLetterQueue(CapturedOutput output) throws Exception {
         Claim claim = new Claim(123, 13, LocalDate.of(2026, 11, 10), now, "old-token");
         when(claims.claim(123, now, now.plusMinutes(5))).thenReturn(Optional.of(claim));
         when(processing.process(claim)).thenReturn(ProcessingOutcome.NOT_APPLIED);
@@ -179,6 +212,10 @@ class DailySongRabbitMqConsumerTest {
         consumer.receive(message("{\"jobId\":123}"), channel);
 
         verify(channel).basicReject(7, false);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=123, "
+                + "failureType=JOB_STATE_UNCERTAIN, occurredAt=2026-11-10T00:00:00Z, exceptionType=null, "
+                + "rootCauseType=null, status=PROCESSING, outcome=NOT_APPLIED, leaseUntil=null")
+                .doesNotContain("new-token");
     }
 
     @Test
@@ -191,7 +228,7 @@ class DailySongRabbitMqConsumerTest {
     }
 
     @Test
-    void committedOutcomeWithoutConfirmedTerminalStateMovesToDeadLetterQueue() throws Exception {
+    void committedOutcomeWithoutConfirmedTerminalStateMovesToDeadLetterQueue(CapturedOutput output) throws Exception {
         Claim claim = new Claim(123, 13, LocalDate.of(2026, 11, 10), now, "claim-token");
         when(claims.claim(123, now, now.plusMinutes(5))).thenReturn(Optional.of(claim));
         when(processing.process(claim)).thenReturn(ProcessingOutcome.COMPLETED);
@@ -201,6 +238,10 @@ class DailySongRabbitMqConsumerTest {
         consumer.receive(message("{\"jobId\":123}"), channel);
 
         verify(channel).basicReject(7, false);
+        assertThat(output.toString()).contains("DLQ 이동 요청: messageId=outbox-event-123, jobId=123, "
+                + "failureType=JOB_STATE_UNCERTAIN, occurredAt=2026-11-10T00:00:00Z, exceptionType=null, "
+                + "rootCauseType=null, status=PROCESSING, outcome=COMPLETED, leaseUntil=2026-11-10T09:05")
+                .doesNotContain("claim-token");
     }
 
     @Test
@@ -220,8 +261,13 @@ class DailySongRabbitMqConsumerTest {
     }
 
     private Message message(String body) {
+        return message(body, "outbox-event-123");
+    }
+
+    private Message message(String body, String messageId) {
         MessageProperties properties = new MessageProperties();
         properties.setDeliveryTag(7);
+        properties.setMessageId(messageId);
         return new Message(body.getBytes(StandardCharsets.UTF_8), properties);
     }
 }
