@@ -85,6 +85,8 @@ public class SecurityConfig {
                         .permitAll()
                         // Docker가 인증 없이 애플리케이션 준비 상태만 확인하도록 healthcheck GET만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/actuator/health").permitAll()
+                        .requestMatchers(HttpMethod.GET, "/actuator/health/liveness",
+                                "/actuator/health/readiness").permitAll()
                         // Prometheus가 사용자 로그인 없이 지표를 수집하도록 GET만 허용한다.
                         .requestMatchers(HttpMethod.GET, "/actuator/prometheus").permitAll()
                         .requestMatchers(HttpMethod.GET, "/api/csrf").permitAll()
